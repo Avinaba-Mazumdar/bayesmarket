@@ -65,8 +65,9 @@ describe('ToastService & ToastContainerComponent', () => {
         });
         fixture.detectChanges();
 
-        const actionBtn = fixture.nativeElement.querySelector('.toast-action-btn') as HTMLButtonElement;
-        expect(actionBtn).toBeTruthy();
+        const actionBtnWrapper = fixture.nativeElement.querySelector('.toast-action-btn') as HTMLElement;
+        expect(actionBtnWrapper).toBeTruthy();
+        const actionBtn = (actionBtnWrapper.querySelector('button') ?? actionBtnWrapper) as HTMLButtonElement;
         expect(actionBtn.textContent?.trim()).toBe('Undo');
 
         actionBtn.click();
@@ -81,7 +82,8 @@ describe('ToastService & ToastContainerComponent', () => {
         fixture.detectChanges();
 
         expect(service.toasts().length).toBe(1);
-        const closeBtn = fixture.nativeElement.querySelector('.toast-close-btn') as HTMLButtonElement;
+        const closeBtnWrapper = fixture.nativeElement.querySelector('.toast-close-btn') as HTMLElement;
+        const closeBtn = (closeBtnWrapper.querySelector('button') ?? closeBtnWrapper) as HTMLButtonElement;
         closeBtn.click();
         fixture.detectChanges();
 

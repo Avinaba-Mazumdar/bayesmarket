@@ -1,8 +1,8 @@
 packages:
-  - 'frontend'
+    - 'frontend'
 
 allowBuilds:
-  "@parcel/watcher": true
-  esbuild: true
-  lmdb: true
-  msgpackr-extract: true
+    '@parcel/watcher': true
+    esbuild: true
+    lmdb: true
+    msgpackr-extract: true

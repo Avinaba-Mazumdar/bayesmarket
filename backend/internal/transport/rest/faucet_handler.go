@@ -3,6 +3,7 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,6 +155,10 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 	var lockedBalance decimal.Decimal
 	lockUserQuery := `SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE;`
 	if err := tx.QueryRow(ctx, lockUserQuery, userID).Scan(&lockedBalance); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "User session is invalid or user no longer exists"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to lock user balance"})
 		return
 	}

@@ -684,6 +684,13 @@ func lockAndVerifyUserBalance(ctx context.Context, tx pgx.Tx, userID uuid.UUID, 
 	var balance decimal.Decimal
 	err := tx.QueryRow(ctx, `SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE;`, userID).Scan(&balance)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return decimal.Zero, &AppError{
+				StatusCode: http.StatusUnauthorized,
+				ErrorCode:  "unauthorized",
+				Message:    "User session is invalid or user not found",
+			}
+		}
 		return decimal.Zero, err
 	}
 	if balance.LessThan(amount) {

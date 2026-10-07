@@ -71,7 +71,7 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 	err := h.pool.QueryRow(ctx, "SELECT cash_balance FROM users WHERE id = $1", userID).Scan(&cashBalance)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "User not found"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "User session is invalid or user not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query user"})

@@ -162,8 +162,8 @@ export class AuthStore {
                 this.isInitializing.set(false);
             },
             error: (err) => {
-                // If token expired or invalid, clear session
-                if (err?.status === 401) {
+                // If token expired, invalid, or user record deleted, clear session
+                if (err?.status === 401 || err?.status === 404) {
                     this.clearSession();
                 }
                 this.isInitializing.set(false);
@@ -291,8 +291,8 @@ export class AuthStore {
                 this.updateBalance(formatted);
             },
             error: (err) => {
-                if (err?.status === 401) {
-                    this.initializeSession();
+                if (err?.status === 401 || err?.status === 404) {
+                    this.clearSession();
                 }
             }
         });
@@ -350,6 +350,11 @@ export class AuthStore {
             },
             error: (err) => {
                 this.isClaimingFaucet.set(false);
+                if (err?.status === 401 || err?.status === 404) {
+                    this.clearSession();
+                    this.toastService.error('Session Expired', 'Your session is no longer valid. Please sign in again.');
+                    return;
+                }
                 const msg = err?.error?.message || 'Faucet cooldown in effect or request rate exceeded';
                 this.toastService.warning('Faucet Cooldown', msg);
             }

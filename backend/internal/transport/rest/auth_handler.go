@@ -626,9 +626,9 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "user_not_found",
-				"message": "User profile not found",
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "unauthorized",
+				"message": "User session is invalid or user no longer exists",
 			})
 			return
 		}

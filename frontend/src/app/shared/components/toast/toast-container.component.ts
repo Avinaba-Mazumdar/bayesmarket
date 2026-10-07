@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { LucideCheck, LucideCircleAlert, LucideTriangleAlert, LucideInfo, LucideBell, LucideX } from '@lucide/angular';
+import { ButtonComponent } from '../button/button.component';
 import { Toast, ToastService } from './toast.service';
 
 @Component({
     selector: 'app-toast-container',
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [LucideCheck, LucideCircleAlert, LucideTriangleAlert, LucideInfo, LucideBell, LucideX],
+    imports: [LucideCheck, LucideCircleAlert, LucideTriangleAlert, LucideInfo, LucideBell, LucideX, ButtonComponent],
     template: `
         <div class="toast-viewport" role="region" aria-label="Notifications" aria-live="polite">
             @for (t of toastService.toasts(); track t.id) {
@@ -41,14 +42,14 @@ import { Toast, ToastService } from './toast.service';
                     </div>
 
                     @if (t.action) {
-                        <button type="button" class="toast-action-btn" (click)="onAction(t)">
+                        <app-button class="toast-action-btn" size="sm" variant="secondary" (btnClick)="onAction(t)">
                             {{ t.action.label }}
-                        </button>
+                        </app-button>
                     }
 
-                    <button type="button" class="toast-close-btn" aria-label="Close notification" (click)="toastService.dismiss(t.id)">
+                    <app-button class="toast-close-btn" variant="ghost" size="icon" ariaLabel="Close notification" (btnClick)="toastService.dismiss(t.id)">
                         <svg lucideX class="close-icon" [size]="16" aria-hidden="true"></svg>
-                    </button>
+                    </app-button>
                 </div>
             }
         </div>
@@ -180,41 +181,12 @@ import { Toast, ToastService } from './toast.service';
             .toast-action-btn {
                 flex-shrink: 0;
                 align-self: center;
-                min-height: 32px;
-                padding: 6px 12px;
-                background-color: var(--surface-card-elevated, #171f30);
-                color: var(--ink, #f8fafc);
-                border: 1px solid var(--border-strong, #606e85);
-                border-radius: var(--radius-md, 10px);
-                font-family: var(--font-ui, system-ui, sans-serif);
-                font-size: 12px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: background-color 0.15s ease;
-            }
-            .toast-action-btn:hover {
-                background-color: var(--surface-card, #111622);
             }
 
-            /* --- Close Button (WCAG 40x40px touch target) --- */
+            /* --- Close Button --- */
             .toast-close-btn {
                 flex-shrink: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: var(--touch-target-min, 40px);
-                min-height: var(--touch-target-min, 40px);
-                margin: -10px -10px -10px 0;
-                background: transparent;
-                border: none;
-                color: var(--muted, #a2b4c9);
-                cursor: pointer;
-                border-radius: var(--radius-sm, 6px);
-                transition: color 0.15s ease;
-            }
-
-            .toast-close-btn:hover {
-                color: var(--ink, #f8fafc);
+                margin: -8px -8px -8px 0;
             }
 
             .close-icon {
