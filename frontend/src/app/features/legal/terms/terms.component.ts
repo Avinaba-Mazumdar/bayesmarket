@@ -183,13 +183,14 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                         right to modify these Terms at any time by updating this page with an amended effective date.
                     </p>
                     <div class="contact-box">
-                        <p><strong>Maintainer:</strong> Avinaba Ghosh</p>
-                        <p><strong>Legal & Security Inquiries:</strong> <a href="mailto:contact@avinaba.com" class="legal-link">contact&#64;avinaba.com</a></p>
+                        <p><strong>Maintainer: </strong> Avinaba Mazumdar</p>
+                        <p><strong>Legal & Security Inquiries: </strong> <a href="mailto:contact@avinaba.com" class="legal-link">contact&#64;avinaba.com</a></p>
                         <p>
-                            <strong>Production Domain:</strong> <a href="https://bayesmarket.avinaba.com" class="legal-link">https://bayesmarket.avinaba.com</a>
+                            <strong>Production Domain: </strong>
+                            <a href="https://bayesmarket.avinaba.com" class="legal-link">https://bayesmarket.avinaba.com</a>
                         </p>
                         <p>
-                            <strong>Repository:</strong>
+                            <strong>Repository: </strong>
                             <a href="https://github.com/bayesmarket/bayesmarket" target="_blank" rel="noopener noreferrer" class="legal-link"
                                 >GitHub &mdash; BayesMarket Open Source</a
                             >

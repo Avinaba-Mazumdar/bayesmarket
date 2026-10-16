@@ -223,11 +223,11 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                     <h2 id="sec-contact" class="section-heading">7. Contact Information & Inquiries</h2>
                     <p>If you have questions, privacy concerns, or data erasure requests regarding BayesMarket, please contact our maintainers:</p>
                     <div class="contact-box">
-                        <p><strong>Maintainer:</strong> Avinaba Ghosh</p>
-                        <p><strong>Primary Contact:</strong> <a href="mailto:contact@avinaba.com" class="legal-link">contact&#64;avinaba.com</a></p>
-                        <p><strong>Web Domain:</strong> <a href="https://bayesmarket.avinaba.com" class="legal-link">https://bayesmarket.avinaba.com</a></p>
+                        <p><strong>Maintainer: </strong> Avinaba Mazumdar</p>
+                        <p><strong>Primary Contact: </strong> <a href="mailto:contact@avinaba.com" class="legal-link">contact&#64;avinaba.com</a></p>
+                        <p><strong>Web Domain: </strong> <a href="https://bayesmarket.avinaba.com" class="legal-link">https://bayesmarket.avinaba.com</a></p>
                         <p>
-                            <strong>Source Repository:</strong>
+                            <strong>Source Repository: </strong>
                             <a href="https://github.com/bayesmarket/bayesmarket" target="_blank" rel="noopener noreferrer" class="legal-link"
                                 >GitHub &mdash; BayesMarket Open Source</a
                             >

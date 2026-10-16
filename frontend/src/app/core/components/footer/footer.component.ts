@@ -18,9 +18,9 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                         <span class="footer-badge">Paper Trading Only</span>
                     </div>
                     <p class="footer-disclaimer-text">
-                        BayesMarket (<code>bayesmarket.avinaba.com</code>) is an educational binary prediction market simulator and mathematical research exchange.
-                        All transactions operate exclusively using simulated play-money credits ("BayesMarket Mock USDC"). Virtual credits have zero (0) real-world
-                        monetary value and cannot be redeemed, deposited, or withdrawn for fiat currency or cryptocurrency.
+                        BayesMarket (<code>bayesmarket.avinaba.com</code>) is an educational binary prediction market simulator and mathematical research
+                        exchange. All transactions operate exclusively using simulated play-money credits ("BayesMarket Mock USDC"). Virtual credits have zero
+                        (0) real-world monetary value and cannot be redeemed, deposited, or withdrawn for fiat currency or cryptocurrency.
                     </p>
                 </div>
 
@@ -183,4 +183,3 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
     ]
 })
 export class FooterComponent {}
-

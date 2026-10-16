@@ -95,9 +95,11 @@ jobs:
               run: pnpm install --no-frozen-lockfile
 
             - name: Run Frontend Unit Tests
+              env:
+                  NODE_OPTIONS: '--max-old-space-size=4096'
               run: |
                   cd frontend
-                  pnpm test -- --watch=false
+                  pnpm test:ci
 
             - name: Build Angular Frontend (Production Bundle)
               run: |
