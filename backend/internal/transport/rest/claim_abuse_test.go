@@ -15,11 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFaucet_NATMultiUserAndAbusePrevention verifies:
+// TestClaim_NATMultiUserAndAbusePrevention verifies:
 // 1. Two distinct users sharing the same NAT IP address can both claim without a 24-hour collision.
 // 2. The same user attempting to claim again is rejected with 429 faucet_cooldown.
 // 3. Excessive claims from the same IP (including loopback) are capped and rejected with faucet_ip_limit_exceeded.
-func TestFaucet_NATMultiUserAndAbusePrevention(t *testing.T) {
+func TestClaim_NATMultiUserAndAbusePrevention(t *testing.T) {
 	pool, _, router := getTestEnv(t)
 	defer pool.Close()
 
@@ -42,9 +42,9 @@ func TestFaucet_NATMultiUserAndAbusePrevention(t *testing.T) {
 		return resp.Token, resp.User.ID
 	}
 
-	claimFaucet := func(token, ip string) *httptest.ResponseRecorder {
+	claimFunds := func(token, ip string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodPost, "/api/v1/faucet", nil)
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/claim", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.RemoteAddr = ip + ":54321"
 		router.ServeHTTP(w, req)
@@ -59,15 +59,15 @@ func TestFaucet_NATMultiUserAndAbusePrevention(t *testing.T) {
 	}()
 
 	// 1. User A claims from natIP -> Must SUCCEED (200 OK)
-	wA := claimFaucet(tokenUserA, natIP)
+	wA := claimFunds(tokenUserA, natIP)
 	assert.Equal(t, http.StatusOK, wA.Code, "User A should succeed on first claim: %s", wA.Body.String())
 
 	// 2. User B claims from the SAME natIP -> Must also SUCCEED (No NAT-cooldown collision!)
-	wB := claimFaucet(tokenUserB, natIP)
+	wB := claimFunds(tokenUserB, natIP)
 	assert.Equal(t, http.StatusOK, wB.Code, "User B should succeed from same NAT IP without 24h lockout: %s", wB.Body.String())
 
 	// 3. User A attempts to claim again immediately -> Must fail with account-level 429 faucet_cooldown
-	wA2 := claimFaucet(tokenUserA, natIP)
+	wA2 := claimFunds(tokenUserA, natIP)
 	assert.Equal(t, http.StatusTooManyRequests, wA2.Code)
 	var errA2 map[string]interface{}
 	_ = json.Unmarshal(wA2.Body.Bytes(), &errA2)
@@ -94,7 +94,7 @@ func TestFaucet_NATMultiUserAndAbusePrevention(t *testing.T) {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userCID)
 	}()
 
-	wC := claimFaucet(tokenUserC, testIP)
+	wC := claimFunds(tokenUserC, testIP)
 	assert.Equal(t, http.StatusTooManyRequests, wC.Code)
 	var errC map[string]interface{}
 	_ = json.Unmarshal(wC.Body.Bytes(), &errC)

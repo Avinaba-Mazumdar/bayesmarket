@@ -67,7 +67,6 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                             <svg lucideShieldCheck class="badge-icon" [size]="14" aria-hidden="true"></svg>
                             ADMIN CONSOLE
                         </app-badge>
-                        <span class="env-tag">RESTRICTED ENVIRONMENT</span>
                     </div>
                     <div class="admin-title-row">
                         <app-brand-icon [size]="32" [glow]="true"></app-brand-icon>
@@ -78,16 +77,6 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                         permanent deletions, or settle mature markets.
                     </p>
                 </div>
-
-                @if (authStore.user()?.email) {
-                    <div class="header-right">
-                        <div class="admin-identity-pill">
-                            <span class="identity-dot"></span>
-                            <span class="identity-role">Admin</span>
-                            <span class="identity-email">{{ authStore.user()?.email }}</span>
-                        </div>
-                    </div>
-                }
             </div>
 
             <!-- Workspace Tabs -->
@@ -736,8 +725,6 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
 
             .admin-badge-row,
             .admin-title-row,
-            .header-right,
-            .admin-identity-pill,
             .manage-header-actions,
             .prob-cell,
             .action-buttons-group,
@@ -761,18 +748,6 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 color: var(--primary-border);
             }
 
-            .env-tag {
-                font-family: var(--font-mono);
-                font-size: 11px;
-                font-weight: 700;
-                color: var(--status-warning);
-                background-color: var(--status-warning-bg);
-                border: 1px solid var(--status-warning-border);
-                padding: var(--space-xxs) var(--space-xs);
-                border-radius: var(--radius-xs);
-                letter-spacing: 0.5px;
-            }
-
             .admin-title-row {
                 gap: var(--space-sm);
                 margin-bottom: var(--space-xs);
@@ -792,38 +767,6 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 max-width: 720px;
                 line-height: var(--line-height-prose);
                 margin: 0;
-            }
-
-            .header-right {
-                gap: var(--space-sm);
-            }
-
-            .admin-identity-pill {
-                gap: var(--space-xs);
-                background-color: var(--primary-subtle);
-                border: 1px solid var(--primary-border);
-                padding: 6px var(--space-sm);
-                border-radius: var(--radius-pill);
-                font-size: 12px;
-            }
-
-            .identity-dot {
-                width: 7px;
-                height: 7px;
-                border-radius: 50%;
-                background-color: var(--outcome-yes);
-                box-shadow: 0 0 6px var(--outcome-yes);
-            }
-
-            .identity-role {
-                font-weight: 700;
-                color: var(--primary-text);
-            }
-
-            .identity-email {
-                color: var(--ink-secondary);
-                font-family: var(--font-mono);
-                font-size: 11px;
             }
 
             /* Common Card Containers */
@@ -879,6 +822,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 background-color: transparent;
                 border: 1px solid transparent;
                 color: var(--muted);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 font-weight: 600;
                 cursor: pointer;

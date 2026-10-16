@@ -296,7 +296,7 @@ bayesmarket/
 │   │   │   └── logger.go        # Structured JSON Request Logger & Trace IDs
 │   │   └── transport/           # TRANSPORT ADAPTERS
 │   │       ├── rest/
-│   │       │   ├── auth_handler.go      # Guest Onboarding & Faucet
+│   │       │   ├── auth_handler.go      # Guest Onboarding & Claim
 │   │       │   ├── market_handler.go    # Market Catalog & Detail
 │   │       │   ├── trade_handler.go     # Quotes & Trade Execution
 │   │       │   ├── portfolio_handler.go # User Positions & PnL
@@ -332,7 +332,7 @@ bayesmarket/
     │   │   │   ├── market.store.ts           # Signal Store: Active Market & Tickers
     │   │   │   └── portfolio.store.ts        # Signal Store: Positions & Unrealized PnL
     │   │   ├── features/
-    │   │   │   ├── navbar/                   # Logo, Faucet, Balance Pill, Guest Badge
+    │   │   │   ├── navbar/                   # Logo, Claim, Balance Pill, Guest Badge
     │   │   │   ├── market-list/              # Catalog Grid, Category Filter, Search
     │   │   │   ├── market-detail/
     │   │   │   │   ├── market-header/        # Probability Badge & Resolution Rules
@@ -378,13 +378,13 @@ export const GuestStore = signalStore(
     withState({
         user: signal<User | null>(null),
         balance: signal<DecimalString>('1000.00000000'),
-        faucetEligible: signal<boolean>(false),
+        claimEligible: signal<boolean>(false),
         isLoading: signal<boolean>(false)
     }),
-    withComputed(({ user, balance, faucetEligible }) => ({
+    withComputed(({ user, balance, claimEligible }) => ({
         isGuest: computed(() => user()?.isGuest ?? true),
         formattedBalance: computed(() => formatUsdc(balance())),
-        canClaimFaucet: computed(() => faucetEligible())
+        canClaim: computed(() => claimEligible())
     }))
 );
 
@@ -683,7 +683,7 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 | `ERR_POOL_RESERVE_EXHAUSTED` | `400 Bad Request`       | Trade would drain reserves below safety threshold ($100.00 USDC).    |
 | `ERR_MARKET_NOT_TRADABLE`    | `409 Conflict`          | Market is locked, suspended, or already resolved.                    |
 | `ERR_RATE_LIMIT_EXCEEDED`    | `429 Too Many Requests` | Token-bucket limit exceeded. Includes `Retry-After` header.          |
-| `ERR_FAUCET_COOLDOWN`        | `429 Too Many Requests` | Claim submitted before 5-minute cooldown expired.                    |
+| `ERR_CLAIM_COOLDOWN`         | `429 Too Many Requests` | Claim submitted before 5-minute cooldown expired.                    |
 
 ---
 
@@ -707,9 +707,9 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 }
 ```
 
-#### 2. Claim Faucet Funds
+#### 2. Claim Funds
 
-- **Endpoint**: `POST /api/v1/faucet`
+- **Endpoint**: `POST /api/v1/claim`
 - **Headers**: `Authorization: Bearer <token>`
 - **Rules**: Allowed if `cash_balance < 200.00000000` and last claim was `> 5 minutes` ago.
 - **Response `200 OK`**:
@@ -1003,7 +1003,7 @@ Every inbound request is assigned a unique `X-Trace-ID` propagated through Go `c
 | **API Drain / DDoS Attack**           | High     | **Token-Bucket Rate Limiter**: 60 req/min for reads; 12 req/min for trades per Guest ID and IP. Excess requests return HTTP 429 immediately before hitting database queries.                 |
 | **Floating-Point Rounding Exploits**  | High     | **Decimal-Only Computation**: Zero `float64` operations in the trading path. All reserves and balances use `shopspring/decimal` fixed-point representations.                                 |
 | **Infinite Division / Zero Reserves** | High     | **Boundary Clamping**: Market prices are restricted to the interval `[0.0100, 0.9900]`. If a trade would drive a reserve below minimum liquidity threshold ($100.00 USDC), execution aborts. |
-| **Sybil Faucet Depletion**            | Medium   | **Dual-Key Faucet Lock**: Claims require both a minimum time cooldown (5 min) per IP address and an active user cash-balance check (`cash_balance < $200.00`).                               |
+| **Sybil Claim Depletion**             | Medium   | **Dual-Key Claim Lock**: Claims require both a minimum time cooldown (5 min) per IP address and an active user cash-balance check (`cash_balance < $200.00`).                                |
 | **SQL Injection**                     | Critical | **Prepared Statements**: All database operations use parameter placeholders (`$1, $2`) via `pgx`. No dynamic string concatenation.                                                           |
 | **Cross-Site Scripting (XSS)**        | High     | **Strict CSP & Sanitization**: Angular's default DOM sanitization prevents script injection; HTTP-Only cookie flags for JWT tokens prevent client-side credential theft.                     |
 
@@ -1018,7 +1018,7 @@ Implemented in Go middleware using `golang.org/x/time/rate`:
     - Rate: **12 requests/minute** per Guest ID / IP address.
     - Burst: **3 requests**.
     - Enforces backpressure against spamming the AMM engine and database row locks.
-- **Faucet Claim Throttling** (`POST /api/v1/faucet`):
+- **Balance Claim Throttling** (`POST /api/v1/claim`):
     - Max **1 claim per 5 minutes** per Guest ID / IP address.
     - Eligibility gate: Balance must be below `$200.00 USDC`.
 - **External Oracle / 3rd-Party Data Cache**:
@@ -1038,7 +1038,7 @@ WHERE is_guest = true
   AND last_active < NOW() - INTERVAL '7 days';
 ```
 
-_(Cascading foreign keys automatically purge associated positions and faucet claim logs)._
+_(Cascading foreign keys automatically purge associated positions and claim logs)._
 
 ---
 

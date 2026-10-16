@@ -144,8 +144,8 @@ Implement the RESTful HTTP API layer, guest session issuance, in-memory token-bu
     - Implement `GET /api/v1/markets/:id`: Returns full market metadata, pool reserves, 24h stats, and resolution rules.
     - Implement `POST /api/v1/markets/:id/quote`: Accepts `{ outcome: "YES", amount_usdc: "100.00000000" }` and returns authoritative decimal-string shares, price, and slippage without mutating state.
 
-- [x] **Task 4.4: Sandbox Faucet & Portfolio Read Endpoints**
-    - Implement `POST /api/v1/faucet`: Claims 500 virtual USDC for guest accounts with an enforced 5-minute cooldown period and an `Idempotency-Key`.
+- [x] **Task 4.4: Sandbox Claim & Portfolio Read Endpoints**
+    - Implement `POST /api/v1/claim`: Claims 500 virtual USDC for guest accounts with an enforced 5-minute cooldown period and an `Idempotency-Key`.
     - Implement `GET /api/v1/portfolio`: Returns user cash balance, open positions, current market value, and unrealized profit/loss.
 
 ### 🔍 User Verification Task (Phase 4)
@@ -269,7 +269,7 @@ Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBr
     - Implement unified `ButtonComponent` (`frontend/src/app/shared/components/button/button.component.ts`) with variant-driven styling, guaranteed `min-height: 44px; min-width: 44px;`, and $\ge 8\text{px}$ touch envelopes:
         - Variant `primary`: Deep Amaranth button with `#ffffff` text (**7.67:1** contrast).
         - Variant `yes` / `no`: Dual-coded outcome selector buttons.
-        - Variant `faucet`: Pill button with `#fbcfe8` text on amaranth subtle base (**12.35:1** contrast).
+        - Variant `claim`: Pill button with `#fbcfe8` text on amaranth subtle base (**12.35:1** contrast).
         - Variant `chip`: Compact selection chip for quick-fill and timeframe selectors.
     - Additional shared primitives: `DialogComponent`, `InputComponent`, `SelectComponent`, `SwitchComponent`, `BadgeComponent`, `LabelComponent`, `TextareaComponent`, `ToastComponent`, `AvatarComponent`.
     - _Note: Feature-specific chip compositions (`QuickAmountChipComponent`, `ChartIntervalChipComponent`) are delivered in Phase 8 alongside their consuming views._
@@ -277,7 +277,7 @@ Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBr
 - [x] **Task 7.4: Navigation Shell & Focus Visibility (SC 2.4.12 & SC 2.4.13 Level AAA)**
     - Implement `TopHeaderDockComponent`:
         - Left: BayesMarket brand emblem and navigation links.
-        - Right: Guest balance pill (`"$1,000.00 USDC"` in JetBrains Mono), `[+ Faucet]` button, live WebSocket pulse indicator.
+        - Right: Guest balance pill (`"$1,000.00 USDC"` in JetBrains Mono), `[+ Claim]` button, live WebSocket pulse indicator.
     - Implement global focus indicators:
         ```css
         :focus-visible {
@@ -386,7 +386,7 @@ Build the portfolio position tracker, "Cash Out" AMM liquidation flow, automated
 
 1. Open `http://localhost:4200` in browser.
 2. Complete the full trader lifecycle:
-    - Click `[+ Faucet]` to receive testnet funds.
+    - Click `[+ Claim]` to receive testnet funds.
     - Place a $100 trade on `YES` via the confirmation modal.
     - Navigate to `/portfolio` and verify open position shows positive/negative unrealized PnL based on market price.
     - Click `"Cash Out"` on the position and verify shares are liquidated back to USDC cash balance.

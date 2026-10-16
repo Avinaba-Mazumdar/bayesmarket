@@ -34,21 +34,15 @@ import { AuthStore } from '../../../state/auth.store';
                     </nav>
                 </div>
 
-                <!-- Right: Faucet, Theme Toggle, Auth -->
+                <!-- Right: Claim, Theme Toggle, Auth -->
                 <div class="dock-right">
                     @if (authStore.isAuthenticated()) {
-                        <!-- Faucet Button -->
-                        <app-button
-                            variant="secondary"
-                            size="default"
-                            [loading]="isClaimingFaucet()"
-                            ariaLabel="Claim testnet faucet USDC"
-                            (btnClick)="onClaimFaucet()"
-                        >
-                            @if (isClaimingFaucet()) {
+                        <!-- Claim Button -->
+                        <app-button variant="secondary" size="default" [loading]="isClaiming()" ariaLabel="Claim testnet USDC" (btnClick)="onClaim()">
+                            @if (isClaiming()) {
                                 <span>Claiming...</span>
                             } @else {
-                                <span>+100 Faucet</span>
+                                <span>+100 Claim</span>
                             }
                         </app-button>
                     }
@@ -207,19 +201,6 @@ import { AuthStore } from '../../../state/auth.store';
             }
             .admin-nav-tab {
                 gap: 6px;
-                color: #e84089;
-                border: 1px solid rgba(232, 64, 137, 0.25);
-                background-color: rgba(232, 64, 137, 0.08);
-            }
-            .admin-nav-tab:hover {
-                background-color: rgba(232, 64, 137, 0.16);
-                border-color: rgba(232, 64, 137, 0.5);
-                color: #ff60a8;
-            }
-            .admin-nav-tab.active {
-                background-color: rgba(232, 64, 137, 0.22);
-                border-color: #e84089;
-                color: #ffffff;
             }
             .admin-tab-icon {
                 flex-shrink: 0;
@@ -346,11 +327,11 @@ export class TopHeaderDockComponent {
     readonly authStore = inject(AuthStore);
     readonly themeService = inject(ThemeService);
 
-    get isClaimingFaucet() {
-        return this.authStore.isClaimingFaucet;
+    get isClaiming() {
+        return this.authStore.isClaiming;
     }
 
-    onClaimFaucet(): void {
-        this.authStore.claimFaucet();
+    onClaim(): void {
+        this.authStore.claim();
     }
 }

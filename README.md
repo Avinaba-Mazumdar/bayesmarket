@@ -35,7 +35,7 @@ Unlike traditional wagering apps, BayesMarket implements a **collateralized comp
 - **High-Concurrency Go Engine**: Low-latency order execution, row-level locking in PostgreSQL for atomic balances and pool invariants, and non-blocking channel fan-out.
 - **Real-Time Streaming**: Push-based price updates and live trade activity via resilient, auto-reconnecting WebSockets.
 - **Reactive Zoneless UI**: Built with Angular Signals, computed derivations, and `lightweight-charts` for 60fps canvas rendering without change-detection overhead.
-- **Instant Sandbox Mode**: 1-click ephemeral Guest Session pre-loaded with 1,000 virtual USDC and faucet replenishment to test trading workflows without wallet connection or registration.
+- **Instant Sandbox Mode**: 1-click ephemeral Guest Session pre-loaded with 1,000 virtual USDC and claim replenishment to test trading workflows without wallet connection or registration.
 - **WCAG 2.2 Level AAA Compliant**: Rigorously engineered accessibility architecture featuring 7:1 enhanced contrast, 44×44px hit targets, full keyboard navigation, and two-step financial order confirmation review.
 - **Abuse Mitigation**: In-memory token-bucket rate limiting per IP and session (`golang.org/x/time/rate`).
 
@@ -70,7 +70,7 @@ flowchart TB
     end
 
     %% Client Interactions
-    UI -->|Orders, Quotes, Faucet| REST
+    UI -->|Orders, Quotes, Claim| REST
     REST --> RL
     RL --> AUTH
     AUTH --> AMM

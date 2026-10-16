@@ -239,7 +239,7 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin
 	// Handlers
 	authHandler := NewAuthHandler(pool, cfg)
 	marketHandler := NewMarketHandler(pool, marketCache)
-	faucetHandler := NewFaucetHandler(pool, isDevOrLocal)
+	claimHandler := NewClaimHandler(pool, isDevOrLocal)
 	portfolioHandler := NewPortfolioHandler(pool)
 	tradeHandler := NewTradeHandler(pool, hub)
 	tradeHandler.SetCache(marketCache)
@@ -358,11 +358,16 @@ bayesmarket_up 1
 			)
 		}
 
-		// 3. Faucet claim (Protected)
+		// 3. Balance claim (Protected)
+		v1.POST("/claim",
+			middleware.RequireAuth(jwtSecret),
+			actionLimiter.LimitByClientOrUser(),
+			claimHandler.HandleClaim,
+		)
 		v1.POST("/faucet",
 			middleware.RequireAuth(jwtSecret),
 			actionLimiter.LimitByClientOrUser(),
-			faucetHandler.HandleClaimFaucet,
+			claimHandler.HandleClaim,
 		)
 
 		// 4. Portfolio read & Cashout (Protected)

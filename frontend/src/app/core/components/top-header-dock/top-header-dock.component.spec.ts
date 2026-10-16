@@ -35,7 +35,7 @@ describe('TopHeaderDockComponent', () => {
                 })
             ),
             getGoogleAuthUrl: vi.fn().mockReturnValue(of({ url: '', simulated: true })),
-            claimFaucet: vi.fn().mockReturnValue(
+            claim: vi.fn().mockReturnValue(
                 of({
                     success: true,
                     amount: '100',
@@ -77,7 +77,7 @@ describe('TopHeaderDockComponent', () => {
         expect(navTabs[1].textContent?.trim()).toBe('Portfolio');
     });
 
-    it('should render faucet button and handle faucet claims when authenticated', () => {
+    it('should render claim button and handle claims when authenticated', () => {
         authStore.token.set('tok-1');
         authStore.user.set({
             id: 'u-1',
@@ -89,12 +89,12 @@ describe('TopHeaderDockComponent', () => {
         fixture.detectChanges();
 
         const el = fixture.nativeElement as HTMLElement;
-        const faucetBtn = el.querySelector('app-button[variant="secondary"]') as HTMLElement;
-        expect(faucetBtn).toBeTruthy();
-        expect(faucetBtn.textContent).toContain('+100 Faucet');
+        const claimBtn = el.querySelector('app-button[variant="secondary"]') as HTMLElement;
+        expect(claimBtn).toBeTruthy();
+        expect(claimBtn.textContent).toContain('+100 Claim');
 
-        const claimSpy = vi.spyOn(authStore, 'claimFaucet');
-        component.onClaimFaucet();
+        const claimSpy = vi.spyOn(authStore, 'claim');
+        component.onClaim();
         expect(claimSpy).toHaveBeenCalled();
     });
 

@@ -40,7 +40,7 @@ You are a senior quantitative trading systems engineer, distributed systems arch
 - **Atomic Balance & Position Ledger**: PostgreSQL transactions with pessimistic row-level locking (`SELECT FOR UPDATE`) guaranteeing serializable pool reserve and cash updates without race conditions.
 - **Real-Time Push Architecture**: Push-based price updates, liquidity updates, and live trade activity streamed to subscribers via resilient, auto-reconnecting WebSockets.
 - **Zoneless Reactive Terminal**: Ultra-responsive Angular Signals architecture driving 60fps TradingView lightweight canvas charts and real-time slippage calculations with zero change-detection overhead.
-- **Instant Sandbox Mode**: 1-click ephemeral Guest Session pre-seeded with 1,000 virtual USDC and faucet claims, enabling immediate interactive trading with zero onboarding friction or cognitive tests.
+- **Instant Sandbox Mode**: 1-click ephemeral Guest Session pre-seeded with 1,000 virtual USDC and balance claims, enabling immediate interactive trading with zero onboarding friction or cognitive tests.
 - **Universal Accessibility**: 100% adherence to WCAG 2.2 Level AAA standards across contrast, target sizes, keyboard operability, and financial error prevention.
 
 ---
@@ -79,7 +79,7 @@ When generating code or proposing modifications for BayesMarket, you MUST strict
 - **Atomic Balance Mutation**: Updating user balances, pool collateral, virtual reserves, positions, and immutable ledger entries must occur inside a single PostgreSQL transaction.
 - **Row-Level Locking**: Within every trade, cash-out, and settlement transaction, lock rows in one global order—user, position (when applicable), market, then liquidity pool—using `SELECT ... FOR UPDATE` before evaluating balance sufficiency or computing swap mechanics.
 - **Immutable Ledger History**: Every balance, collateral, or position mutation must generate append-only `ledger_entries` tied to a transaction identifier. Snapshot balances and pool reserves are never updated without corresponding ledger entries.
-- **Idempotency**: All mutation endpoints (`POST /api/v1/markets/:id/orders`, `POST /api/v1/faucet`, cash-out, and resolution) require an `Idempotency-Key` and enforce it with a database unique constraint scoped to the actor and operation.
+- **Idempotency**: All mutation endpoints (`POST /api/v1/markets/:id/orders`, `POST /api/v1/claim`, cash-out, and resolution) require an `Idempotency-Key` and enforce it with a database unique constraint scoped to the actor and operation.
 
 ### 3. Backend Tech Stack Constraints
 

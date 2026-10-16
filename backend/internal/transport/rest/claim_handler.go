@@ -17,28 +17,34 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FaucetHandler handles virtual sandbox currency grants with cooldown protection.
-type FaucetHandler struct {
+// ClaimHandler handles virtual sandbox currency grants with cooldown protection.
+type ClaimHandler struct {
 	pool         *pgxpool.Pool
 	isDevOrLocal bool
 }
 
-// NewFaucetHandler constructs a FaucetHandler.
-func NewFaucetHandler(pool *pgxpool.Pool, isDevOrLocal ...bool) *FaucetHandler {
+// FaucetHandler is a legacy alias for ClaimHandler.
+type FaucetHandler = ClaimHandler
+
+// NewClaimHandler constructs a ClaimHandler.
+func NewClaimHandler(pool *pgxpool.Pool, isDevOrLocal ...bool) *ClaimHandler {
 	isDev := false
 	if len(isDevOrLocal) > 0 {
 		isDev = isDevOrLocal[0]
 	}
-	return &FaucetHandler{
+	return &ClaimHandler{
 		pool:         pool,
 		isDevOrLocal: isDev,
 	}
 }
 
-// HandleClaimFaucet issues 100 virtual USDC to the user with a 24-hour cooldown.
+// NewFaucetHandler is a legacy alias for NewClaimHandler.
+var NewFaucetHandler = NewClaimHandler
+
+// HandleClaim issues 100 virtual USDC to the user with a 24-hour cooldown.
 //
-// POST /api/v1/faucet
-func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
+// POST /api/v1/claim or POST /api/v1/faucet
+func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
@@ -50,7 +56,7 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 
 	clientIP := c.ClientIP()
 	cooldownDuration := 24 * time.Hour
-	faucetGrant := decimal.NewFromInt(100)
+	claimGrant := decimal.NewFromInt(100)
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 
@@ -71,8 +77,8 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 	if h.pool == nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success":          true,
-			"amount_claimed":   faucetGrant.StringFixed(8),
-			"amount":           faucetGrant.StringFixed(0),
+			"amount_claimed":   claimGrant.StringFixed(8),
+			"amount":           claimGrant.StringFixed(0),
 			"new_balance":      "1100.00000000",
 			"cooldown_seconds": 86400,
 			"user": gin.H{
@@ -204,7 +210,7 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 		WHERE id = $2
 		RETURNING cash_balance;
 	`
-	err = tx.QueryRow(ctx, updateQuery, faucetGrant, userID).Scan(&updatedBalance)
+	err = tx.QueryRow(ctx, updateQuery, claimGrant, userID).Scan(&updatedBalance)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to update user cash balance"})
 		return
@@ -215,7 +221,7 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 		INSERT INTO faucet_claims (user_id, ip_address, amount)
 		VALUES ($1, $2, $3);
 	`
-	_, err = tx.Exec(ctx, insertClaim, userID, clientIP, faucetGrant)
+	_, err = tx.Exec(ctx, insertClaim, userID, clientIP, claimGrant)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to record claim audit log"})
 		return
@@ -225,9 +231,9 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 	txID := uuid.New()
 	insertLedger := `
 		INSERT INTO ledger_entries (transaction_id, user_id, account, asset, delta, entry_type)
-		VALUES ($1, $2, 'user_cash', 'USDC', $3, 'faucet');
+		VALUES ($1, $2, 'user_cash', 'USDC', $3, 'claim');
 	`
-	_, err = tx.Exec(ctx, insertLedger, txID, userID, faucetGrant)
+	_, err = tx.Exec(ctx, insertLedger, txID, userID, claimGrant)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to record ledger entry"})
 		return
@@ -236,8 +242,8 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 	// Build the authoritative response, then persist it as the idempotency receipt.
 	resp := gin.H{
 		"success":          true,
-		"amount_claimed":   faucetGrant.StringFixed(8),
-		"amount":           faucetGrant.StringFixed(0),
+		"amount_claimed":   claimGrant.StringFixed(8),
+		"amount":           claimGrant.StringFixed(0),
 		"new_balance":      updatedBalance.StringFixed(8),
 		"cooldown_seconds": 86400,
 		"user": gin.H{
@@ -250,7 +256,7 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 		if respBytes, err := json.Marshal(resp); err == nil {
 			insertIdempotency := `
 				INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response, created_at)
-				VALUES ($1, 'faucet_claim', $2, $3, NOW())
+				VALUES ($1, 'claim', $2, $3, NOW())
 				ON CONFLICT (actor_id, operation, idempotency_key) DO NOTHING;
 			`
 			_, _ = tx.Exec(ctx, insertIdempotency, userID, idempotencyKey, respBytes)
@@ -258,9 +264,14 @@ func (h *FaucetHandler) HandleClaimFaucet(c *gin.Context) {
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to commit faucet transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to commit claim transaction"})
 		return
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// HandleClaimFaucet is a legacy alias for HandleClaim.
+func (h *ClaimHandler) HandleClaimFaucet(c *gin.Context) {
+	h.HandleClaim(c)
 }

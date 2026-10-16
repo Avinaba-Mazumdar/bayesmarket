@@ -7,11 +7,11 @@ import {
     BuyQuoteResponse,
     CashOutRequest,
     CashOutResponse,
+    ClaimResponse,
     CreateMarketRequest,
     CreateMarketResponse,
     DeleteMarketResponse,
     EditMarketRequest,
-    FaucetResponse,
     GoogleCallbackRequest,
     GoogleVerifyRequest,
     Market,
@@ -129,11 +129,11 @@ export class ApiService {
     }
 
     /**
-     * Claim testnet faucet USDC.
+     * Claim testnet USDC.
      */
-    claimFaucet(token: string): Observable<FaucetResponse> {
+    claim(token: string): Observable<ClaimResponse> {
         const headers = this.buildHeaders(token);
-        return this.http.post<FaucetResponse>(`${this.baseUrl}/faucet`, {}, { headers });
+        return this.http.post<ClaimResponse>(`${this.baseUrl}/claim`, {}, { headers });
     }
 
     /**

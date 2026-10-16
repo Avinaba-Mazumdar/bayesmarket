@@ -32,7 +32,7 @@ export class AuthStore {
 
     readonly isInitializing = signal<boolean>(false);
     readonly isAuthenticating = signal<boolean>(false);
-    readonly isClaimingFaucet = signal<boolean>(false);
+    readonly isClaiming = signal<boolean>(false);
     readonly isAuthModalOpen = signal<boolean>(false);
 
     readonly isDev = signal<boolean>(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
@@ -314,17 +314,17 @@ export class AuthStore {
     }
 
     /**
-     * Claims testnet faucet funds.
+     * Claims testnet funds.
      */
-    claimFaucet(): void {
+    claim(): void {
         const token = this.token();
         if (!token) {
             this.toastService.error('Session Error', 'Session not ready');
             return;
         }
 
-        this.isClaimingFaucet.set(true);
-        this.apiService.claimFaucet(token).subscribe({
+        this.isClaiming.set(true);
+        this.apiService.claim(token).subscribe({
             next: (res) => {
                 const rawBalance = res.new_balance ?? res.user?.cash_balance ?? '0';
                 const formatted = this.formatBalance(rawBalance);
@@ -344,19 +344,19 @@ export class AuthStore {
                     }
                 }
 
-                this.isClaimingFaucet.set(false);
+                this.isClaiming.set(false);
                 const claimedAmount = res.amount_claimed ? Math.round(parseFloat(res.amount_claimed)).toString() : (res.amount ?? '100');
-                this.toastService.success('Faucet Claimed', `+$${claimedAmount} USDC credited to your balance`);
+                this.toastService.success('Claim Successful', `+$${claimedAmount} USDC credited to your balance`);
             },
             error: (err) => {
-                this.isClaimingFaucet.set(false);
+                this.isClaiming.set(false);
                 if (err?.status === 401 || err?.status === 404) {
                     this.clearSession();
                     this.toastService.error('Session Expired', 'Your session is no longer valid. Please sign in again.');
                     return;
                 }
-                const msg = err?.error?.message || 'Faucet cooldown in effect or request rate exceeded';
-                this.toastService.warning('Faucet Cooldown', msg);
+                const msg = err?.error?.message || 'Claim cooldown in effect or request rate exceeded';
+                this.toastService.warning('Claim Cooldown', msg);
             }
         });
     }

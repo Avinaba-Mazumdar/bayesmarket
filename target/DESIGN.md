@@ -248,7 +248,7 @@ components:
         padding: 14px 20px
         minHeight: 44px
         minWidth: 44px
-    button-faucet:
+    button-claim:
         backgroundColor: '{colors.primary-subtle}'
         textColor: '#fbcfe8'
         borderColor: '{colors.primary-border}'
@@ -454,7 +454,7 @@ BayesMarket is designed to satisfy the highest international benchmark for digit
 - **Primary Brand** (`{colors.primary}` — `#a6034c`): Deep Amaranth. The foundational brand color. Used for primary commit CTAs (`"Execute Trade"`, `"Confirm Swap"`), active navigation indicators, and primary highlight badges. `#ffffff` text on `#a6034c` achieves **7.67:1** contrast (**Exceeds 7.0:1 AAA**).
 - **Primary Active** (`{colors.primary-active}` — `#85023d`): Pressed state for primary buttons with tactile mechanical scale depression. `#ffffff` on `#85023d` achieves **10.13:1** contrast (**Exceeds 7.0:1 AAA**).
 - **Primary Hover** (`{colors.primary-hover}` — `#ab034e`): Calibrated high-luminance hover shade. `#ffffff` on `#ab034e` achieves **7.36:1** contrast (**Strictly Exceeds 7.0:1 AAA**; standard lighter pinks fail this test).
-- **Primary Subtle** (`{colors.primary-subtle}` — `rgba(166, 3, 76, 0.15)`): Tonal glow background for active tabs, selected token pills, and guest faucet controls.
+- **Primary Subtle** (`{colors.primary-subtle}` — `rgba(166, 3, 76, 0.15)`): Tonal glow background for active tabs, selected token pills, and guest claim controls.
 - **Primary Border / Focus Ring** (`{colors.primary-border}` / `{colors.focus-outline}` — `#e84089`): High-definition perimeter outline for active cards and focused order inputs (**5.24:1** contrast against canvas `#07090e`, **4.76:1** against card `#111622` — **Exceeds 3.0:1 Focus/Non-Text AAA**).
 - **Primary Glow** (`{colors.primary-glow}` — `rgba(166, 3, 76, 0.35)`): Ambient radial bloom surrounding execution triggers.
 
@@ -521,7 +521,7 @@ Quantitative Font: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, 
 | `{typography.label-md}`         | Scoutie Sans   | 14px | 600    | 1.35        | 0.1px    | Form field labels, Slider endpoints                            |
 | `{typography.label-sm}`         | Scoutie Sans   | 12px | 600    | 1.3         | 0.2px    | Status tags (`ACTIVE`, `RESOLVED`), Category badges            |
 | `{typography.button}`           | Scoutie Sans   | 15px | 600    | 1.3         | 0.1px    | Primary action triggers (`Buy YES`, `Execute Trade`)           |
-| `{typography.button-sm}`        | Scoutie Sans   | 13px | 600    | 1.3         | 0.1px    | Faucet claim, Quick share amount pills (`+$50`, `Max`)         |
+| `{typography.button-sm}`        | Scoutie Sans   | 13px | 600    | 1.3         | 0.1px    | Claim, Quick share amount pills (`+$50`, `Max`)                |
 | `{typography.probability-hero}` | JetBrains Mono | 36px | 700    | 1.1         | -1.0px   | Main market implied probability (`72% YES`)                    |
 | `{typography.kpi-metric}`       | JetBrains Mono | 24px | 700    | 1.2         | -0.5px   | User cash balance, 24h Volume counters (`$142,500 USDC`)       |
 | `{typography.mono-md}`          | JetBrains Mono | 15px | 600    | 1.35        | 0        | Order input value, Expected shares filled, Avg price           |
@@ -582,14 +582,14 @@ Level 0: Canvas Floor          Level 1: Cards & Panels        Level 2: Modals & 
 - `{rounded.md}` (`10px`): Order terminal inputs, YES/NO toggle buttons, category pills.
 - `{rounded.lg}` (`14px`): Primary action buttons (`{component.button-primary}`), market cards.
 - `{rounded.xl}` (`20px`): TradingView chart panels, execution terminal outer frames, modals.
-- `{rounded.pill}` (`9999px`): Probability badges, Guest Balance pill, Faucet claim button.
+- `{rounded.pill}` (`9999px`): Probability badges, Guest Balance pill, Claim button.
 - `{rounded.full}` (`9999px`): Circular avatars, status ping lights, icon buttons.
 
 ### 6.2 Strict 44×44px Target Size Enforcement (SC 2.5.5 Level AAA)
 
 To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 
-1. **Universal Minimum Dimension**: Every interactive element (buttons, tabs, inputs, icon triggers, faucet pills, quick-fill chips, chart timeframe pills, table cash out buttons) enforces `min-height: 44px; min-width: 44px;`.
+1. **Universal Minimum Dimension**: Every interactive element (buttons, tabs, inputs, icon triggers, claim pills, quick-fill chips, chart timeframe pills, table cash out buttons) enforces `min-height: 44px; min-width: 44px;`.
 2. **Spacing Isolation**: Adjacent interactive targets maintain at least `8px` (`{spacing.xs}`) of visual gap so circular touch envelopes never collide.
 3. **Quick-Fill Sizing Chips**: Preset buttons (`$10`, `$50`, `$100`, `Max`) use `height: 44px; min-width: 52px; padding: 10px 16px;`.
 4. **Chart Interval Selectors**: Timeframe controls (`1H`, `1D`, `1W`, `ALL`) measure `height: 44px; min-width: 44px; padding: 8px 14px;`.
@@ -619,7 +619,7 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 - Active / Selected: Background `{colors.outcome-no}` (`#fb7185`), Text `#07090e`, Box-shadow `{shadows.glow-no}`, Transform `scale(0.98)`.
 - Contrast Verification: `#fda4af` on `#330814` = **9.39:1** (**Passes AAA 7.0:1**). Selected text `#07090e` on `#fb7185` = **7.40:1** (**Passes AAA 7.0:1**).
 
-**`button-faucet`** — Ephemeral guest sandbox balance refill trigger.
+**`button-claim`** — Ephemeral guest sandbox balance refill trigger.
 
 - Container: Background `{colors.primary-subtle}` (`rgba(166, 3, 76, 0.15)` on card = `#271328`), Border 1px `{colors.primary-border}` (`#e84089`), Text `#fbcfe8` (Light Orchid), Corner `{rounded.pill}`, Padding `10px 18px`, Min-Height `44px`, Min-Width `44px`.
 - Contrast: `#fbcfe8` on `#271328` = **12.35:1** (**Passes AAA 7.0:1**). Border `#e84089` against card = **4.76:1** (**Passes 3.0:1 Non-text AAA**).
@@ -633,7 +633,7 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 
 - Background: `{colors.surface-glass}` with `backdrop-filter: blur(16px)` and 1px bottom border `{colors.hairline}`.
 - Left Cluster: BayesMarket monogram in Deep Amaranth (`#a6034c`) + wordmark in `{typography.title-lg}` Scoutie Sans. Category navigation tabs (`AI`, `Crypto`, `Tech`, `Macro`) with `min-height: 44px` touch hitboxes and `aria-current="page"`.
-- Right Cluster: Ephemeral Guest Balance indicator (`"$1,000.00 USDC"` in `{typography.mono-sm}`), `[+ Faucet]` button (44px height), and live WebSocket telemetry connection pulse (🟢 connected with explicit aria-label).
+- Right Cluster: Ephemeral Guest Balance indicator (`"$1,000.00 USDC"` in `{typography.mono-sm}`), `[+ Claim]` button (44px height), and live WebSocket telemetry connection pulse (🟢 connected with explicit aria-label).
 
 ---
 
@@ -738,7 +738,7 @@ BayesMarket is engineered to deliver institutional-grade trading ergonomics from
 ```
 1. MOBILE VIEW (375px–430px)          2. DESKTOP COCKPIT (1280px–1600px)
 ┌─────────────────────────┐           ┌────────────────────────────────────────────────────────┐
-│ [Logo] [$1000] [+Faucet]│           │ [BayesMarket Logo]  Markets  Portfolio    [$1000] [Faucet]│
+│ [Logo] [$1000]  [+Claim]│           │ [BayesMarket Logo]  Markets  Portfolio    [$1000]  [Claim]│
 ├─────────────────────────┤           ├──────────────────────────────────────────┬─────────────┤
 │ Category Tabs (Scroll)  │           │ LEFT: MARKET CHART & PROBABILITY         │ RIGHT:      │
 ├─────────────────────────┤           │ • Market Question Header in Scoutie Sans │ TERMINAL    │
@@ -791,7 +791,7 @@ Under **WCAG 2.2 Level AAA**, all normal text requires **7.0:1 minimum**. Large 
 | **NO Label in Capsule**           | `{colors.outcome-no-text}` (`#fda4af`)  | `{colors.outcome-no-subtle}` (`#330814`)     | **9.39 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
 | **NO Label on Canvas**            | `{colors.outcome-no-text}` (`#fda4af`)  | `{colors.canvas}` (`#07090e`)                | **10.53 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
 | **NO Active Solid Button Text**   | `{colors.on-outcome}` (`#07090e`)       | `{colors.outcome-no}` (`#fb7185`)            | **7.40 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Faucet Button Text**            | Light Orchid (`#fbcfe8`)                | Subtle Amaranth (`#271328`)                  | **12.35 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
+| **Claim Button Text**             | Light Orchid (`#fbcfe8`)                | Subtle Amaranth (`#271328`)                  | **12.35 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
 | **Warning Callout Text**          | `{colors.status-warning}` (`#fcd34d`)   | `{colors.status-warning-bg}` (`#2a1a02`)     | **11.68 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
 | **Resolved Market Text**          | `{colors.status-resolved}` (`#d8b4fe`)  | `{colors.status-resolved-bg}` (`#250e38`)    | **9.91 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
 | **Info / Category Text**          | `{colors.status-info}` (`#7dd3fc`)      | `{colors.status-info-bg}` (`#082536`)        | **9.48 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
@@ -828,7 +828,7 @@ Every single trading, navigation, and inspection workflow is 100% operable via k
 | `[Escape]`                       | Modals / Drawers | Dismiss order confirmation dialog, close mobile drawer, dismiss tooltips |
 | `[Y]`                            | Quick Shortcut   | Focus order terminal and select `BUY YES`                                |
 | `[N]`                            | Quick Shortcut   | Focus order terminal and select `BUY NO`                                 |
-| `[F]`                            | Quick Shortcut   | Claim virtual testnet faucet allocation                                  |
+| `[F]`                            | Quick Shortcut   | Claim virtual testnet allocation                                         |
 
 #### SC 2.2.3 & SC 2.2.6 No Timing & Timeouts (Level AAA)
 

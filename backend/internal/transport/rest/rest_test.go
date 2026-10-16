@@ -300,8 +300,8 @@ func TestMarketQuoteEndpoint(t *testing.T) {
 	}
 }
 
-// 5. Task 4.4: Sandbox Faucet Claim & 5-Minute Cooldown Enforcement
-func TestFaucetClaimAndCooldown(t *testing.T) {
+// 5. Task 4.4: Sandbox Claim & 5-Minute Cooldown Enforcement
+func TestClaimAndCooldown(t *testing.T) {
 	pool, _, router := getTestEnv(t)
 	defer pool.Close()
 
@@ -314,30 +314,30 @@ func TestFaucetClaimAndCooldown(t *testing.T) {
 
 	token := authResp.Token
 
-	// Claim 1: Should succeed and return $1,500.00 balance
-	wFaucet1 := httptest.NewRecorder()
-	reqFaucet1, _ := http.NewRequest(http.MethodPost, "/api/v1/faucet", nil)
-	reqFaucet1.Header.Set("Authorization", "Bearer "+token)
-	router.ServeHTTP(wFaucet1, reqFaucet1)
+	// Claim 1: Should succeed and return $1,100.00 balance
+	wClaim1 := httptest.NewRecorder()
+	reqClaim1, _ := http.NewRequest(http.MethodPost, "/api/v1/claim", nil)
+	reqClaim1.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(wClaim1, reqClaim1)
 
-	if wFaucet1.Code != http.StatusOK {
-		t.Fatalf("Expected status 200 for first faucet claim, got %d. Body: %s", wFaucet1.Code, wFaucet1.Body.String())
+	if wClaim1.Code != http.StatusOK {
+		t.Fatalf("Expected status 200 for first claim, got %d. Body: %s", wClaim1.Code, wClaim1.Body.String())
 	}
 
-	var faucetResp map[string]interface{}
-	_ = json.Unmarshal(wFaucet1.Body.Bytes(), &faucetResp)
-	if faucetResp["new_balance"] != "1100.00000000" {
-		t.Errorf("Expected new balance '1100.00000000', got %v", faucetResp["new_balance"])
+	var claimResp map[string]interface{}
+	_ = json.Unmarshal(wClaim1.Body.Bytes(), &claimResp)
+	if claimResp["new_balance"] != "1100.00000000" {
+		t.Errorf("Expected new balance '1100.00000000', got %v", claimResp["new_balance"])
 	}
 
 	// Claim 2: Immediate second claim must trigger HTTP 429 Cooldown
-	wFaucet2 := httptest.NewRecorder()
-	reqFaucet2, _ := http.NewRequest(http.MethodPost, "/api/v1/faucet", nil)
-	reqFaucet2.Header.Set("Authorization", "Bearer "+token)
-	router.ServeHTTP(wFaucet2, reqFaucet2)
+	wClaim2 := httptest.NewRecorder()
+	reqClaim2, _ := http.NewRequest(http.MethodPost, "/api/v1/claim", nil)
+	reqClaim2.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(wClaim2, reqClaim2)
 
-	if wFaucet2.Code != http.StatusTooManyRequests {
-		t.Fatalf("Expected HTTP 429 for cooldown rejection, got %d. Body: %s", wFaucet2.Code, wFaucet2.Body.String())
+	if wClaim2.Code != http.StatusTooManyRequests {
+		t.Fatalf("Expected HTTP 429 for cooldown rejection, got %d. Body: %s", wClaim2.Code, wClaim2.Body.String())
 	}
 }
 

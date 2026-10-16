@@ -185,7 +185,7 @@ export interface AuthResponse {
     user: UserProfile;
 }
 
-export interface FaucetResponse {
+export interface ClaimResponse {
     success?: boolean;
     amount_claimed?: string;
     new_balance?: string;
