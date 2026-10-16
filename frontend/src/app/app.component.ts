@@ -3,10 +3,11 @@ import { RouterOutlet } from '@angular/router';
 import { TopHeaderDockComponent } from './core/components/top-header-dock/top-header-dock.component';
 import { ToastContainerComponent } from './shared/components/toast/toast-container.component';
 import { AuthDialogComponent } from './features/auth/auth-dialog.component';
+import { FooterComponent } from './core/components/footer/footer.component';
 import { ThemeService } from './core/services/theme.service';
 
 @Component({
-    imports: [RouterOutlet, TopHeaderDockComponent, ToastContainerComponent, AuthDialogComponent],
+    imports: [RouterOutlet, TopHeaderDockComponent, FooterComponent, ToastContainerComponent, AuthDialogComponent],
     selector: 'app-root',
     changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './app.component.css',

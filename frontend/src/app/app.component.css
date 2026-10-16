@@ -22,8 +22,14 @@
     outline-offset: 2px;
 }
 
+:host {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
 #app-main-content {
-    min-height: calc(100vh - 64px);
+    flex: 1 0 auto;
     padding: var(--space-xl, 24px) var(--space-lg, 20px);
     max-width: 1600px;
     margin: 0 auto;

@@ -29,6 +29,16 @@ export const routes: Routes = [
         title: 'Authenticating — BayesMarket'
     },
     {
+        path: 'privacy',
+        loadComponent: () => import('./features/legal/privacy-policy/privacy-policy.component').then((m) => m.PrivacyPolicyComponent),
+        title: 'Privacy Policy — BayesMarket'
+    },
+    {
+        path: 'terms',
+        loadComponent: () => import('./features/legal/terms/terms.component').then((m) => m.TermsComponent),
+        title: 'Terms and Conditions — BayesMarket'
+    },
+    {
         path: '**',
         redirectTo: ''
     }

@@ -9,7 +9,7 @@
 > **High-Performance Binary Prediction Market Exchange Engine & Reactive Trading Platform**
 
 <p align="center">
-  <a href="https://bayesmarket-oss.vercel.app"><b>🌐 Launch Live Application (Vercel)</b></a> &nbsp;•&nbsp;
+  <a href="https://bayesmarket.avinaba.com"><b>🌐 Launch Live Application (bayesmarket.avinaba.com)</b></a> &nbsp;•&nbsp;
   <a href="https://bayesmarket-oss.onrender.com/healthz"><b>⚡ Live Backend Health (Render)</b></a> &nbsp;•&nbsp;
   <a href="#quick-start-with-docker-1-command"><b>🐳 Docker Quickstart</b></a>
 </p>
