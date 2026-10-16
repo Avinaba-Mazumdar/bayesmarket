@@ -3,8 +3,18 @@
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
 
--- Migrate any is_superadmin flags over to is_admin
-UPDATE users SET is_admin = true WHERE is_superadmin = true;
+-- Migrate any is_superadmin flags over to is_admin if the column exists
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+          AND column_name = 'is_superadmin'
+    ) THEN
+        EXECUTE 'UPDATE users SET is_admin = true WHERE is_superadmin = true';
+    END IF;
+END $$;
 
 -- Drop is_superadmin index and column
 DROP INDEX IF EXISTS idx_users_is_superadmin;
@@ -12,4 +22,3 @@ ALTER TABLE users DROP COLUMN IF EXISTS is_superadmin;
 
 -- Ensure partial index on is_admin exists for fast permission lookups
 CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin) WHERE is_admin = true;
-E
