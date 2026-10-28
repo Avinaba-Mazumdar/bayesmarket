@@ -555,6 +555,11 @@ CREATE TABLE markets (
     resolution_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'active', -- 'draft', 'active', 'suspended', 'locked', 'resolved', 'settled', 'voided'
     winning_outcome VARCHAR(8),                -- 'YES', 'NO', NULL
+    oracle_proof TEXT,                         -- https link to the resolution evidence, set on settlement
+    proof_hash VARCHAR(64),                    -- SHA-256 of oracle_proof
+    settlement_digest VARCHAR(64),             -- SHA-256 of the settlement payload
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    resolved_by UUID REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
@@ -1134,7 +1139,7 @@ BayesMarket contains **zero pre-seeded or hardcoded demo markets**. All predicti
     - `resolution_date` must be in the future, on create and on edit. An expired market can only be reactivated together with a new future date.
 3. **Market Listing**: The admin console lists markets in every status (`active`, `suspended`, `locked`, `resolved`, `voided`) via `GET /api/v1/admin/markets?status=&category=&limit=&offset=`, so halted markets stay reachable for reactivation, resolution or voiding. The public `GET /api/v1/markets` keeps returning only `active` markets.
 4. **Market Editing**: Administrators can modify market metadata and operational status (`active`, `suspended`, `locked`) via `PUT /api/v1/admin/markets/:id`. Invariant reserves and collateral remain protected from arbitrary tampering.
-5. **Market Voiding & Deletion**: Administrators cancel a market that has trading history via `POST /api/v1/admin/markets/:id/void`, which refunds every open position at cost basis and keeps all trade and ledger history. `DELETE /api/v1/admin/markets/:id` only removes markets with no trades, positions or ledger entries; otherwise it returns `409 market_has_activity`. Ledger rows are never deleted.
+5. **Market Voiding**: Administrators cancel a market via `POST /api/v1/admin/markets/:id/void`, which refunds every open position at cost basis and keeps all trade and ledger history. Ledger rows are never deleted. There is no delete endpoint: a market is voided, not removed.
 6. **Authoritative Resolution**: Settle contracts and distribute winning share payouts via `POST /api/v1/admin/markets/:id/resolve`.
 
 ---

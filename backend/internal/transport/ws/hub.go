@@ -220,12 +220,6 @@ func (h *Hub) BroadcastMarketUpdated(msg MarketUpdatedMessage) {
 	h.broadcastMarketFrame("MarketUpdatedMessage", msg.MarketID, msg, true)
 }
 
-// BroadcastMarketDeleted formats and broadcasts a MARKET_DELETED telemetry frame to the market and the global feed.
-func (h *Hub) BroadcastMarketDeleted(msg MarketDeletedMessage) {
-	msg.Type = MessageTypeMarketDeleted
-	h.broadcastMarketFrame("MarketDeletedMessage", msg.MarketID, msg, true)
-}
-
 // broadcastMarketFrame marshals a market frame once and sends it to the market's subscribers, and to
 // the global feed when global is set.
 func (h *Hub) broadcastMarketFrame(name, marketID string, frame any, global bool) {

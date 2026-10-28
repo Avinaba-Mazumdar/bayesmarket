@@ -724,7 +724,7 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
     constructor() {
         effect(() => {
             const tick = this.wsService.lastPriceTick();
-            const targetId = this.id();
+            const targetId = this.liveMarketId();
             if (tick && tick.market_id === targetId) {
                 untracked(() => this.applyLivePrice(tick));
             }
@@ -732,26 +732,15 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
 
         effect(() => {
             const updated = this.wsService.lastMarketUpdated();
-            const targetId = this.id();
+            const targetId = this.liveMarketId();
             if (updated && updated.market_id === targetId) {
                 untracked(() => this.fetchMarket(false));
             }
         });
 
         effect(() => {
-            const removed = this.wsService.lastMarketDeleted();
-            const targetId = this.id();
-            if (removed && removed.market_id === targetId) {
-                untracked(() => {
-                    this.isLoading.set(false);
-                    this.market.set(null);
-                });
-            }
-        });
-
-        effect(() => {
             const res = this.wsService.lastMarketResolved();
-            const targetId = this.id();
+            const targetId = this.liveMarketId();
             if (res && res.market_id === targetId) {
                 untracked(() => {
                     this.isResolvedBannerVisible.set(true);
@@ -835,7 +824,11 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
      */
     private fetchMarket(connect: boolean): void {
         const marketId = this.id();
-        this.isLoading.set(true);
+        // Only the first load shows the spinner. Refreshing after an order must not unmount the terminal,
+        // the dialogs or the chart, which would drop the reader's typed amount and keyboard focus.
+        if (connect) {
+            this.isLoading.set(true);
+        }
 
         this.apiService
             .getMarketById(marketId)
@@ -866,6 +859,14 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
         // over the WebSocket. Only the static market fields need a refresh.
         this.fetchMarket(false);
         this.loadMyPositions();
+    }
+
+    /**
+     * The UUID of the loaded market. Live frames carry the UUID, but the route may hold a slug (admin links do),
+     * so frames are matched against the loaded market rather than the route parameter.
+     */
+    private liveMarketId(): string | undefined {
+        return untracked(() => this.market()?.id);
     }
 
     /** Copies the server's post-trade probabilities and reserves into the header state. */

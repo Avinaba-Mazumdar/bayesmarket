@@ -42,7 +42,6 @@ func TestLoad_DevModeAcceptsLocalDatabase(t *testing.T) {
 	for _, dsn := range []string{
 		"postgres://app:secret@localhost:5432/bayes?sslmode=disable",
 		"postgres://app:secret@127.0.0.1:5432/bayes?sslmode=disable",
-		"postgres://app:secret@postgres:5432/bayes?sslmode=disable",
 	} {
 		t.Setenv("APP_ENV", "local")
 		t.Setenv("JWT_SECRET", testJWTSecret)

@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS markets (
     resolution_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'active',
     winning_outcome VARCHAR(8),
+    -- Resolution evidence, set in the settlement transaction. The proof is the https link the admin supplied;
+    -- the digest and hash commit to it, so the evidence stays checkable after the idempotency receipt expires.
+    oracle_proof TEXT,
+    proof_hash VARCHAR(64),
+    settlement_digest VARCHAR(64),
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    resolved_by UUID REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_markets_status
         CHECK (status IN ('draft', 'active', 'suspended', 'locked', 'resolved', 'settled', 'voided')),

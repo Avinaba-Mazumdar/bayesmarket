@@ -69,3 +69,28 @@ func TestConfig_MigrationAndAutoMigrate(t *testing.T) {
 		t.Errorf("expected AutoMigrate to be false when set to 'false'")
 	}
 }
+
+func TestConfig_ClientIPHeader(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("JWT_SECRET", "this-is-a-valid-production-jwt-secret-key-32-bytes")
+
+	t.Run("accepts a plain header name", func(t *testing.T) {
+		t.Setenv("CLIENT_IP_HEADER", "CF-Connecting-IP")
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.ClientIPHeader != "CF-Connecting-IP" {
+			t.Fatalf("ClientIPHeader = %q; want CF-Connecting-IP", cfg.ClientIPHeader)
+		}
+	})
+
+	t.Run("rejects a value that is not a header name", func(t *testing.T) {
+		for _, bad := range []string{"CF Connecting", "X-IP;drop", "a:b"} {
+			t.Setenv("CLIENT_IP_HEADER", bad)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load() with CLIENT_IP_HEADER=%q returned no error", bad)
+			}
+		}
+	})
+}

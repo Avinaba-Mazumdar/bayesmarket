@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal, Wri
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { LucideShieldCheck, LucidePlus, LucideCircleCheck, LucidePencil, LucideTrash, LucideSlidersVertical } from '@lucide/angular';
+import { LucideShieldCheck, LucidePlus, LucideCircleCheck, LucidePencil, LucideSlidersVertical } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
@@ -18,6 +18,7 @@ import { SelectComponent, SelectOption } from '../../shared/components/select/se
 import { TextareaComponent } from '../../shared/components/textarea/textarea.component';
 import { BrandIconComponent } from '../../shared/components/brand-icon/brand-icon.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
+import { newIdempotencyKey } from '../../core/utils/idempotency';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -41,7 +42,6 @@ import { handleRovingKeydown } from '../../core/utils/roving-focus';
         LucidePlus,
         LucideCircleCheck,
         LucidePencil,
-        LucideTrash,
         LucideSlidersVertical
     ],
     template: `
@@ -195,11 +195,10 @@ import { handleRovingKeydown } from '../../core/utils/roving-focus';
                                                         variant="destructive"
                                                         size="sm"
                                                         [disabled]="isTerminal(m)"
-                                                        (btnClick)="openDeleteModal(m)"
-                                                        ariaLabel="Void or delete market {{ m.title }}"
+                                                        (btnClick)="openVoidModal(m)"
+                                                        ariaLabel="Void market {{ m.title }} and refund open positions"
                                                     >
-                                                        <svg lucideTrash [size]="14" aria-hidden="true"></svg>
-                                                        <span>Void / Delete</span>
+                                                        <span>Void</span>
                                                     </app-button>
                                                 </div>
                                             </td>
@@ -312,52 +311,38 @@ import { handleRovingKeydown } from '../../core/utils/roving-focus';
                 }
             </app-dialog>
 
-            <!-- Delete Confirmation Modal -->
+            <!-- Void Confirmation Modal -->
             <app-dialog
-                [open]="!!deletingMarket()"
-                (closed)="closeDeleteModal()"
-                title="Void or Delete Prediction Market"
-                description="Permanently delete prediction market and purge double-entry records."
+                [open]="!!voidingMarket()"
+                (closed)="closeVoidModal()"
+                title="Void Prediction Market"
+                description="Cancel this market and refund every open position at cost basis."
                 size="sm"
                 dialogRole="alertdialog"
-                ariaLabel="Void or Delete Prediction Market Alert"
+                ariaLabel="Void Prediction Market Alert"
             >
-                @if (deletingMarket(); as dm) {
+                @if (voidingMarket(); as vm) {
                     <div class="delete-body">
-                        <p class="delete-warning-text">How do you want to remove this market?</p>
                         <div class="delete-market-preview">
                             <span class="preview-label">Market Question:</span>
-                            <strong class="preview-title">{{ dm.title }}</strong>
-                            <span class="mono-sub">ID: {{ dm.id }}</span>
+                            <strong class="preview-title">{{ vm.title }}</strong>
+                            <span class="mono-sub">ID: {{ vm.id }}</span>
                         </div>
                         <div class="danger-box">
                             <p class="danger-text">
                                 Void &amp; Refund cancels the market and returns each open position's cost basis to its holder. Trade and ledger history is
                                 kept. A voided market can't be traded, edited or resolved again.
                             </p>
-                            <p class="danger-text">Delete permanently removes the market. It only works for markets that have never been traded.</p>
                         </div>
 
                         <div class="dialog-actions">
-                            <app-button variant="outline" size="default" type="button" (btnClick)="closeDeleteModal()" ariaLabel="Cancel deletion">
+                            <app-button variant="outline" size="default" type="button" (btnClick)="closeVoidModal()" ariaLabel="Cancel void">
                                 Cancel
-                            </app-button>
-                            <app-button
-                                variant="secondary"
-                                size="default"
-                                type="button"
-                                [disabled]="isVoidingSubmitting()"
-                                [loading]="isDeletingSubmitting()"
-                                (btnClick)="confirmDeleteMarket()"
-                                ariaLabel="Permanently delete untraded market"
-                            >
-                                Delete
                             </app-button>
                             <app-button
                                 variant="destructive"
                                 size="default"
                                 type="button"
-                                [disabled]="isDeletingSubmitting()"
                                 [loading]="isVoidingSubmitting()"
                                 (btnClick)="confirmVoidMarket()"
                                 ariaLabel="Void market and refund open positions"
@@ -984,7 +969,6 @@ export class AdminDashboardComponent implements OnInit {
     readonly authStore = inject(AuthStore);
 
     readonly isEditingSubmitting = signal<boolean>(false);
-    readonly isDeletingSubmitting = signal<boolean>(false);
     readonly isVoidingSubmitting = signal<boolean>(false);
     readonly isDev = signal<boolean>(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
 
@@ -1002,8 +986,8 @@ export class AdminDashboardComponent implements OnInit {
     readonly editDescription = signal<string>('');
     readonly editResolutionSource = signal<string>('');
 
-    // Delete Market Modal fields
-    readonly deletingMarket = signal<Market | null>(null);
+    // Void Market Modal fields
+    readonly voidingMarket = signal<Market | null>(null);
     // Generated once per opened dialog so a retried void replays instead of executing twice
     private voidIdempotencyKey = '';
 
@@ -1147,45 +1131,25 @@ export class AdminDashboardComponent implements OnInit {
         });
     }
 
-    // --- Market Deletion ---
-    openDeleteModal(m: Market): void {
-        this.voidIdempotencyKey = `void-${m.id}-${crypto.randomUUID()}`;
-        this.deletingMarket.set(m);
+    // --- Market Voiding ---
+    openVoidModal(m: Market): void {
+        this.voidIdempotencyKey = newIdempotencyKey(`void-${m.id}`);
+        this.voidingMarket.set(m);
     }
 
-    closeDeleteModal(): void {
-        this.deletingMarket.set(null);
-    }
-
-    confirmDeleteMarket(): void {
-        const m = this.deletingMarket();
-        if (!m) return;
-
-        this.isDeletingSubmitting.set(true);
-        this.apiService.deleteMarket(m.id, this.getEffectiveToken()).subscribe({
-            next: () => {
-                this.isDeletingSubmitting.set(false);
-                this.closeDeleteModal();
-                this.toastService.success('Market Deleted', `"${m.title}" was permanently removed.`);
-                this.loadMarkets();
-            },
-            error: (err) => {
-                this.isDeletingSubmitting.set(false);
-                const msg = err?.error?.message || 'Failed to delete market';
-                this.toastService.error('Delete Error', msg);
-            }
-        });
+    closeVoidModal(): void {
+        this.voidingMarket.set(null);
     }
 
     confirmVoidMarket(): void {
-        const m = this.deletingMarket();
+        const m = this.voidingMarket();
         if (!m) return;
 
         this.isVoidingSubmitting.set(true);
         this.apiService.voidMarket(m.id, this.getEffectiveToken(), this.voidIdempotencyKey).subscribe({
             next: (res) => {
                 this.isVoidingSubmitting.set(false);
-                this.closeDeleteModal();
+                this.closeVoidModal();
                 this.toastService.success(
                     'Market Voided',
                     `"${m.title}" was voided. Refunded ${res.total_refund_usdc} USDC across ${res.positions_refunded} positions.`

@@ -15,13 +15,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// localDatabaseHosts are the database hosts accepted while running in local or dev mode. "postgres"
-// is the service name used by docker-compose.yml.
+// localDatabaseHosts are the database hosts accepted while running in local or dev mode.
 var localDatabaseHosts = map[string]bool{
 	"localhost": true,
 	"127.0.0.1": true,
 	"::1":       true,
-	"postgres":  true,
 }
 
 // EphemeralJWTSecret returns a random secret for this process only. It is used when a caller builds
@@ -63,6 +61,10 @@ type Config struct {
 	GoogleRedirectURI    string
 	DisableRateLimits    bool
 	TrustedProxies       []string
+	// ClientIPHeader names a header that the hosting platform sets to the real client address, for
+	// example CF-Connecting-IP or True-Client-IP. It is read only when set, and only when the platform
+	// strips any client-supplied copy of it. Empty uses the proxy chain from TrustedProxies.
+	ClientIPHeader string
 	// CookieSameSite is "lax" or "none". Lax is the default: the refresh cookie is first-party
 	// when the frontend proxies /api. "none" is only for a split-origin deploy, and browsers
 	// that block third-party cookies will drop the session on reload.
@@ -159,6 +161,11 @@ func Load() (*Config, error) {
 		log.Println("[WARN] TRUSTED_PROXIES is empty. X-Forwarded-For is ignored and the client IP is the direct connection. Set TRUSTED_PROXIES to the reverse-proxy CIDRs when the API sits behind one.")
 	}
 
+	clientIPHeader := strings.TrimSpace(os.Getenv("CLIENT_IP_HEADER"))
+	if clientIPHeader != "" && !validHeaderName(clientIPHeader) {
+		return nil, fmt.Errorf("CLIENT_IP_HEADER must be a plain HTTP header name, for example CF-Connecting-IP")
+	}
+
 	cookieSameSite := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE")))
 	if cookieSameSite == "" {
 		cookieSameSite = "lax"
@@ -189,9 +196,22 @@ func Load() (*Config, error) {
 		GoogleClientSecret:   strings.TrimSpace(googleClientSecret),
 		GoogleRedirectURI:    strings.TrimSpace(googleRedirectURI),
 		TrustedProxies:       trustedProxies,
+		ClientIPHeader:       clientIPHeader,
 		CookieSameSite:       cookieSameSite,
 		OAuthStateSecret:     oauthStateSecret,
 	}, nil
+}
+
+// validHeaderName reports whether s is made only of letters, digits and hyphens.
+func validHeaderName(s string) bool {
+	for _, r := range s {
+		isLetter := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		isDigit := r >= '0' && r <= '9'
+		if !isLetter && !isDigit && r != '-' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // deriveOAuthStateSecret separates the OAuth state MAC key from the JWT signing key.

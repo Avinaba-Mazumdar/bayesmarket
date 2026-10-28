@@ -10,8 +10,7 @@
 
 <p align="center">
   <a href="https://bayesmarket.avinaba.com"><b>🌐 Launch Live Application (bayesmarket.avinaba.com)</b></a> &nbsp;•&nbsp;
-  <a href="https://bayesmarket-oss.onrender.com/healthz"><b>⚡ Live Backend Health (Render)</b></a> &nbsp;•&nbsp;
-  <a href="#quick-start-with-docker-1-command"><b>🐳 Docker Quickstart</b></a>
+  <a href="https://bayesmarket-oss.onrender.com/healthz"><b>⚡ Live Backend Health (Render)</b></a>
 </p>
 
 BayesMarket is a modern, open-source prediction market platform inspired by Polymarket. Users trade binary outcome shares (**YES** and **NO**) on real-world events.
@@ -149,30 +148,9 @@ When depositing $\Delta USDC$ to purchase `YES` shares:
 
 ---
 
-## Quick Start with Docker (1-Command)
+## Local Development Setup
 
-Run the entire platform locally — including PostgreSQL 18, automated database migrations, pre-calibrated prediction markets, Go trading engine, and Angular 22 frontend — with a single command:
-
-```bash
-# Clone the repository
-git clone https://github.com/Avinaba-Mazumdar/bayesmarket.git
-cd bayesmarket
-
-# Boot all services via Docker Compose
-docker compose up --build -d
-```
-
-Once initialized, open your browser:
-
-- **Trading Application**: `http://localhost:4200`
-- **Backend API & Health**: `http://localhost:8080/healthz`
-- **Database**: `localhost:5432` (`bayesuser` / `bayespassword`)
-
----
-
-## Manual Development Setup
-
-If developing locally without Docker:
+The API and the frontend run directly on your machine, against a PostgreSQL 18 database you provide.
 
 ### Prerequisites
 

@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { firstValueFrom, Observable, tap } from 'rxjs';
 import { ApiService } from '../core/services/api.service';
 import { ToastService } from '../shared/components/toast/toast.service';
 import { AuthResponse, UserProfile } from '../core/models/market.model';
@@ -13,6 +13,18 @@ const BALANCE_STORAGE_KEY = 'bayesmarket_user_balance';
 const SESSION_HINT_KEY = 'bm_has_session';
 /** Set when logout could not reach the server, so the next load retries revocation. */
 const REVOKE_PENDING_KEY = 'bm_revoke_pending';
+const RENEWAL_LOCK_NAME = 'bayesmarket-renewal';
+
+/**
+ * Runs one renewal at a time across every tab of this origin. The Web Locks API is missing in some
+ * insecure contexts; there the renewal runs unlocked, as it did before.
+ */
+function withRenewalLock<T>(task: () => Promise<T>): Promise<T> {
+    if (typeof navigator === 'undefined' || !navigator.locks) {
+        return task();
+    }
+    return navigator.locks.request(RENEWAL_LOCK_NAME, () => task());
+}
 
 @Injectable({
     providedIn: 'root'
@@ -43,7 +55,8 @@ export class AuthStore {
     readonly isInitializing = signal<boolean>(false);
     readonly isAuthenticating = signal<boolean>(false);
     readonly isClaiming = signal<boolean>(false);
-    private refreshInFlight = false;
+    /** The renewal in progress in this tab. Callers that arrive while it runs wait for the same result. */
+    private renewal: Promise<string> | null = null;
     /** Kept across retries of one claim attempt; cleared once the claim succeeds or the cooldown answers. */
     private claimKey: string | null = null;
     /** Seconds until the next claim is allowed, from the server's cooldown. Zero when claimable. */
@@ -341,28 +354,38 @@ export class AuthStore {
     }
 
     /**
-     * Restores the session from the refresh cookie. Concurrent calls share one request: a second refresh
-     * with the same cookie would look like a replayed token to the server and end every session.
+     * Renews the access token from the refresh cookie and returns the new token. Calls in this tab share one
+     * renewal. The renewal also takes a Web Lock, so two tabs never present the same cookie: a second use of a
+     * rotated cookie looks like a replayed token to the server, which ends every session.
      */
+    renewAccessToken(): Promise<string> {
+        if (!this.renewal) {
+            this.renewal = this.runRenewal().finally(() => {
+                this.renewal = null;
+            });
+        }
+        return this.renewal;
+    }
+
+    private async runRenewal(): Promise<string> {
+        const res = await withRenewalLock(() => firstValueFrom(this.apiService.refreshSession()));
+        this.token.set(res.token);
+        this.user.set(res.user);
+        this.userId.set(res.user.id);
+        this.updateBalance(res.user.cash_balance ?? '0');
+        this.persistSession(res.token, res.user);
+        return res.token;
+    }
+
+    /** Restores the session on load. A failed renewal means the refresh cookie is gone or revoked, so sign out locally. */
     restoreSession(): void {
-        if (this.refreshInFlight) return;
-        this.refreshInFlight = true;
-        this.apiService.refreshSession().subscribe({
-            next: (res) => {
-                this.refreshInFlight = false;
-                this.token.set(res.token);
-                this.user.set(res.user);
-                this.userId.set(res.user.id);
-                this.updateBalance(res.user.cash_balance ?? '0');
-                this.persistSession(res.token, res.user);
-                this.isInitializing.set(false);
-            },
-            error: () => {
-                this.refreshInFlight = false;
+        this.renewAccessToken().then(
+            () => this.isInitializing.set(false),
+            () => {
                 this.clearSession();
                 this.isInitializing.set(false);
             }
-        });
+        );
     }
 
     /**

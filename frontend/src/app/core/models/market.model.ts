@@ -15,6 +15,11 @@ export interface Market {
     resolution_date: string;
     status: MarketStatus;
     winning_outcome?: 'YES' | 'NO' | null;
+    /** Resolution evidence, present once the market is resolved. The proof is an https link to the source. */
+    oracle_proof?: string | null;
+    proof_hash?: string | null;
+    settlement_digest?: string | null;
+    resolved_at?: string | null;
     probability_yes: string;
     probability_no: string;
     probability_yes_pct: string;
@@ -203,13 +208,6 @@ export interface MarketTrade {
     execution_price: string;
     amount_usdc: string;
     created_at: string;
-}
-
-export interface DeleteMarketResponse {
-    status: string;
-    market_id: string;
-    title?: string;
-    message: string;
 }
 
 export interface VoidMarketResponse {

@@ -31,7 +31,7 @@ func SafeTestDatabaseURL(t *testing.T) string {
 
 	host := parsed.Hostname()
 	switch host {
-	case "localhost", "127.0.0.1", "::1", "postgres":
+	case "localhost", "127.0.0.1", "::1":
 		return dbURL
 	default:
 		t.Skipf("REFUSING to run live database tests against remote host %q (protecting production database). To run tests against a local database, set BAYESMARKET_TEST_DATABASE_URL with a localhost connection.", host)

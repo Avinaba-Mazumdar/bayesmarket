@@ -129,6 +129,10 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engin
 		// This prevents callers from spoofing ClientIP() via X-Forwarded-For or X-Real-IP headers.
 		_ = router.SetTrustedProxies(nil)
 	}
+	if cfg != nil && cfg.ClientIPHeader != "" {
+		// The platform sets this header to the real client address; ClientIP() reads it first.
+		router.TrustedPlatform = cfg.ClientIPHeader
+	}
 	router.Use(
 		securityHeadersMiddleware(isDevOrLocal),
 		redactedLogger(),
@@ -197,16 +201,11 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engin
 		router.GET("/ws/markets", wsHandler.HandleGlobalWS)
 	}
 
-	// Health check endpoints (unlimited, for keep-alive cron jobs, load balancers, and orchestrators)
+	// Health check endpoints. Unauthenticated and unlimited, for keep-alive cron jobs, load balancers and
+	// orchestrators. The database is pinged at most once every two seconds, whatever the request rate.
+	health := newHealthProbe(pool, 2*time.Second)
 	healthHandler := func(c *gin.Context) {
-		dbStatus := "disconnected"
-		if pool != nil {
-			if err := pool.Ping(c.Request.Context()); err == nil {
-				dbStatus = "connected"
-			} else {
-				dbStatus = "degraded"
-			}
-		}
+		dbStatus := health.database()
 
 		httpStatus := http.StatusOK
 		overallStatus := "healthy"

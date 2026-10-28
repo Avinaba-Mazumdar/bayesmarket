@@ -342,17 +342,25 @@ func (h *AdminHandler) executeResolutionTx(
 		return nil, err
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE markets SET status = 'resolved', winning_outcome = $1 WHERE id = $2;", winningOutcome, marketID); err != nil {
+	resolvedAt := time.Now().UTC()
+	nowStr := resolvedAt.Format(time.RFC3339)
+	settlementPayload := fmt.Sprintf("%s:%s:%s:%s:%s", marketID.String(), winningOutcome, totalPayout.StringFixed(8), proofHash, nowStr)
+	settlementDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(settlementPayload)))
+
+	// The evidence is stored on the market so it outlives the idempotency receipt, which retention deletes.
+	if _, err := tx.Exec(ctx, `
+		UPDATE markets
+		SET status = 'resolved', winning_outcome = $1,
+		    oracle_proof = $2, proof_hash = $3, settlement_digest = $4,
+		    resolved_at = $5, resolved_by = $6
+		WHERE id = $7;
+	`, winningOutcome, oracleProof, proofHash, settlementDigest, resolvedAt, actorID, marketID); err != nil {
 		return nil, err
 	}
 
 	if err := assertTransactionBalanced(ctx, tx, settlementTxID); err != nil {
 		return nil, err
 	}
-
-	nowStr := time.Now().UTC().Format(time.RFC3339)
-	settlementPayload := fmt.Sprintf("%s:%s:%s:%s:%s", marketID.String(), winningOutcome, totalPayout.StringFixed(8), proofHash, nowStr)
-	settlementDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(settlementPayload)))
 
 	responseObj := ResolveMarketResponse{
 		Status:           string(models.MarketStatusResolved),

@@ -15,7 +15,7 @@ A verbose run of `go test -count=1 -v ./internal/database/ ./internal/transport/
 
 Not run:
 
-- Database-backed tests. Nothing was listening on `127.0.0.1:5432`. The Docker daemon was not running (`docker version` could not open the pipe).
+- Database-backed tests. Nothing was listening on `127.0.0.1:5432`.
 - `go test -race`. `go env CGO_ENABLED` was `0` and `gcc` was not on `PATH`. CI still runs `-race` against Postgres 18.
 
 The Go module path is `github.com/Avinaba-Mazumdar/bayesmarket`.
@@ -30,7 +30,7 @@ From `frontend/`, with `NODE_OPTIONS=--max-old-space-size=4096` for tests:
 - A production build attempted with a 4096 MB heap ran out of memory. The successful production build used 8192 MB.
 - `node --max-old-space-size=8192 ./node_modules/@angular/cli/bin/ng.js build --configuration development` exited 0. The earlier NG8107 warning on `m.reserves?.total_volume_usdc` is gone.
 
-`npx pnpm@11.24.0 install --frozen-lockfile` at the repo root exited 0. A copy of `frontend/package.json`, `frontend/pnpm-lock.yaml`, and `frontend/pnpm-workspace.yaml` also installed with `--frozen-lockfile` (the Docker context).
+`npx pnpm@11.24.0 install --frozen-lockfile` at the repo root exited 0. A copy of `frontend/package.json`, `frontend/pnpm-lock.yaml`, and `frontend/pnpm-workspace.yaml` also installed with `--frozen-lockfile`.
 
 ## Not verified here
 

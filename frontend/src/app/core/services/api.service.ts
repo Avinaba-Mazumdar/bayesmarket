@@ -9,7 +9,6 @@ import {
     ClaimResponse,
     CreateMarketRequest,
     CreateMarketResponse,
-    DeleteMarketResponse,
     EditMarketRequest,
     GoogleCallbackRequest,
     GoogleVerifyRequest,
@@ -257,14 +256,6 @@ export class ApiService {
     editMarket(marketId: string, request: EditMarketRequest, token?: string | null): Observable<Market> {
         const headers = this.buildHeaders(token);
         return this.http.put<Market>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}`, request, { headers });
-    }
-
-    /**
-     * Administratively delete a prediction market. The backend refuses markets with trading history.
-     */
-    deleteMarket(marketId: string, token?: string | null): Observable<DeleteMarketResponse> {
-        const headers = this.buildHeaders(token);
-        return this.http.delete<DeleteMarketResponse>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}`, { headers });
     }
 
     /**

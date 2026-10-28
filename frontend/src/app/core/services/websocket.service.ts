@@ -1,13 +1,5 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
-import {
-    ConnectionStatus,
-    MarketDeletedEvent,
-    MarketResolvedEvent,
-    MarketUpdatedEvent,
-    PriceUpdateEvent,
-    TradeEvent,
-    WebSocketMessage
-} from '../models/websocket.model';
+import { ConnectionStatus, MarketResolvedEvent, MarketUpdatedEvent, PriceUpdateEvent, TradeEvent, WebSocketMessage } from '../models/websocket.model';
 
 @Injectable({
     providedIn: 'root'
@@ -30,7 +22,6 @@ export class WebSocketService implements OnDestroy {
     readonly recentTrades = signal<TradeEvent[]>([]);
     readonly lastMarketResolved = signal<MarketResolvedEvent | null>(null);
     readonly lastMarketUpdated = signal<MarketUpdatedEvent | null>(null);
-    readonly lastMarketDeleted = signal<MarketDeletedEvent | null>(null);
     readonly activeMarketId = signal<string | null>(null);
 
     /**
@@ -163,10 +154,6 @@ export class WebSocketService implements OnDestroy {
                 case 'MARKET_UPDATED':
                     this.lastMarketUpdated.set(msg);
                     break;
-
-                case 'MARKET_DELETED':
-                    this.lastMarketDeleted.set(msg);
-                    break;
             }
         } catch (e) {
             console.warn('[WS] Failed to parse WebSocket message frame:', e, raw);
@@ -194,7 +181,7 @@ export class WebSocketService implements OnDestroy {
     }
 
     private buildWebSocketUrl(marketId?: string, customBaseUrl?: string): string {
-        let base = customBaseUrl;
+        let base = customBaseUrl || this.configuredOrigin();
         if (!base) {
             if (typeof window !== 'undefined' && window.location) {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -213,6 +200,18 @@ export class WebSocketService implements OnDestroy {
             return `${base}/ws/markets/${marketId}`;
         }
         return `${base}/ws/markets`;
+    }
+
+    /**
+     * WebSocket origin set by the deployment, for hosts where the frontend proxy cannot carry WebSockets
+     * (a Vercel rewrite does not upgrade them). Empty means the page's own origin, which is correct when the API
+     * and the page share a host.
+     * Read from <meta name="bayesmarket-ws-origin">, for example "wss://api.example.com".
+     */
+    private configuredOrigin(): string {
+        if (typeof document === 'undefined') return '';
+        const content = document.querySelector<HTMLMetaElement>('meta[name="bayesmarket-ws-origin"]')?.content.trim() ?? '';
+        return /^wss?:\/\/[^\s/]+$/.test(content) ? content : '';
     }
 
     ngOnDestroy(): void {

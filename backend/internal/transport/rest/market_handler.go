@@ -41,15 +41,20 @@ func (h *MarketHandler) Cache() *MarketCache {
 
 // MarketSummaryResponse details a market and its current implied probabilities.
 type MarketSummaryResponse struct {
-	ID                string           `json:"id"`
-	Slug              string           `json:"slug"`
-	Title             string           `json:"title"`
-	Description       string           `json:"description"`
-	Category          string           `json:"category"`
-	ResolutionSource  string           `json:"resolution_source"`
-	ResolutionDate    string           `json:"resolution_date"`
-	Status            string           `json:"status"`
-	WinningOutcome    *string          `json:"winning_outcome"` // "YES" or "NO" once resolved, otherwise null
+	ID               string  `json:"id"`
+	Slug             string  `json:"slug"`
+	Title            string  `json:"title"`
+	Description      string  `json:"description"`
+	Category         string  `json:"category"`
+	ResolutionSource string  `json:"resolution_source"`
+	ResolutionDate   string  `json:"resolution_date"`
+	Status           string  `json:"status"`
+	WinningOutcome   *string `json:"winning_outcome"` // "YES" or "NO" once resolved, otherwise null
+	// Resolution evidence. Set only once the market is resolved; the proof is an https link to the evidence.
+	OracleProof       *string          `json:"oracle_proof,omitempty"`
+	ProofHash         *string          `json:"proof_hash,omitempty"`
+	SettlementDigest  *string          `json:"settlement_digest,omitempty"`
+	ResolvedAt        *string          `json:"resolved_at,omitempty"`
 	ProbabilityYes    string           `json:"probability_yes"`
 	ProbabilityNo     string           `json:"probability_no"`
 	ProbabilityYesPct string           `json:"probability_yes_pct"`
@@ -215,6 +220,7 @@ type marketListRow struct {
 const marketSelectSQL = `
 		SELECT m.id, m.slug, m.title, m.description, m.category,
 		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
+		       m.oracle_proof, m.proof_hash, m.settlement_digest, m.resolved_at,
 		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
 		FROM markets m
 		JOIN liquidity_pools p ON p.market_id = m.id
@@ -231,6 +237,8 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 		id                                           uuid.UUID
 		slug, title, desc, cat, resSource, mktStatus string
 		winningOutcome                               *string
+		oracleProof, proofHash, settlementDigest     *string
+		resolvedAt                                   *time.Time
 		resDate, createdAt                           time.Time
 		rYes, rNo, collateral, volume                decimal.Decimal
 	)
@@ -238,6 +246,7 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 	if err := row.Scan(
 		&id, &slug, &title, &desc, &cat,
 		&resSource, &resDate, &mktStatus, &winningOutcome, &createdAt,
+		&oracleProof, &proofHash, &settlementDigest, &resolvedAt,
 		&rYes, &rNo, &collateral, &volume,
 	); err != nil {
 		return marketListRow{}, err
@@ -263,6 +272,10 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 			ResolutionDate:    resDate.Format(time.RFC3339),
 			Status:            mktStatus,
 			WinningOutcome:    winningOutcome,
+			OracleProof:       oracleProof,
+			ProofHash:         proofHash,
+			SettlementDigest:  settlementDigest,
+			ResolvedAt:        formatOptionalTime(resolvedAt),
 			ProbabilityYes:    pYes.StringFixed(8),
 			ProbabilityNo:     pNo.StringFixed(8),
 			ProbabilityYesPct: pYes.Mul(decimal.NewFromInt(100)).StringFixed(2),
@@ -276,6 +289,15 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 			CreatedAt: createdAt.Format(time.RFC3339),
 		},
 	}, nil
+}
+
+// formatOptionalTime renders a nullable timestamp as RFC 3339, or nil when it is unset.
+func formatOptionalTime(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
 }
 
 // listMarkets queries markets with their pool state. An empty category or status matches all.
