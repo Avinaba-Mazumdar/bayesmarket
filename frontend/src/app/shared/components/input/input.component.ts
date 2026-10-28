@@ -76,7 +76,7 @@ export type InputVariant = 'default' | 'mono';
                 outline: none;
                 box-shadow: none;
                 color: var(--ink);
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 line-height: 1.4;
                 box-sizing: border-box;
@@ -119,7 +119,7 @@ export type InputVariant = 'default' | 'mono';
 
             /* --- Variants --- */
             .input-variant-mono .native-input {
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-feature-settings: 'tnum' 1;
                 letter-spacing: 0.2px;
             }
@@ -161,7 +161,7 @@ export type InputVariant = 'default' | 'mono';
             /* --- Error Message --- */
             .input-error-msg {
                 display: block;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 12px;
                 font-weight: 500;
                 color: var(--status-loss);
@@ -206,7 +206,7 @@ export class InputComponent {
 
     protected onInputChange(event: Event): void {
         const target = event.target as HTMLInputElement;
-        const val = this.type() === 'number' ? (target.value === '' ? '' : Number(target.value)) : target.value;
-        this.value.set(val);
+        // The DOM string is emitted as typed so no digits are lost to a float conversion.
+        this.value.set(target.value);
     }
 }

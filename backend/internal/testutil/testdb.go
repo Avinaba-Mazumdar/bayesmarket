@@ -3,7 +3,6 @@ package testutil
 import (
 	"net/url"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/bayesmarket/bayesmarket/internal/config"
@@ -21,7 +20,7 @@ func SafeTestDatabaseURL(t *testing.T) string {
 		dbURL = os.Getenv("DATABASE_URL")
 	}
 
-	if dbURL == "" || strings.Contains(dbURL, "ep-cool-pool-123456") {
+	if dbURL == "" {
 		t.Skip("Skipping live database test: neither BAYESMARKET_TEST_DATABASE_URL nor test DATABASE_URL is set")
 	}
 
@@ -44,7 +43,7 @@ func SafeTestDatabaseURL(t *testing.T) string {
 func TestConfig(dbURL string) *config.Config {
 	return &config.Config{
 		DatabaseURL:       dbURL,
-		JWTSecret:         "bayesmarket-development-hmac-sha256-default-secret-key-32b",
+		JWTSecret:         config.EphemeralJWTSecret(),
 		DisableRateLimits: true,
 		Environment:       "test",
 	}

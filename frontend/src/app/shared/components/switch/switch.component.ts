@@ -136,7 +136,7 @@ export type SwitchColor = 'primary' | 'yes';
             .switch-checked.switch-color-primary .switch-track {
                 background-color: var(--primary);
                 border-color: var(--primary-border);
-                box-shadow: var(--shadow-glow-primary, 0 0 12px rgba(166, 3, 76, 0.4));
+                box-shadow: var(--shadow-glow-primary);
             }
 
             .switch-checked.switch-color-yes .switch-track {

@@ -92,7 +92,7 @@ import { Toast, ToastService } from './toast.service';
                 -webkit-backdrop-filter: blur(16px);
                 border: 1px solid var(--hairline);
                 border-radius: var(--radius-lg);
-                box-shadow: var(--shadow-lg, 0 12px 28px -4px rgba(0, 0, 0, 0.65));
+                box-shadow: var(--shadow-lg);
                 overflow: hidden;
                 animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             }
@@ -170,7 +170,7 @@ import { Toast, ToastService } from './toast.service';
             }
 
             .toast-title {
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 font-weight: 600;
                 line-height: 1.3;
@@ -178,7 +178,7 @@ import { Toast, ToastService } from './toast.service';
             }
 
             .toast-description {
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 13px;
                 line-height: 1.4;
                 color: var(--muted);

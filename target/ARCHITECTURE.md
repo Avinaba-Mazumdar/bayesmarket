@@ -51,7 +51,7 @@ Traders and developers can interact with the platform immediately via an **insta
 
 | Category                     | Technology / Library                 | Version   | Engineering Rationale                                                                                                        |
 | :--------------------------- | :----------------------------------- | :-------- | :--------------------------------------------------------------------------------------------------------------------------- |
-| **Language & Runtime**       | **Go (Golang)**                      | `1.24+`   | Latest release. Generic methods, high-performance green-thread scheduler, lightweight static binary.                         |
+| **Language & Runtime**       | **Go (Golang)**                      | `1.27+`   | Latest release. Generic methods, high-performance green-thread scheduler, lightweight static binary.                         |
 | **HTTP Routing**             | **Gin (`github.com/gin-gonic/gin`)** | `v1.10.0` | High-performance, battle-tested HTTP framework with built-in JSON binding/validation and native `gorilla/websocket` support. |
 | **WebSocket Engine**         | `github.com/gorilla/websocket`       | `v1.5.3`  | RFC 6455 implementation with dedicated read/write pumps, ping/pong support, and stable Go ecosystem adoption.                |
 | **Database Driver**          | `github.com/jackc/pgx/v5`            | `v5.7.1`  | High-performance PostgreSQL connection pool (`pgxpool`) with native binary encoding.                                         |
@@ -1051,14 +1051,14 @@ Every inbound request is assigned a unique `X-Trace-ID` propagated through Go `c
 
 ## 10. Security, Privacy & Vulnerability Mitigation
 
-| Threat Vector                         | Severity | Mitigation Architecture                                                                                                                                                                      |
-| :------------------------------------ | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **API Drain / DDoS Attack**           | High     | **Token-Bucket Rate Limiter**: 60 req/min for reads; 12 req/min for trades per Guest ID and IP. Excess requests return HTTP 429 immediately before hitting database queries.                 |
-| **Floating-Point Rounding Exploits**  | High     | **Decimal-Only Computation**: Zero `float64` operations in the trading path. All reserves and balances use `shopspring/decimal` fixed-point representations.                                 |
-| **Infinite Division / Zero Reserves** | High     | **Boundary Clamping**: Market prices are restricted to the interval `[0.0100, 0.9900]`. If a trade would drive a reserve below minimum liquidity threshold ($100.00 USDC), execution aborts. |
-| **Sybil Claim Depletion**             | Medium   | **Dual-Key Claim Lock**: Claims require both a minimum time cooldown (5 min) per IP address and an active user cash-balance check (`cash_balance < $200.00`).                                |
-| **SQL Injection**                     | Critical | **Prepared Statements**: All database operations use parameter placeholders (`$1, $2`) via `pgx`. No dynamic string concatenation.                                                           |
-| **Cross-Site Scripting (XSS)**        | High     | **Strict CSP & Sanitization**: Angular's default DOM sanitization prevents script injection; the refresh token is an HttpOnly cookie that scripts cannot read. The 1-hour access token is kept in sessionStorage.                     |
+| Threat Vector                         | Severity | Mitigation Architecture                                                                                                                                                                                           |
+| :------------------------------------ | :------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API Drain / DDoS Attack**           | High     | **Token-Bucket Rate Limiter**: 60 req/min for reads; 12 req/min for trades per Guest ID and IP. Excess requests return HTTP 429 immediately before hitting database queries.                                      |
+| **Floating-Point Rounding Exploits**  | High     | **Decimal-Only Computation**: Zero `float64` operations in the trading path. All reserves and balances use `shopspring/decimal` fixed-point representations.                                                      |
+| **Infinite Division / Zero Reserves** | High     | **Boundary Clamping**: Market prices are restricted to the interval `[0.0100, 0.9900]`. If a trade would drive a reserve below minimum liquidity threshold ($100.00 USDC), execution aborts.                      |
+| **Sybil Claim Depletion**             | Medium   | **Dual-Key Claim Lock**: Claims require both a minimum time cooldown (5 min) per IP address and an active user cash-balance check (`cash_balance < $200.00`).                                                     |
+| **SQL Injection**                     | Critical | **Prepared Statements**: All database operations use parameter placeholders (`$1, $2`) via `pgx`. No dynamic string concatenation.                                                                                |
+| **Cross-Site Scripting (XSS)**        | High     | **Strict CSP & Sanitization**: Angular's default DOM sanitization prevents script injection; the refresh token is an HttpOnly cookie that scripts cannot read. The 1-hour access token is kept in sessionStorage. |
 
 ### 10.1 Token-Bucket Rate Limiter & Oracle Cache Policy
 

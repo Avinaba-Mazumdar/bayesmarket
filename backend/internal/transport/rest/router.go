@@ -172,8 +172,9 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	if jwtSecret == "" && isDevOrLocal {
-		jwtSecret = "bayesmarket-development-hmac-sha256-default-secret-key-32b"
+	if jwtSecret == "" {
+		// Only reachable when SetupRouter is called without configuration; see config.EphemeralJWTSecret.
+		jwtSecret = config.EphemeralJWTSecret()
 	}
 
 	router := gin.New()
@@ -320,18 +321,13 @@ bayesmarket_up 1
 	v1.GET("/categories", HandleGetMarketCategories)
 	{
 		// 0. Public System Configuration
+		// Only what the browser needs to render: deployment environment and dev mode are not published.
 		v1.GET("/config", publicReadLimiter.LimitByIP(), func(c *gin.Context) {
-			appEnv := "development"
-			isDev := true
 			googleAuthEnabled := false
 			if cfg != nil {
-				appEnv = cfg.Environment
-				isDev = cfg.IsDevOrLocal()
 				googleAuthEnabled = cfg.GoogleClientID != ""
 			}
 			c.JSON(http.StatusOK, gin.H{
-				"app_env":             appEnv,
-				"is_dev":              isDev,
 				"google_auth_enabled": googleAuthEnabled,
 			})
 		})

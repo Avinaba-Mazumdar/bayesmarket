@@ -9,6 +9,7 @@ import { GlossaryPopoverComponent } from './glossary-popover.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
+import { addDecimal, formatDecimal } from '../../core/utils/decimal';
 
 export type CategoryFilter = string;
 
@@ -142,7 +143,7 @@ export type CategoryFilter = string;
                 justify-content: space-between;
                 gap: 24px;
                 padding: 32px 28px;
-                background: var(--hero-gradient, linear-gradient(135deg, #ffffff 0%, #f8fafc 100%));
+                background: var(--hero-gradient);
                 border: 1px solid var(--hairline);
                 border-radius: var(--radius-lg);
                 position: relative;
@@ -157,7 +158,7 @@ export type CategoryFilter = string;
                 left: -20%;
                 width: 70%;
                 height: 200%;
-                background: var(--hero-glow, radial-gradient(circle, rgba(67, 56, 202, 0.08) 0%, transparent 70%));
+                background: var(--hero-glow);
                 pointer-events: none;
             }
 
@@ -425,19 +426,13 @@ export class MarketListComponent implements OnInit {
     protected readonly loadError = signal<boolean>(false);
 
     protected readonly totalVolume = computed(() => {
-        const total = this.markets().reduce((acc, m) => {
-            const v = parseFloat(m.reserves?.total_volume_usdc || '0');
-            return acc + (isNaN(v) ? 0 : v);
-        }, 0);
-        return total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const total = this.markets().reduce((acc, m) => addDecimal(acc, m.reserves?.total_volume_usdc || '0') ?? acc, '0');
+        return formatDecimal(total, 2, true) ?? '0.00';
     });
 
     protected readonly totalCollateral = computed(() => {
-        const total = this.markets().reduce((acc, m) => {
-            const c = parseFloat(m.reserves?.collateral_reserve || '0');
-            return acc + (isNaN(c) ? 0 : c);
-        }, 0);
-        return total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const total = this.markets().reduce((acc, m) => addDecimal(acc, m.reserves?.collateral_reserve || '0') ?? acc, '0');
+        return formatDecimal(total, 2, true) ?? '0.00';
     });
 
     protected readonly filteredMarkets = computed(() => {

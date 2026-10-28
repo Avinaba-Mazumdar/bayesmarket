@@ -66,7 +66,7 @@ export type TextareaVariant = 'default' | 'mono';
                 box-shadow: none;
                 resize: vertical;
                 color: var(--ink);
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 line-height: 1.5;
                 box-sizing: border-box;
@@ -110,7 +110,7 @@ export type TextareaVariant = 'default' | 'mono';
 
             /* --- Variants --- */
             .textarea-variant-mono .native-textarea {
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-feature-settings: 'tnum' 1;
                 letter-spacing: 0.2px;
             }
@@ -137,7 +137,7 @@ export type TextareaVariant = 'default' | 'mono';
             /* --- Error Message --- */
             .textarea-error-msg {
                 display: block;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 12px;
                 font-weight: 500;
                 color: var(--status-loss);

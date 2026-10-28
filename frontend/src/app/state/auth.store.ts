@@ -3,7 +3,8 @@ import { Observable, tap } from 'rxjs';
 import { ApiService } from '../core/services/api.service';
 import { ToastService } from '../shared/components/toast/toast.service';
 import { AuthResponse, UserProfile } from '../core/models/market.model';
-import { formatUsd, normalizeDecimal } from '../core/utils/decimal';
+import { formatUsd, normalizeDecimal, roundDecimal } from '../core/utils/decimal';
+import { newIdempotencyKey } from '../core/utils/idempotency';
 
 const TOKEN_STORAGE_KEY = 'bayesmarket_auth_token';
 const LEGACY_TOKEN_STORAGE_KEY = 'bayesmarket_guest_token';
@@ -41,13 +42,14 @@ export class AuthStore {
     readonly isAuthenticating = signal<boolean>(false);
     readonly isClaiming = signal<boolean>(false);
     private refreshInFlight = false;
+    /** Kept across retries of one claim attempt; cleared once the claim succeeds or the cooldown answers. */
+    private claimKey: string | null = null;
     /** Seconds until the next claim is allowed, from the server's cooldown. Zero when claimable. */
     readonly claimCooldownSeconds = signal<number>(0);
     private claimCooldownTimer: ReturnType<typeof setInterval> | null = null;
     readonly isAuthModalOpen = signal<boolean>(false);
 
     readonly isDev = signal<boolean>(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
-    readonly appEnv = signal<string>('development');
 
     constructor() {
         this.initializeSession();
@@ -137,7 +139,6 @@ export class AuthStore {
      * Does NOT automatically create guest sessions for first-time visitors.
      */
     initializeSession(): void {
-        this.fetchAppConfig();
         const existingToken = this.token();
         if (existingToken) {
             // Verify session by fetching user profile and portfolio balance
@@ -146,20 +147,6 @@ export class AuthStore {
             // No access token in this tab: the refresh cookie may still hold a session from earlier
             this.restoreSession();
         }
-    }
-
-    private fetchAppConfig(): void {
-        if (!this.apiService || typeof this.apiService.getConfig !== 'function') {
-            return;
-        }
-        this.apiService.getConfig().subscribe({
-            next: (cfg) => {
-                if (cfg) {
-                    this.isDev.set(cfg.is_dev);
-                    this.appEnv.set(cfg.app_env);
-                }
-            }
-        });
     }
 
     private fetchCurrentUserProfile(token: string): void {
@@ -368,7 +355,8 @@ export class AuthStore {
         }
 
         this.isClaiming.set(true);
-        this.apiService.claim(token).subscribe({
+        this.claimKey ??= newIdempotencyKey('claim');
+        this.apiService.claim(token, this.claimKey).subscribe({
             next: (res) => {
                 const rawBalance = res.new_balance ?? res.user?.cash_balance ?? '0';
                 this.updateBalance(rawBalance);
@@ -389,7 +377,8 @@ export class AuthStore {
 
                 this.isClaiming.set(false);
                 this.claimCooldownSeconds.set(0);
-                const claimedAmount = res.amount_claimed ? Math.round(parseFloat(res.amount_claimed)).toString() : (res.amount ?? '100');
+                this.claimKey = null;
+                const claimedAmount = (res.amount_claimed ? roundDecimal(res.amount_claimed, 0) : null) ?? res.amount ?? '100';
                 this.toastService.success('Claim Successful', `+$${claimedAmount} USDC credited to your balance`);
             },
             error: (err) => {
@@ -397,6 +386,7 @@ export class AuthStore {
                 const retryIn = Number(err?.error?.cooldown_remaining_seconds);
                 if (err?.status === 429 && Number.isFinite(retryIn) && retryIn > 0) {
                     this.startClaimCooldown(Math.ceil(retryIn));
+                    this.claimKey = null;
                 }
                 if (err?.status === 401 || err?.status === 404) {
                     this.clearSession();

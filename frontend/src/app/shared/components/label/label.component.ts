@@ -23,7 +23,7 @@ export type LabelSize = 'sm' | 'default' | 'lg';
             label {
                 display: inline-flex;
                 align-items: center;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-weight: 600;
                 line-height: 1.3;
                 letter-spacing: 0.1px;

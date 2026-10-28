@@ -6,6 +6,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { PortfolioResponse, UserPosition } from '../../core/models/market.model';
 import { formatUSDC, formatShares, formatPrice } from '../../core/utils/formatters';
+import { absDecimal, formatDecimal, signedDecimalSign } from '../../core/utils/decimal';
 import { CashOutDialogComponent } from './cash-out-dialog.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
@@ -627,7 +628,6 @@ export class PortfolioViewComponent implements OnInit {
     readonly positions = computed(() => {
         const raw = this.portfolio()?.positions || [];
         return raw.map((pos) => {
-            const pnlNum = parseFloat(pos.unrealized_pnl_usdc || '0');
             return {
                 ...pos,
                 formattedShares: formatShares(pos.shares_owned),
@@ -635,7 +635,7 @@ export class PortfolioViewComponent implements OnInit {
                 formattedCurrentPrice: formatPrice(pos.current_price, 4).replace('$', ''),
                 formattedMarketValue: formatUSDC(pos.current_value_usdc).replace('$', ''),
                 formattedPnL: formatUSDC(pos.unrealized_pnl_usdc),
-                isPositivePnL: pnlNum >= 0
+                isPositivePnL: signedDecimalSign(pos.unrealized_pnl_usdc || '0') !== -1
             };
         });
     });
@@ -648,22 +648,19 @@ export class PortfolioViewComponent implements OnInit {
     readonly formattedPnL = computed(() => {
         const p = this.portfolio();
         if (!p) return '0.00';
-        const pnl = parseFloat(p.total_unrealized_pnl_usdc || '0');
-        return formatUSDC(Math.abs(pnl)).replace('$', '');
+        return formatUSDC(absDecimal(p.total_unrealized_pnl_usdc || '0') ?? '0').replace('$', '');
     });
 
     readonly formattedPnLPct = computed(() => {
         const p = this.portfolio();
         if (!p) return '';
-        const pct = parseFloat(p.total_unrealized_pnl_pct || '0');
-        return isNaN(pct) ? '' : Math.abs(pct).toFixed(1);
+        return formatDecimal(absDecimal(p.total_unrealized_pnl_pct || '0') ?? '0', 1, false) ?? '';
     });
 
     readonly isTotalPnLPositive = computed(() => {
         const p = this.portfolio();
         if (!p) return true;
-        const pnl = parseFloat(p.total_unrealized_pnl_usdc || '0');
-        return pnl >= 0;
+        return signedDecimalSign(p.total_unrealized_pnl_usdc || '0') !== -1;
     });
 
     ngOnInit(): void {
@@ -693,16 +690,6 @@ export class PortfolioViewComponent implements OnInit {
             });
     }
 
-    formatNumber(raw: string | undefined, decimals: number): string {
-        if (!raw) return '0.00';
-        const n = parseFloat(raw);
-        return isNaN(n) ? '0.00' : n.toFixed(decimals);
-    }
-
-    isRowPnLPositive(pos: UserPosition): boolean {
-        const pnl = parseFloat(pos.unrealized_pnl_usdc || '0');
-        return pnl >= 0;
-    }
 
     openCashOutModal(pos: UserPosition): void {
         this.selectedPosition.set(pos);

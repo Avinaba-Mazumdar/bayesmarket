@@ -52,7 +52,7 @@ func NewAuthHandler(pool *pgxpool.Pool, cfg *config.Config) *AuthHandler {
 	googleClientID := ""
 	googleClientSecret := ""
 	googleRedirectURI := "http://localhost:4200/auth/callback"
-	jwtSecret := "bayesmarket-development-hmac-sha256-default-secret-key-32b"
+	jwtSecret := config.EphemeralJWTSecret()
 	isDevOrLocal := false
 
 	if cfg != nil {

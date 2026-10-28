@@ -5,7 +5,18 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
 import { CashOutResponse, SellQuoteResponse, UserPosition } from '../../core/models/market.model';
-import { addDecimal, applyTolerance, compareDecimal, formatUsd, normalizeDecimal, truncateDecimal } from '../../core/utils/decimal';
+import {
+    addDecimal,
+    applyTolerance,
+    compareDecimal,
+    formatDecimal,
+    formatUsd,
+    normalizeDecimal,
+    signedDecimalSign,
+    truncateDecimal
+} from '../../core/utils/decimal';
+import { formatShares, formatUSDC } from '../../core/utils/formatters';
+import { newIdempotencyKey } from '../../core/utils/idempotency';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { DialogComponent } from '../../shared/components/dialog/dialog.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
@@ -354,6 +365,19 @@ export class CashOutDialogComponent {
     readonly isExecuting = signal<boolean>(false);
     readonly isQuoting = signal<boolean>(false);
 
+    /** One key per sale (position and share count); a retry reuses it so it replays instead of selling twice. */
+    private idempotencyKey: string | null = null;
+    private keyIntent: string | null = null;
+
+    private keyForSale(pos: UserPosition, shares: string): string {
+        const intent = `${pos.market_id}|${pos.outcome}|${shares}`;
+        if (this.keyIntent !== intent || this.idempotencyKey === null) {
+            this.keyIntent = intent;
+            this.idempotencyKey = newIdempotencyKey('cashout');
+        }
+        return this.idempotencyKey;
+    }
+
     /** The reader's entry for how many shares to sell; defaults to the whole position. */
     readonly sharesInput = signal<string>('');
     private sharesDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -442,15 +466,13 @@ export class CashOutDialogComponent {
     protected readonly formattedShares = computed(() => {
         const pos = this.position();
         if (!pos) return '0.00';
-        const n = parseFloat(pos.shares_owned);
-        return isNaN(n) ? '0.00' : n.toFixed(2);
+        return formatShares(pos.shares_owned);
     });
 
     protected readonly formattedPrice = computed(() => {
         const pos = this.position();
         if (!pos) return '0.0000';
-        const n = parseFloat(pos.current_price);
-        return isNaN(n) ? '0.0000' : n.toFixed(4);
+        return formatDecimal(pos.current_price, 4, false) ?? '0.0000';
     });
 
     protected readonly formattedProceeds = computed(() => {
@@ -472,8 +494,7 @@ export class CashOutDialogComponent {
     protected readonly isPnLPositive = computed(() => {
         const pos = this.position();
         if (!pos) return true;
-        const pnl = parseFloat(pos.unrealized_pnl_usdc || pos.unrealized_pnl || '0');
-        return pnl >= 0;
+        return signedDecimalSign(pos.unrealized_pnl_usdc || pos.unrealized_pnl || '0') !== -1;
     });
 
     protected readonly estimatedPostBalance = computed(() => {
@@ -503,7 +524,7 @@ export class CashOutDialogComponent {
         }
 
         this.isExecuting.set(true);
-        const idempotencyKey = `cashout-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const idempotencyKey = this.keyForSale(pos, this.sharesToSell() ?? '0');
 
         this.apiService
             .cashOut(
@@ -521,13 +542,15 @@ export class CashOutDialogComponent {
                 next: (receipt) => {
                     this.isExecuting.set(false);
                     this.isOpen.set(false);
+                    this.keyIntent = null;
+                    this.idempotencyKey = null;
 
                     // Update cash balance in AuthStore
                     this.authStore.updateBalance(receipt.new_cash_balance);
 
                     this.toastService.success(
                         'Shares Liquidated',
-                        `Successfully sold ${parseFloat(receipt.shares_sold).toFixed(2)} ${receipt.outcome} shares for $${parseFloat(receipt.payout_usdc).toFixed(2)} USDC.`
+                        `Successfully sold ${formatShares(receipt.shares_sold)} ${receipt.outcome} shares for ${formatUSDC(receipt.payout_usdc)} USDC.`
                     );
 
                     this.cashedOut.emit(receipt);

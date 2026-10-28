@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LucideArrowUp, LucideArrowDown, LucideInfo } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
-import { applyTolerance, truncateDecimal } from '../../core/utils/decimal';
+import { absDecimal, applyTolerance, formatDecimal, truncateDecimal } from '../../core/utils/decimal';
+import { formatShares } from '../../core/utils/formatters';
+import { newIdempotencyKey } from '../../core/utils/idempotency';
 import { OrderResponse } from '../../core/models/market.model';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
@@ -324,25 +326,34 @@ export class OrderConfirmDialogComponent {
 
     readonly isExecuting = signal<boolean>(false);
 
+    /** One key per review: a retry of the same intent reuses it, so it replays instead of executing twice. */
+    private idempotencyKey: string | null = null;
+    private keyIntent: OrderIntent | null = null;
+
+    private keyForIntent(ord: OrderIntent): string {
+        if (this.keyIntent !== ord || this.idempotencyKey === null) {
+            this.keyIntent = ord;
+            this.idempotencyKey = newIdempotencyKey('order');
+        }
+        return this.idempotencyKey;
+    }
+
     protected readonly formattedDeposit = computed(() => {
         const ord = this.intent();
         if (!ord) return '0.00';
-        const n = parseFloat(ord.amountUSDC);
-        return isNaN(n) ? '0.00' : n.toFixed(2);
+        return formatShares(ord.amountUSDC);
     });
 
     protected readonly formattedShares = computed(() => {
         const ord = this.intent();
         if (!ord?.quote) return '0.00';
-        const n = parseFloat(ord.quote.shares_received);
-        return isNaN(n) ? '0.00' : n.toFixed(2);
+        return formatShares(ord.quote.shares_received);
     });
 
     protected readonly formattedPrice = computed(() => {
         const ord = this.intent();
         if (!ord?.quote) return '0.0000';
-        const n = parseFloat(ord.quote.avg_price);
-        return isNaN(n) ? '0.0000' : n.toFixed(4);
+        return formatDecimal(ord.quote.avg_price, 4, false) ?? '0.0000';
     });
 
     /** Server-side slippage floor: the quoted shares reduced by the user's tolerance. */
@@ -360,8 +371,7 @@ export class OrderConfirmDialogComponent {
     protected readonly formattedImpact = computed(() => {
         const ord = this.intent();
         if (!ord?.quote) return '0.00';
-        const n = parseFloat(ord.quote.price_impact_pct);
-        return isNaN(n) ? '0.00' : Math.abs(n).toFixed(2);
+        return formatDecimal(absDecimal(ord.quote.price_impact_pct) ?? '0', 2, false) ?? '0.00';
     });
 
     onDismiss(): void {
@@ -384,7 +394,7 @@ export class OrderConfirmDialogComponent {
         }
 
         this.isExecuting.set(true);
-        const idempotencyKey = `order-ui-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const idempotencyKey = this.keyForIntent(ord);
 
         this.apiService
             .placeOrder(
@@ -402,13 +412,15 @@ export class OrderConfirmDialogComponent {
                 next: (receipt) => {
                     this.isExecuting.set(false);
                     this.isOpen.set(false);
+                    this.keyIntent = null;
+                    this.idempotencyKey = null;
 
                     // Update store cash balance
                     this.authStore.updateBalance(receipt.new_cash_balance);
 
                     this.toastService.success(
                         'Trade Executed Successfully',
-                        `Filled ${parseFloat(receipt.shares_filled).toFixed(2)} ${receipt.outcome} shares at $${parseFloat(receipt.execution_price).toFixed(4)}`
+                        `Filled ${formatShares(receipt.shares_filled)} ${receipt.outcome} shares at $${formatDecimal(receipt.execution_price, 4) ?? '0.0000'}`
                     );
 
                     this.orderPlaced.emit(receipt);

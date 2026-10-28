@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Avinaba-Mazumdar/bayesmarket/actions/workflows/ci.yml/badge.svg)](https://github.com/Avinaba-Mazumdar/bayesmarket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Angular](<https://img.shields.io/badge/Angular-22%20(Zoneless)-DD0031?logo=angular&logoColor=white>)](https://angular.dev)
 [![WCAG AAA target](https://img.shields.io/badge/WCAG%202.2-AAA%20target-blue)](target/DESIGN.md)
 
@@ -176,7 +176,7 @@ If developing locally without Docker:
 
 ### Prerequisites
 
-- **Go**: `v1.24+`
+- **Go**: `v1.27+`
 - **Node.js**: `v22+` (or `v24 LTS`)
 - **pnpm**: `v10+` (or `npm`)
 - **PostgreSQL**: Local PostgreSQL 18 or **[Neon.tech](https://neon.tech)**

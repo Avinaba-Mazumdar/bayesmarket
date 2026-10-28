@@ -94,7 +94,7 @@ export type SelectVariant = 'default' | 'mono';
                 border-radius: var(--radius-lg);
                 padding: 0 14px;
                 box-sizing: border-box;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 line-height: 1.4;
                 cursor: pointer;
@@ -127,7 +127,7 @@ export type SelectVariant = 'default' | 'mono';
 
             /* --- Variants --- */
             .select-variant-mono {
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-feature-settings: 'tnum' 1;
             }
 
@@ -182,7 +182,7 @@ export type SelectVariant = 'default' | 'mono';
                 background-color: var(--surface-card-elevated);
                 border: 1px solid var(--hairline);
                 border-radius: var(--radius-lg);
-                box-shadow: var(--shadow-lg, 0 12px 28px -4px rgba(0, 0, 0, 0.65));
+                box-shadow: var(--shadow-lg);
                 padding: 4px;
                 outline: none;
             }
@@ -196,7 +196,7 @@ export type SelectVariant = 'default' | 'mono';
                 padding: 8px 12px;
                 border-radius: var(--radius-md);
                 color: var(--ink);
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 cursor: pointer;
                 user-select: none;
@@ -246,7 +246,7 @@ export type SelectVariant = 'default' | 'mono';
             /* --- Error Message --- */
             .select-error-msg {
                 display: block;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 12px;
                 font-weight: 500;
                 color: var(--status-loss);

@@ -83,10 +83,16 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if idempotencyKey != "" {
+		if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
+	}
 
 	// Fast-path idempotency replay: return the stored receipt for a retried claim.
 	if idempotencyKey != "" {
-		if cached, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey); err == nil && found {
+		if cached, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey, claimFingerprint()); err == nil && found {
 			c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
 			c.Data(http.StatusOK, "application/json", cached)
 			return
@@ -114,7 +120,7 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, ErrIdempotencyReplay) || IsUniqueViolation(err) {
-			if cached, found, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey); found {
+			if cached, found, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey, claimFingerprint()); found {
 				c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
 				c.Data(http.StatusOK, "application/json", cached)
 				return
@@ -237,9 +243,9 @@ func (h *ClaimHandler) executeClaimTx(ctx context.Context, userID uuid.UUID, cli
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
-			VALUES ($1, $2, $3, $4);
-		`, userID, claimIdempotencyOp, idempotencyKey, respBytes); err != nil {
+			INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response, request_hash)
+			VALUES ($1, $2, $3, $4, $5);
+		`, userID, claimIdempotencyOp, idempotencyKey, respBytes, claimFingerprint()); err != nil {
 			return nil, err
 		}
 	}
@@ -253,4 +259,9 @@ func (h *ClaimHandler) executeClaimTx(ctx context.Context, userID uuid.UUID, cli
 // HandleClaimFaucet is a legacy alias for HandleClaim.
 func (h *ClaimHandler) HandleClaimFaucet(c *gin.Context) {
 	h.HandleClaim(c)
+}
+
+// claimFingerprint identifies a claim. A claim has no body, so the operation alone is bound.
+func claimFingerprint() string {
+	return requestFingerprint("claim")
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/bayesmarket/bayesmarket/internal/amm"
 	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/bayesmarket/bayesmarket/internal/models"
 	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -146,6 +147,10 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 		})
 		return
 	}
+	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	if marketIDParam == "" {
@@ -188,8 +193,14 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 		return
 	}
 
-	// 1. Fast path: check idempotency receipt outside tx
-	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "place_order", idempotencyKey)
+	// 1. Fast path: check idempotency receipt outside tx. A key reused for a different order is refused.
+	fingerprint := orderFingerprint(marketIDParam, outcome, amount, minSharesOut)
+	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "place_order", idempotencyKey, fingerprint)
+	if errors.Is(err, ErrIdempotencyKeyReused) {
+		appErr := idempotencyReusedError()
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 	if err == nil && found {
 		c.Data(http.StatusOK, "application/json", cachedResp)
 		return
@@ -202,7 +213,7 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, ErrIdempotencyReplay) {
-			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, "place_order", idempotencyKey); ok {
+			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, "place_order", idempotencyKey, fingerprint); ok {
 				c.Data(http.StatusOK, "application/json", cached)
 				return
 			}
@@ -363,7 +374,7 @@ func (h *TradeHandler) executeOrderTx(
 	batch.Queue(ledgerSQL, ledgerArgs...)
 
 	// 6. Idempotency receipt
-	QueueIdempotencyRecord(batch, userID, "place_order", idempotencyKey, respBytes)
+	QueueIdempotencyRecord(batch, userID, "place_order", idempotencyKey, orderFingerprint(marketIDParam, outcome, amount, minSharesOut), respBytes)
 
 	if err := executeBatchAndCheckIdempotency(ctx, tx, batch); err != nil {
 		return nil, err
@@ -399,6 +410,10 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 			"error":   "idempotency_key_required",
 			"message": "Idempotency-Key header is required for cashout mutations",
 		})
+		return
+	}
+	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 		return
 	}
 
@@ -442,8 +457,14 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 		return
 	}
 
-	// 1. Fast path: check idempotency receipt outside tx
-	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "cashout", idempotencyKey)
+	// 1. Fast path: check idempotency receipt outside tx. A key reused for a different sale is refused.
+	fingerprint := cashOutFingerprint(marketIDParam, outcome, shares, minPayout)
+	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "cashout", idempotencyKey, fingerprint)
+	if errors.Is(err, ErrIdempotencyKeyReused) {
+		appErr := idempotencyReusedError()
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 	if err == nil && found {
 		c.Data(http.StatusOK, "application/json", cachedResp)
 		return
@@ -456,7 +477,7 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, ErrIdempotencyReplay) {
-			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, "cashout", idempotencyKey); ok {
+			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, "cashout", idempotencyKey, fingerprint); ok {
 				c.Data(http.StatusOK, "application/json", cached)
 				return
 			}
@@ -617,7 +638,7 @@ func (h *TradeHandler) executeCashOutTx(
 	batch.Queue(ledgerSQL, ledgerArgs...)
 
 	// 6. Store idempotency receipt
-	QueueIdempotencyRecord(batch, userID, "cashout", idempotencyKey, respBytes)
+	QueueIdempotencyRecord(batch, userID, "cashout", idempotencyKey, cashOutFingerprint(marketIDParam, outcome, shares, minPayout), respBytes)
 
 	if err := executeBatchAndCheckIdempotency(ctx, tx, batch); err != nil {
 		return nil, err
@@ -695,7 +716,7 @@ func lockAndVerifyActiveMarket(ctx context.Context, tx pgx.Tx, marketIDParam str
 
 // checkTradable returns an error unless the market is active and before its resolution date.
 func checkTradable(status string, resolutionDate time.Time) *AppError {
-	if status != "active" {
+	if status != string(models.MarketStatusActive) {
 		return &AppError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  "market_not_active",
@@ -887,4 +908,15 @@ func yesProbabilityAfter(reserveYes, reserveNo, collateral decimal.Decimal) deci
 		return decimal.Zero
 	}
 	return pYes
+}
+
+// orderFingerprint identifies a BUY request for idempotency. Every field that changes the outcome is
+// included, so a retry is replayed only when it is the same order.
+func orderFingerprint(marketIDParam string, outcome amm.Outcome, amount, minSharesOut decimal.Decimal) string {
+	return requestFingerprint("buy", marketIDParam, string(outcome), amount.String(), minSharesOut.String())
+}
+
+// cashOutFingerprint identifies a SELL request for idempotency.
+func cashOutFingerprint(marketIDParam string, outcome amm.Outcome, shares, minPayout decimal.Decimal) string {
+	return requestFingerprint("sell", marketIDParam, string(outcome), shares.String(), minPayout.String())
 }

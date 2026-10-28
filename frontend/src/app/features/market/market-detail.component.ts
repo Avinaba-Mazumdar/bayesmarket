@@ -29,6 +29,7 @@ import { ActivityFeedComponent } from '../trade/activity-feed.component';
 import { GlossaryPopoverComponent } from './glossary-popover.component';
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
+import { roundDecimal, shiftDecimal } from '../../core/utils/decimal';
 
 @Component({
     selector: 'app-market-detail',
@@ -752,8 +753,8 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
     protected readonly yesPct = computed(() => {
         const m = this.market();
         if (!m) return 50;
-        const p = parseFloat(m.probability_yes_pct);
-        return isNaN(p) ? 50 : Math.round(p);
+        const p = roundDecimal(m.probability_yes_pct, 0);
+        return p === null ? 50 : Number(p);
     });
 
     protected readonly noPct = computed(() => {
@@ -856,8 +857,8 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
             ...current,
             probability_yes: tick.yes_price,
             probability_no: tick.no_price,
-            probability_yes_pct: (parseFloat(tick.yes_price) * 100).toFixed(1),
-            probability_no_pct: (parseFloat(tick.no_price) * 100).toFixed(1),
+            probability_yes_pct: shiftDecimal(tick.yes_price, 2, 1) ?? '0.0',
+            probability_no_pct: shiftDecimal(tick.no_price, 2, 1) ?? '0.0',
             reserves: tick.reserves
                 ? {
                       ...current.reserves,

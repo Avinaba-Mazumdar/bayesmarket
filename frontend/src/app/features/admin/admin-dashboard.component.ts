@@ -37,6 +37,7 @@ import { TextareaComponent } from '../../shared/components/textarea/textarea.com
 import { SwitchComponent } from '../../shared/components/switch/switch.component';
 import { BrandIconComponent } from '../../shared/components/brand-icon/brand-icon.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
+import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeDecimal, shiftDecimal } from '../../core/utils/decimal';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -1487,39 +1488,32 @@ export class AdminDashboardComponent implements OnInit {
             }));
     });
 
-    readonly numericProbability = computed(() => {
-        const parsed = parseFloat(this.probabilityInput());
-        if (isNaN(parsed) || parsed < 1) return 1;
-        if (parsed > 99) return 99;
+    readonly probabilityPct = computed(() => {
+        const parsed = normalizeDecimal(this.probabilityInput().trim(), 2);
+        if (parsed === null || compareDecimal(parsed, '1') === -1) return '1';
+        if (compareDecimal(parsed, '99') === 1) return '99';
         return parsed;
     });
 
-    readonly numericCollateral = computed(() => {
-        const parsed = parseFloat(this.collateralInput());
-        return isNaN(parsed) || parsed <= 0 ? 10000 : parsed;
+    readonly numericProbability = computed(() => Number(this.probabilityPct()));
+
+    readonly probabilityYes = computed(() => shiftDecimal(this.probabilityPct(), -2, 8) ?? '0.01');
+
+    readonly collateralAmount = computed(() => {
+        const parsed = normalizeDecimal(this.collateralInput().trim(), 8);
+        return parsed === null || compareDecimal(parsed, '0') !== 1 ? '10000' : parsed;
     });
 
-    readonly formattedCollateral = computed(() => {
-        return this.numericCollateral().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    });
+    readonly formattedCollateral = computed(() => formatDecimal(this.collateralAmount(), 2, true) ?? '0.00');
 
     readonly formattedReserveYes = computed(() => {
-        const c = this.numericCollateral();
-        const pNo = (100 - this.numericProbability()) / 100;
-        return (c * pNo).toFixed(2);
+        const pNo = diffDecimal('1', this.probabilityYes(), 8) ?? '0';
+        return multiplyDecimal(this.collateralAmount(), pNo, 2) ?? '0.00';
     });
 
-    readonly formattedReserveNo = computed(() => {
-        const c = this.numericCollateral();
-        const pYes = this.numericProbability() / 100;
-        return (c * pYes).toFixed(2);
-    });
+    readonly formattedReserveNo = computed(() => multiplyDecimal(this.collateralAmount(), this.probabilityYes(), 2) ?? '0.00');
 
-    readonly formattedInvariantK = computed(() => {
-        const rYes = parseFloat(this.formattedReserveYes());
-        const rNo = parseFloat(this.formattedReserveNo());
-        return (rYes * rNo).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    });
+    readonly formattedInvariantK = computed(() => multiplyDecimal(this.formattedReserveYes(), this.formattedReserveNo(), 0, true) ?? '0');
 
     getStatusBadgeVariant(status: string): BadgeVariant {
         switch (status) {
@@ -1551,13 +1545,6 @@ export class AdminDashboardComponent implements OnInit {
         this.apiService.getMarketCategories().subscribe({
             next: (list) => this.categoryOptions.set(list.map((c) => ({ value: c.id, label: c.label }))),
             error: () => this.toastService.warning('Categories unavailable', 'Could not load the market category list.')
-        });
-        this.apiService.getConfig().subscribe({
-            next: (cfg) => {
-                if (cfg) {
-                    this.isDev.set(cfg.is_dev);
-                }
-            }
         });
 
         if (this.authStore.isAdmin()) {
@@ -1616,8 +1603,8 @@ export class AdminDashboardComponent implements OnInit {
             resolution_source: source,
             resolution_date: new Date(rawDate).toISOString(),
             image_url: this.imageUrl().trim(),
-            initial_collateral_usdc: this.numericCollateral().toFixed(8),
-            initial_probability_yes: (this.numericProbability() / 100).toFixed(8)
+            initial_collateral_usdc: this.collateralAmount(),
+            initial_probability_yes: this.probabilityYes()
         };
 
         this.isSubmitting.set(true);

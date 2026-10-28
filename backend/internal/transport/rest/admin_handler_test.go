@@ -56,7 +56,7 @@ func TestAdminResolveUnauthorized(t *testing.T) {
 
 	// 1. Without Authorization header -> 401
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"test"}`))
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", uuid.New().String())
 	router.ServeHTTP(w, req)
@@ -67,7 +67,7 @@ func TestAdminResolveUnauthorized(t *testing.T) {
 
 	// 2. With invalid bearer token -> 403
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"test"}`))
+	req, _ = http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer invalid-admin-token-xyz")
 	req.Header.Set("Idempotency-Key", uuid.New().String())
@@ -87,7 +87,7 @@ func TestAdminResolveUnauthorized(t *testing.T) {
 	_ = json.Unmarshal(wGuest.Body.Bytes(), &authResp)
 	if authResp.Token != "" {
 		wUser := httptest.NewRecorder()
-		reqUser, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"test"}`))
+		reqUser, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`))
 		reqUser.Header.Set("Content-Type", "application/json")
 		reqUser.Header.Set("Authorization", "Bearer "+authResp.Token)
 		reqUser.Header.Set("Idempotency-Key", uuid.New().String())
@@ -108,7 +108,7 @@ func TestAdminResolveMissingIdempotency(t *testing.T) {
 	url := fmt.Sprintf("/api/v1/admin/markets/%s/resolve", randomMarketID)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"test"}`))
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+getSuperadminToken(t, pool, cfg))
 	router.ServeHTTP(w, req)
@@ -180,7 +180,7 @@ func TestAdminResolveLiveWorkflow(t *testing.T) {
 	// 4. Resolve market to YES via admin API
 	superadminToken := getSuperadminToken(t, pool, cfg)
 	idempKey := fmt.Sprintf("resolve-%d", time.Now().UnixNano())
-	resolvePayload := `{"winning_outcome":"YES","oracle_proof":"Official BLS Labor Release #2026-09","resolve_early":true}`
+	resolvePayload := `{"winning_outcome":"YES","oracle_proof":"https://www.bls.gov/news.release/empsit.nr0.htm","resolve_early":true}`
 	url := fmt.Sprintf("/api/v1/admin/markets/%s/resolve", testMarketID.String())
 
 	w := httptest.NewRecorder()
@@ -486,7 +486,7 @@ func TestAdminVoidMarketRefundsPositions(t *testing.T) {
 	if w := doReq(http.MethodPost, marketURL+"/void", "", idempKey+"-2"); w.Code != http.StatusConflict {
 		t.Errorf("Expected 409 voiding twice, got %d", w.Code)
 	}
-	resolveBody := `{"winning_outcome":"YES","oracle_proof":"Official source"}`
+	resolveBody := `{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`
 	if w := doReq(http.MethodPost, marketURL+"/resolve", resolveBody, idempKey+"-resolve"); w.Code != http.StatusConflict {
 		t.Errorf("Expected 409 resolving a voided market, got %d: %s", w.Code, w.Body.String())
 	}
@@ -644,7 +644,7 @@ func TestResolvedMarketReportsWinningOutcome(t *testing.T) {
 	adminToken := getSuperadminToken(t, pool, cfg)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/v1/admin/markets/"+marketID.String()+"/resolve",
-		bytes.NewBufferString(`{"winning_outcome":"NO","oracle_proof":"Official source","resolve_early":true}`))
+		bytes.NewBufferString(`{"winning_outcome":"NO","oracle_proof":"https://example.com/evidence/official-release","resolve_early":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	req.Header.Set("Idempotency-Key", fmt.Sprintf("resolve-no-%d", time.Now().UnixNano()))

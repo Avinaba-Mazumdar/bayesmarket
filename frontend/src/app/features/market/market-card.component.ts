@@ -4,6 +4,7 @@ import { LucideArrowRight } from '@lucide/angular';
 import { Market } from '../../core/models/market.model';
 import { formatUSDC } from '../../core/utils/formatters';
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
+import { roundDecimal } from '../../core/utils/decimal';
 
 @Component({
     selector: 'app-market-card',
@@ -314,8 +315,8 @@ export class MarketCardComponent {
     });
 
     protected readonly yesPct = computed(() => {
-        const val = parseFloat(this.market().probability_yes_pct);
-        return isNaN(val) ? 50 : Math.round(val);
+        const val = roundDecimal(this.market().probability_yes_pct, 0);
+        return val === null ? 50 : Number(val);
     });
 
     protected readonly noPct = computed(() => {

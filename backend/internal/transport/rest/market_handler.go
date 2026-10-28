@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bayesmarket/bayesmarket/internal/amm"
+	"github.com/bayesmarket/bayesmarket/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -117,7 +118,7 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 	if offset == 0 {
 		queryLimit = publicListMax
 	}
-	rows, err := h.listMarkets(ctx, category, "active", queryLimit, offset)
+	rows, err := h.listMarkets(ctx, category, string(models.MarketStatusActive), queryLimit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "database_error",
@@ -151,11 +152,11 @@ const publicListMax = 100
 
 // adminListableStatuses are the market statuses the admin console can filter by.
 var adminListableStatuses = map[string]bool{
-	"active":    true,
-	"suspended": true,
-	"locked":    true,
-	"resolved":  true,
-	"voided":    true,
+	string(models.MarketStatusActive):    true,
+	string(models.MarketStatusSuspended): true,
+	string(models.MarketStatusLocked):    true,
+	string(models.MarketStatusResolved):  true,
+	string(models.MarketStatusVoided):    true,
 }
 
 // HandleAdminListMarkets returns markets in every lifecycle status so admins can manage
@@ -217,14 +218,77 @@ type marketListRow struct {
 	reserves amm.PoolReserves
 }
 
-// listMarkets queries markets with their pool state. An empty category or status matches all.
-func (h *MarketHandler) listMarkets(ctx context.Context, category, status string, limit, offset int) ([]marketListRow, error) {
-	query := `
+// marketSelectSQL is the column list shared by every query that returns a marketListRow.
+const marketSelectSQL = `
 		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url,
 		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
 		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
 		FROM markets m
 		JOIN liquidity_pools p ON p.market_id = m.id
+`
+
+// marketRowScanner is satisfied by pgx.Rows and pgx.Row, so one mapper decodes both.
+type marketRowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanMarketRow decodes one marketSelectSQL row into its response. Market rows are decoded only here.
+func scanMarketRow(row marketRowScanner) (marketListRow, error) {
+	var (
+		id                                           uuid.UUID
+		slug, title, desc, cat, resSource, mktStatus string
+		imgURL, winningOutcome                       *string
+		resDate, createdAt                           time.Time
+		rYes, rNo, collateral, volume                decimal.Decimal
+	)
+
+	if err := row.Scan(
+		&id, &slug, &title, &desc, &cat, &imgURL,
+		&resSource, &resDate, &mktStatus, &winningOutcome, &createdAt,
+		&rYes, &rNo, &collateral, &volume,
+	); err != nil {
+		return marketListRow{}, err
+	}
+
+	poolReserves := amm.PoolReserves{
+		ReserveYes:        rYes,
+		ReserveNo:         rNo,
+		CollateralReserve: collateral,
+	}
+	pYes, pNo, _ := amm.CalculateSpotPrices(poolReserves)
+
+	return marketListRow{
+		id:       id,
+		reserves: poolReserves,
+		summary: MarketSummaryResponse{
+			ID:                id.String(),
+			Slug:              slug,
+			Title:             title,
+			Description:       desc,
+			Category:          cat,
+			ImageURL:          imgURL,
+			ResolutionSource:  resSource,
+			ResolutionDate:    resDate.Format(time.RFC3339),
+			Status:            mktStatus,
+			WinningOutcome:    winningOutcome,
+			ProbabilityYes:    pYes.StringFixed(8),
+			ProbabilityNo:     pNo.StringFixed(8),
+			ProbabilityYesPct: pYes.Mul(decimal.NewFromInt(100)).StringFixed(2),
+			ProbabilityNoPct:  pNo.Mul(decimal.NewFromInt(100)).StringFixed(2),
+			Reserves: ReservesResponse{
+				ReserveYes:        rYes.StringFixed(8),
+				ReserveNo:         rNo.StringFixed(8),
+				CollateralReserve: collateral.StringFixed(8),
+				TotalVolumeUSDC:   volume.StringFixed(8),
+			},
+			CreatedAt: createdAt.Format(time.RFC3339),
+		},
+	}, nil
+}
+
+// listMarkets queries markets with their pool state. An empty category or status matches all.
+func (h *MarketHandler) listMarkets(ctx context.Context, category, status string, limit, offset int) ([]marketListRow, error) {
+	query := marketSelectSQL + `
 		WHERE ($1 = '' OR m.category = $1) AND ($2 = '' OR m.status = $2)
 		ORDER BY m.created_at ASC
 		LIMIT $3 OFFSET $4;
@@ -237,58 +301,11 @@ func (h *MarketHandler) listMarkets(ctx context.Context, category, status string
 
 	var result []marketListRow
 	for rows.Next() {
-		var (
-			id                                           uuid.UUID
-			slug, title, desc, cat, resSource, mktStatus string
-			imgURL, winningOutcome                       *string
-			resDate, createdAt                           time.Time
-			rYes, rNo, collateral, volume                decimal.Decimal
-		)
-
-		if err := rows.Scan(
-			&id, &slug, &title, &desc, &cat, &imgURL,
-			&resSource, &resDate, &mktStatus, &winningOutcome, &createdAt,
-			&rYes, &rNo, &collateral, &volume,
-		); err != nil {
+		row, err := scanMarketRow(rows)
+		if err != nil {
 			return nil, err
 		}
-
-		poolReserves := amm.PoolReserves{
-			ReserveYes:        rYes,
-			ReserveNo:         rNo,
-			CollateralReserve: collateral,
-		}
-		pYes, pNo, _ := amm.CalculateSpotPrices(poolReserves)
-		pYesPct := pYes.Mul(decimal.NewFromInt(100)).StringFixed(2)
-		pNoPct := pNo.Mul(decimal.NewFromInt(100)).StringFixed(2)
-
-		result = append(result, marketListRow{
-			id:       id,
-			reserves: poolReserves,
-			summary: MarketSummaryResponse{
-				ID:                id.String(),
-				Slug:              slug,
-				Title:             title,
-				Description:       desc,
-				Category:          cat,
-				ImageURL:          imgURL,
-				ResolutionSource:  resSource,
-				ResolutionDate:    resDate.Format(time.RFC3339),
-				Status:            mktStatus,
-				WinningOutcome:    winningOutcome,
-				ProbabilityYes:    pYes.StringFixed(8),
-				ProbabilityNo:     pNo.StringFixed(8),
-				ProbabilityYesPct: pYesPct,
-				ProbabilityNoPct:  pNoPct,
-				Reserves: ReservesResponse{
-					ReserveYes:        rYes.StringFixed(8),
-					ReserveNo:         rNo.StringFixed(8),
-					CollateralReserve: collateral.StringFixed(8),
-					TotalVolumeUSDC:   volume.StringFixed(8),
-				},
-				CreatedAt: createdAt.Format(time.RFC3339),
-			},
-		})
+		result = append(result, row)
 	}
 	return result, rows.Err()
 }
@@ -315,26 +332,9 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 	defer cancel()
 
 	keyPredicate, keyArg := marketKeyPredicate("m", param)
-	query := `
-		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url,
-		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
-		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
-		FROM markets m
-		JOIN liquidity_pools p ON p.market_id = m.id
-		WHERE ` + keyPredicate + `;
-	`
-	var (
-		id, slug, title, desc, cat, resSource, status string
-		imgURL, winningOutcome                        *string
-		resDate, createdAt                            time.Time
-		rYes, rNo, collateral, volume                 decimal.Decimal
-	)
+	query := marketSelectSQL + `WHERE ` + keyPredicate + `;`
 
-	err := h.pool.QueryRow(ctx, query, keyArg).Scan(
-		&id, &slug, &title, &desc, &cat, &imgURL,
-		&resSource, &resDate, &status, &winningOutcome, &createdAt,
-		&rYes, &rNo, &collateral, &volume,
-	)
+	row, err := scanMarketRow(h.pool.QueryRow(ctx, query, keyArg))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Prediction market not found"})
@@ -344,41 +344,9 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 		return
 	}
 
-	poolReserves := amm.PoolReserves{
-		ReserveYes:        rYes,
-		ReserveNo:         rNo,
-		CollateralReserve: collateral,
-	}
-	pYes, pNo, _ := amm.CalculateSpotPrices(poolReserves)
-
-	resp := MarketSummaryResponse{
-		ID:                id,
-		Slug:              slug,
-		Title:             title,
-		Description:       desc,
-		Category:          cat,
-		ImageURL:          imgURL,
-		ResolutionSource:  resSource,
-		ResolutionDate:    resDate.Format(time.RFC3339),
-		Status:            status,
-		WinningOutcome:    winningOutcome,
-		ProbabilityYes:    pYes.StringFixed(8),
-		ProbabilityNo:     pNo.StringFixed(8),
-		ProbabilityYesPct: pYes.Mul(decimal.NewFromInt(100)).StringFixed(2),
-		ProbabilityNoPct:  pNo.Mul(decimal.NewFromInt(100)).StringFixed(2),
-		Reserves: ReservesResponse{
-			ReserveYes:        rYes.StringFixed(8),
-			ReserveNo:         rNo.StringFixed(8),
-			CollateralReserve: collateral.StringFixed(8),
-			TotalVolumeUSDC:   volume.StringFixed(8),
-		},
-		CreatedAt: createdAt.Format(time.RFC3339),
-	}
-
+	resp := row.summary
 	if h.cache != nil {
-		if mUUID, parseErr := uuid.Parse(id); parseErr == nil {
-			h.cache.SetMarket(id, slug, resp, poolReserves, mUUID)
-		}
+		h.cache.SetMarket(resp.ID, resp.Slug, resp, row.reserves, row.id)
 	}
 
 	c.JSON(http.StatusOK, resp)

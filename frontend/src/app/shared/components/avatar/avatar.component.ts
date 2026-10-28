@@ -56,7 +56,7 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
                 background-color: var(--surface-card-elevated);
                 color: var(--ink);
                 border: 1px solid var(--hairline);
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-weight: 600;
                 text-transform: uppercase;
                 transition:

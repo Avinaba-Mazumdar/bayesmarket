@@ -140,7 +140,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
                 border-radius: var(--radius-xl);
                 padding: 24px;
                 box-shadow:
-                    var(--shadow-terminal, 0 8px 32px rgba(0, 0, 0, 0.7)),
+                    var(--shadow-terminal),
                     0 0 0 1px rgba(255, 255, 255, 0.08);
                 box-sizing: border-box;
                 outline: none;
@@ -209,7 +209,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
 
             .dialog-title {
                 margin: 0;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 19px;
                 font-weight: 700;
                 line-height: 1.35;
@@ -219,7 +219,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
 
             .dialog-description {
                 margin: 0;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 line-height: 1.5;
                 color: var(--muted);

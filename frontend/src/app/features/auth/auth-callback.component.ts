@@ -61,7 +61,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 background-color: var(--surface-card);
                 border: 1px solid var(--hairline);
                 border-radius: var(--radius-xl);
-                box-shadow: var(--shadow-terminal, 0 10px 25px -5px rgba(15, 23, 42, 0.1));
+                box-shadow: var(--shadow-terminal);
             }
 
             .status-icon {
@@ -93,7 +93,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             }
 
             .callback-title {
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 20px;
                 font-weight: 700;
                 color: var(--ink);
@@ -102,7 +102,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             }
 
             .callback-desc {
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-size: 14px;
                 color: var(--muted);
                 line-height: 1.5;

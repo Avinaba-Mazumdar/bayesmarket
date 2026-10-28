@@ -49,7 +49,7 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
                 gap: 8px;
                 white-space: nowrap;
                 flex-wrap: nowrap;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-weight: 600;
                 line-height: 1.3;
                 letter-spacing: 0.1px;
@@ -279,7 +279,7 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
             .btn-variant-chip {
                 background-color: var(--surface-card);
                 color: var(--ink-secondary);
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-size: 13px;
                 letter-spacing: 0.1px;
                 border: 1px solid var(--hairline);

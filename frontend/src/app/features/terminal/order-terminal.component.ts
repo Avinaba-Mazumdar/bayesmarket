@@ -12,7 +12,8 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { LabelComponent } from '../../shared/components/label/label.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
-import { compareDecimal, formatUsd, normalizeDecimal, subtractDecimal } from '../../core/utils/decimal';
+import { absDecimal, addDecimal, compareDecimal, diffDecimal, divideDecimal, formatDecimal, formatUsd, normalizeDecimal, roundDecimal, shiftDecimal, subtractDecimal, trimDecimal } from '../../core/utils/decimal';
+import { formatShares, formatUSDC } from '../../core/utils/formatters';
 
 export interface OrderIntent {
     marketId: string;
@@ -23,6 +24,12 @@ export interface OrderIntent {
     maxSlippagePct: string;
     currentBalance: string;
     postTradeBalance: string;
+}
+
+/** "$0.7200" style price for quote averages. */
+function formatUsd4(value: string): string {
+    const formatted = formatDecimal(value, 4, false);
+    return formatted === null ? '$0.00' : `$${formatted}`;
 }
 
 @Component({
@@ -616,9 +623,9 @@ export class OrderTerminalComponent {
     onSlippageInput(event: Event): void {
         const input = event.target as HTMLInputElement;
         if (!input) return;
-        const val = parseFloat(input.value);
-        if (!isNaN(val) && val >= 0.1 && val <= 50) {
-            this.maxSlippageTolerancePct.set(val.toFixed(1));
+        const val = normalizeDecimal(input.value, 1);
+        if (val !== null && compareDecimal(val, '0.1') !== -1 && compareDecimal(val, '50') !== 1) {
+            this.maxSlippageTolerancePct.set(val);
         }
     }
 
@@ -631,19 +638,12 @@ export class OrderTerminalComponent {
 
     protected readonly yesPriceCents = computed(() => {
         const m = this.market();
-        const p = parseFloat(m?.probability_yes_pct || '50.00');
-        return isNaN(p) ? '50' : Math.round(p).toString();
+        return roundDecimal(m?.probability_yes_pct || '50.00', 0) ?? '50';
     });
 
     protected readonly noPriceCents = computed(() => {
         const m = this.market();
-        const p = parseFloat(m?.probability_no_pct || '50.00');
-        return isNaN(p) ? '50' : Math.round(p).toString();
-    });
-
-    protected readonly currentNumericAmount = computed(() => {
-        const parsed = parseFloat(this.amountInput());
-        return isNaN(parsed) ? 0 : parsed;
+        return roundDecimal(m?.probability_no_pct || '50.00', 0) ?? '50';
     });
 
     /** The typed amount as a canonical 8-decimal string, or null when it is not a valid amount. */
@@ -677,57 +677,53 @@ export class OrderTerminalComponent {
     protected readonly formattedSharesReceived = computed(() => {
         const q = this.latestQuote();
         if (!q) return '—';
-        const num = parseFloat(q.shares_received);
-        return isNaN(num) ? '0.00' : num.toFixed(2);
+        return formatShares(q.shares_received);
     });
 
     protected readonly formattedAvgPrice = computed(() => {
         const q = this.latestQuote();
         if (!q) return '—';
-        const num = parseFloat(q.avg_price);
-        return isNaN(num) ? '$0.00' : `$${num.toFixed(4)}`;
+        return formatUsd4(q.avg_price);
     });
 
     protected readonly formattedPriceImpact = computed(() => {
         const q = this.latestQuote();
         if (!q) return '—';
-        const num = parseFloat(q.price_impact_pct);
-        return isNaN(num) ? '0.00' : Math.abs(num).toFixed(2);
+        return formatDecimal(absDecimal(q.price_impact_pct) ?? '0', 2) ?? '0.00';
     });
 
     protected readonly slippageBadgeVariant = computed(() => {
         const q = this.latestQuote();
         if (!q) return 'secondary';
-        const num = Math.abs(parseFloat(q.price_impact_pct));
-        if (num < 1.0) return 'profit';
-        if (num <= 3.0) return 'warning';
+        const impact = absDecimal(q.price_impact_pct) ?? '0';
+        if (compareDecimal(impact, '1') === -1) return 'profit';
+        if (compareDecimal(impact, '3') !== 1) return 'warning';
         return 'destructive';
     });
 
     protected readonly slippageBadgeLabel = computed(() => {
         const q = this.latestQuote();
         if (!q) return 'Awaiting quote';
-        const num = Math.abs(parseFloat(q.price_impact_pct));
-        if (num < 1.0) return 'Minimal';
-        if (num <= 3.0) return 'Moderate';
+        const impact = absDecimal(q.price_impact_pct) ?? '0';
+        if (compareDecimal(impact, '1') === -1) return 'Minimal';
+        if (compareDecimal(impact, '3') !== 1) return 'Moderate';
         return 'High Impact';
     });
 
     protected readonly potentialPayout = computed(() => {
         const q = this.latestQuote();
         if (!q) return '—';
-        const shares = parseFloat(q.shares_received);
-        return isNaN(shares) ? '$0.00' : `$${shares.toFixed(2)}`;
+        return formatUSDC(q.shares_received);
     });
 
     protected readonly potentialReturnPct = computed(() => {
         const q = this.latestQuote();
-        const amt = this.currentNumericAmount();
-        if (!q || amt <= 0) return 0;
-        const shares = parseFloat(q.shares_received);
-        if (isNaN(shares)) return 0;
-        const profit = shares - amt;
-        return Math.round((profit / amt) * 100);
+        const amt = this.canonicalAmount();
+        if (!q || amt === null || compareDecimal(amt, '0') !== 1) return 0;
+        const profit = diffDecimal(q.shares_received, amt, 4);
+        const pct = profit === null ? null : divideDecimal(profit, amt, 4);
+        const rounded = pct === null ? null : roundDecimal(shiftDecimal(pct, 2, 2) ?? '0', 0);
+        return rounded === null ? 0 : Number(rounded);
     });
 
     protected readonly tradeButtonText = computed(() => {
@@ -738,15 +734,14 @@ export class OrderTerminalComponent {
             return 'Trading closed';
         }
         const outcome = this.selectedOutcome();
-        const amt = this.currentNumericAmount();
-        return `Trade $${amt.toFixed(2)} on ${outcome}`;
+        return `Trade ${formatUSDC(this.canonicalAmount() ?? '0')} on ${outcome}`;
     });
 
     protected readonly tradeButtonLabel = computed(() => {
         if (!this.authStore.isAuthenticated()) {
             return 'Sign in or continue as guest to start trading';
         }
-        return `Review and place trade for $${this.currentNumericAmount().toFixed(2)} USDC on outcome ${this.selectedOutcome()}`;
+        return `Review and place trade for ${formatUSDC(this.canonicalAmount() ?? '0')} USDC on outcome ${this.selectedOutcome()}`;
     });
 
     constructor() {
@@ -782,8 +777,7 @@ export class OrderTerminalComponent {
     }
 
     addAmount(addition: number): void {
-        const current = this.currentNumericAmount();
-        this.amountInput.set((current + addition).toString());
+        this.amountInput.set(trimDecimal(addDecimal(this.canonicalAmount() ?? '0', String(addition)) ?? '0'));
     }
 
     clearAmount(): void {

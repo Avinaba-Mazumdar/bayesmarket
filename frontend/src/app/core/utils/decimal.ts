@@ -102,3 +102,109 @@ export function formatUsd(value: string): string {
     const fraction = (cents % 100n).toString().padStart(2, '0');
     return `$${whole}.${fraction}`;
 }
+
+/*
+ * Display helpers. Values are parsed at 18 fractional digits, which is exact for every amount the
+ * backend stores (8 digits), then rounded half-up to the requested places. No binary floats are used.
+ */
+
+const WORK = 18;
+const WORK_ONE = 10n ** BigInt(WORK);
+const SIGNED_PATTERN = /^-?\d+(\.\d+)?$/;
+
+function parseSignedWork(value: string): bigint | null {
+    const trimmed = value.trim();
+    if (!SIGNED_PATTERN.test(trimmed)) return null;
+    const negative = trimmed.startsWith('-');
+    const body = negative ? trimmed.slice(1) : trimmed;
+    const [whole, fraction = ''] = body.split('.');
+    const magnitude = BigInt(whole) * WORK_ONE + BigInt(fraction.slice(0, WORK).padEnd(WORK, '0'));
+    return negative ? -magnitude : magnitude;
+}
+
+function formatWork(scaled: bigint, places: number, grouping: boolean): string {
+    const negative = scaled < 0n;
+    const magnitude = negative ? -scaled : scaled;
+    const unit = 10n ** BigInt(WORK - places);
+    let rounded = magnitude / unit;
+    if ((magnitude % unit) * 2n >= unit) rounded += 1n;
+    const scale = 10n ** BigInt(places);
+    const whole = (rounded / scale).toString();
+    const groupedWhole = grouping ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : whole;
+    const body = places > 0 ? `${groupedWhole}.${(rounded % scale).toString().padStart(places, '0')}` : groupedWhole;
+    return negative && rounded !== 0n ? `-${body}` : body;
+}
+
+/**
+ * Formats a signed decimal string to a fixed number of places, rounding half-up.
+ * Returns null for input that is not a decimal.
+ *
+ * formatDecimal('1234.565', 2, true) === '1,234.57'
+ */
+export function formatDecimal(value: string, places: number, grouping = false): string | null {
+    const scaled = parseSignedWork(value);
+    if (scaled === null) return null;
+    return formatWork(scaled, Math.max(0, Math.min(places, WORK)), grouping);
+}
+
+/** Drops trailing zeros after the point for display in an input: '60.00000000' becomes '60'. */
+export function trimDecimal(value: string): string {
+    return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
+}
+
+/** Removes the sign from a decimal string. */
+export function absDecimal(value: string): string | null {
+    const scaled = parseSignedWork(value);
+    if (scaled === null) return null;
+    return formatWork(scaled < 0n ? -scaled : scaled, WORK, false).replace(/\.?0+$/, '');
+}
+
+/** Signed a - b with no clamping, as a decimal string rounded to `places`. */
+export function diffDecimal(a: string, b: string, places: number): string | null {
+    const x = parseSignedWork(a);
+    const y = parseSignedWork(b);
+    if (x === null || y === null) return null;
+    return formatWork(x - y, Math.max(0, Math.min(places, WORK)), false);
+}
+
+/** a × b rounded to `places` (half-up). */
+export function multiplyDecimal(a: string, b: string, places: number, grouping = false): string | null {
+    const x = parseSignedWork(a);
+    const y = parseSignedWork(b);
+    if (x === null || y === null) return null;
+    return formatWork((x * y) / WORK_ONE, Math.max(0, Math.min(places, WORK)), grouping);
+}
+
+/** a ÷ b rounded to `places` (half-up). Returns null when b is zero or either input is invalid. */
+export function divideDecimal(a: string, b: string, places: number): string | null {
+    const x = parseSignedWork(a);
+    const y = parseSignedWork(b);
+    if (x === null || y === null || y === 0n) return null;
+    return formatWork((x * WORK_ONE) / y, Math.max(0, Math.min(places, WORK)), false);
+}
+
+/**
+ * Multiplies by 10^places exactly (negative places divide). Used for probability ↔ percent and
+ * dollars ↔ cents without going through a float.
+ *
+ * shiftDecimal('0.6812', 2, 1) === '68.1'
+ */
+export function shiftDecimal(value: string, shift: number, places: number): string | null {
+    const scaled = parseSignedWork(value);
+    if (scaled === null) return null;
+    const factor = 10n ** BigInt(Math.abs(shift));
+    const shifted = shift >= 0 ? scaled * factor : scaled / factor;
+    return formatWork(shifted, Math.max(0, Math.min(places, WORK)), false);
+}
+
+/** Signed comparison helper that accepts only decimal strings. */
+export function signedDecimalSign(value: string): -1 | 0 | 1 | null {
+    const scaled = parseSignedWork(value);
+    if (scaled === null) return null;
+    return scaled === 0n ? 0 : scaled < 0n ? -1 : 1;
+}
+
+/** Rounds a decimal string half-up to `places` (no grouping). */
+export function roundDecimal(value: string, places: number): string | null {
+    return formatDecimal(value, places, false);
+}

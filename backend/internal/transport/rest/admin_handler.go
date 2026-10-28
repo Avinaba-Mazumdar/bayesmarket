@@ -8,13 +8,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/bayesmarket/bayesmarket/internal/amm"
 	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/bayesmarket/bayesmarket/internal/models"
 	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -131,8 +134,8 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 	winningOutcome := string(outcome)
 
 	oracleProof := strings.TrimSpace(req.OracleProof)
-	if oracleProof == "" || len(oracleProof) < 4 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_proof", "message": "oracle_proof must contain substantive resolution evidence"})
+	if appErr := validateOracleProof(oracleProof); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 		return
 	}
 	proofHash := fmt.Sprintf("%x", sha256.Sum256([]byte(oracleProof)))
@@ -150,8 +153,18 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 	unlock := h.locks.acquire("market:" + marketID.String())
 	defer unlock()
 
-	// Check idempotency cache first
-	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "resolve", idempotencyKey)
+	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
+
+	// Check idempotency cache first; a key reused for a different resolution is refused
+	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "resolve", idempotencyKey, resolutionFingerprint(marketID, winningOutcome, proofHash, req.ResolveEarly))
+	if errors.Is(err, ErrIdempotencyKeyReused) {
+		appErr := idempotencyReusedError()
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 	if err == nil && found {
 		c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
 		c.Data(http.StatusOK, "application/json", cachedResp)
@@ -165,7 +178,7 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, ErrIdempotencyReplay) {
-			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "resolve", idempotencyKey); ok {
+			if cached, ok, _ := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "resolve", idempotencyKey, resolutionFingerprint(marketID, winningOutcome, proofHash, req.ResolveEarly)); ok {
 				c.Data(http.StatusOK, "application/json", cached)
 				return
 			}
@@ -239,14 +252,14 @@ func (h *AdminHandler) executeResolutionTx(
 	}
 
 	switch currentStatus {
-	case "active", "suspended", "locked":
-	case "resolved", "settled":
+	case string(models.MarketStatusActive), string(models.MarketStatusSuspended), string(models.MarketStatusLocked):
+	case string(models.MarketStatusResolved), string(models.MarketStatusSettled):
 		return nil, &AppError{
 			StatusCode: http.StatusConflict,
 			ErrorCode:  "market_already_resolved",
 			Message:    fmt.Sprintf("Market is already resolved with outcome '%s'", currentWinningOutcome),
 		}
-	case "voided":
+	case string(models.MarketStatusVoided):
 		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_voided", Message: "Voided markets cannot be resolved"}
 	default:
 		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_not_resolvable", Message: fmt.Sprintf("Markets in status '%s' cannot be resolved", currentStatus)}
@@ -353,7 +366,7 @@ func (h *AdminHandler) executeResolutionTx(
 	settlementDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(settlementPayload)))
 
 	responseObj := ResolveMarketResponse{
-		Status:           "resolved",
+		Status:           string(models.MarketStatusResolved),
 		MarketID:         marketID.String(),
 		WinningOutcome:   winningOutcome,
 		TotalPayoutUSDC:  totalPayout.StringFixed(8),
@@ -369,9 +382,9 @@ func (h *AdminHandler) executeResolutionTx(
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
-		VALUES ($1, 'resolve', $2, $3);
-	`, actorID, idempotencyKey, respJSON); err != nil {
+		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response, request_hash)
+		VALUES ($1, 'resolve', $2, $3, $4);
+	`, actorID, idempotencyKey, respJSON, resolutionFingerprint(marketID, winningOutcome, proofHash, resolveEarly)); err != nil {
 		return nil, err
 	}
 
@@ -747,7 +760,7 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		"image_url":           imageURL,
 		"resolution_source":   req.ResolutionSource,
 		"resolution_date":     resolutionDate.Format(time.RFC3339),
-		"status":              "active",
+		"status":              string(models.MarketStatusActive),
 		"reserve_yes":         reserveYes.StringFixed(8),
 		"reserve_no":          reserveNo.StringFixed(8),
 		"collateral_reserve":  collateral.StringFixed(8),
@@ -823,7 +836,7 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		return
 	}
 
-	if curStatus == "resolved" || curStatus == "settled" || curStatus == "voided" {
+	if curStatus == string(models.MarketStatusResolved) || curStatus == string(models.MarketStatusSettled) || curStatus == string(models.MarketStatusVoided) {
 		c.JSON(http.StatusConflict, gin.H{
 			"error":   "market_immutable",
 			"message": "Resolved, settled or voided markets cannot be edited",
@@ -889,7 +902,7 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	if req.Status != nil {
 		s := strings.ToLower(strings.TrimSpace(*req.Status))
 		switch s {
-		case "active", "suspended", "locked":
+		case string(models.MarketStatusActive), string(models.MarketStatusSuspended), string(models.MarketStatusLocked):
 			newStatus = s
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_status", "message": "Status must be 'active', 'suspended', or 'locked'"})
@@ -898,7 +911,7 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	}
 
 	// An expired market can only be reopened together with a new, future resolution date.
-	if newStatus == "active" && curStatus != "active" && newDate.Before(time.Now().UTC()) {
+	if newStatus == string(models.MarketStatusActive) && curStatus != string(models.MarketStatusActive) && newDate.Before(time.Now().UTC()) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "invalid_status",
 			"message": "Cannot reactivate a market whose resolution date has passed; set a future resolution_date",
@@ -1109,7 +1122,17 @@ func (h *AdminHandler) HandleVoidMarket(c *gin.Context) {
 	unlock := h.locks.acquire("market:" + marketID.String())
 	defer unlock()
 
-	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "void", idempotencyKey)
+	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
+
+	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "void", idempotencyKey, voidFingerprint(marketID))
+	if errors.Is(err, ErrIdempotencyKeyReused) {
+		appErr := idempotencyReusedError()
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 	if err == nil && found {
 		c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
 		c.Data(http.StatusOK, "application/json", cachedResp)
@@ -1162,9 +1185,9 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		return nil, err
 	}
 	switch currentStatus {
-	case "resolved", "settled":
+	case string(models.MarketStatusResolved), string(models.MarketStatusSettled):
 		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_already_resolved", Message: "Resolved markets cannot be voided"}
-	case "voided":
+	case string(models.MarketStatusVoided):
 		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_already_voided", Message: "Market is already voided"}
 	}
 
@@ -1260,7 +1283,7 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 	}
 
 	responseObj := VoidMarketResponse{
-		Status:            "voided",
+		Status:            string(models.MarketStatusVoided),
 		MarketID:          marketID.String(),
 		TotalRefundUSDC:   totalRefund.StringFixed(8),
 		PositionsRefunded: positionCount,
@@ -1272,9 +1295,9 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
-		VALUES ($1, 'void', $2, $3);
-	`, actorID, idempotencyKey, respJSON); err != nil {
+		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response, request_hash)
+		VALUES ($1, 'void', $2, $3, $4);
+	`, actorID, idempotencyKey, respJSON, voidFingerprint(marketID)); err != nil {
 		return nil, err
 	}
 
@@ -1286,4 +1309,33 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		marketID.String(), totalRefund.StringFixed(8), positionCount, actorID.String())
 
 	return &responseObj, nil
+}
+
+// resolutionFingerprint identifies a resolution request: the outcome, the evidence and the early flag.
+func resolutionFingerprint(marketID uuid.UUID, winningOutcome, proofHash string, resolveEarly bool) string {
+	return requestFingerprint("resolve", marketID.String(), winningOutcome, proofHash, strconv.FormatBool(resolveEarly))
+}
+
+// voidFingerprint identifies a void request.
+func voidFingerprint(marketID uuid.UUID) string {
+	return requestFingerprint("void", marketID.String())
+}
+
+// validateOracleProof requires an https link to the official evidence. The proof is stored with the
+// settlement and hashed into the settlement digest, so a link can be checked later by anyone; a
+// free-text note cannot. Before this rule any four-character string was accepted.
+func validateOracleProof(proof string) *AppError {
+	invalid := &AppError{
+		StatusCode: http.StatusBadRequest,
+		ErrorCode:  "invalid_proof",
+		Message:    "oracle_proof must be an https:// link to the official evidence",
+	}
+	if proof == "" || len(proof) > 2000 || strings.ContainsAny(proof, " \t\r\n") {
+		return invalid
+	}
+	u, err := url.Parse(proof)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return invalid
+	}
+	return nil
 }

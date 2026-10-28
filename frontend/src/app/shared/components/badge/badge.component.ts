@@ -25,7 +25,7 @@ export type BadgeSize = 'default' | 'sm' | 'lg';
                 align-items: center;
                 justify-content: center;
                 gap: 5px;
-                font-family: var(--font-ui, system-ui, sans-serif);
+                font-family: var(--font-ui);
                 font-weight: 600;
                 line-height: 1;
                 letter-spacing: 0.15px;

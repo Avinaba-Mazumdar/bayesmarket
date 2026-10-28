@@ -323,7 +323,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
 
             .callout-text {
                 font-size: 15px;
-                line-height: var(--line-height-prose, 1.6);
+                line-height: var(--line-height-prose);
                 color: var(--body);
                 margin-bottom: var(--space-xs);
                 max-width: none;
@@ -372,7 +372,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
 
             p {
                 font-size: 15px;
-                line-height: var(--line-height-prose, 1.6);
+                line-height: var(--line-height-prose);
                 color: var(--body);
                 margin-bottom: var(--space-md);
                 max-width: none;
@@ -386,7 +386,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
 
             .legal-list li {
                 font-size: 15px;
-                line-height: var(--line-height-prose, 1.6);
+                line-height: var(--line-height-prose);
                 color: var(--body);
                 margin-bottom: var(--space-xs);
             }

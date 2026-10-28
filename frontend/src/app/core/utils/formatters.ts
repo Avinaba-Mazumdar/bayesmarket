@@ -1,73 +1,36 @@
 /**
- * Universal financial and temporal formatting utilities for BayesMarket.
- * Ensures consistent tabular presentation (font-feature-settings: "tnum" 1)
- * and eliminates duplicate parsing/rounding logic across views (DRY & KISS).
+ * Financial and temporal formatting for BayesMarket. Amounts are canonical decimal strings from the API
+ * and are formatted exactly (no binary floats): see decimal.ts.
  */
 
+import { formatDecimal } from './decimal';
+
+/** Puts a leading minus sign before the currency symbol: "-$1.00", not "$-1.00". */
+function withCurrency(formatted: string): string {
+    return formatted.startsWith('-') ? `-$${formatted.slice(1)}` : `$${formatted}`;
+}
+
 /**
- * Formats a USDC monetary quantity into a standard currency string (e.g. "$1,000.00").
+ * Formats a USDC amount into a currency string (e.g. "$1,000.00").
  */
 export function formatUSDC(val: string | number | null | undefined, fractionDigits = 2): string {
-    if (val === null || val === undefined || val === '') {
-        return '$0.00';
-    }
-    const num = typeof val === 'number' ? val : parseFloat(val);
-    if (isNaN(num)) {
-        return '$0.00';
-    }
-    return `$${num.toLocaleString('en-US', {
-        minimumFractionDigits: fractionDigits,
-        maximumFractionDigits: fractionDigits
-    })}`;
+    const formatted = formatDecimal(String(val ?? ''), fractionDigits, true);
+    return formatted === null ? '$0.00' : withCurrency(formatted);
 }
 
 /**
- * Formats an outcome share balance into a localized quantity string (e.g. "1,250.00").
+ * Formats an outcome share balance (e.g. "1,250.00").
  */
 export function formatShares(val: string | number | null | undefined, fractionDigits = 2): string {
-    if (val === null || val === undefined || val === '') {
-        return '0.00';
-    }
-    const num = typeof val === 'number' ? val : parseFloat(val);
-    if (isNaN(num)) {
-        return '0.00';
-    }
-    return num.toLocaleString('en-US', {
-        minimumFractionDigits: fractionDigits,
-        maximumFractionDigits: fractionDigits
-    });
+    return formatDecimal(String(val ?? ''), fractionDigits, true) ?? '0.00';
 }
 
 /**
- * Formats a unit probability price (e.g. 0.7200) into a standard price string (e.g. "$0.7200" or "72¢").
+ * Formats a unit probability price (e.g. "0.7200") as "$0.7200".
  */
 export function formatPrice(val: string | number | null | undefined, fractionDigits = 4): string {
-    if (val === null || val === undefined || val === '') {
-        return '$0.0000';
-    }
-    const num = typeof val === 'number' ? val : parseFloat(val);
-    if (isNaN(num)) {
-        return '$0.0000';
-    }
-    return `$${num.toFixed(fractionDigits)}`;
-}
-
-/**
- * Formats a probability or price into a percentage string (e.g. 0.72 -> "72%", or "72.5%").
- */
-export function formatPercent(val: string | number | null | undefined, decimals = 0): string {
-    if (val === null || val === undefined || val === '') {
-        return '0%';
-    }
-    let num = typeof val === 'number' ? val : parseFloat(val);
-    if (isNaN(num)) {
-        return '0%';
-    }
-    // If given as probability 0.0 - 1.0, scale up to percentage
-    if (num <= 1.0 && num >= -1.0 && num !== 0) {
-        num = num * 100;
-    }
-    return `${num.toFixed(decimals)}%`;
+    const formatted = formatDecimal(String(val ?? ''), fractionDigits, false);
+    return formatted === null ? '$0.0000' : withCurrency(formatted);
 }
 
 /**

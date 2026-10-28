@@ -1,13 +1,50 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
+
+// localDatabaseHosts are the database hosts accepted while running in local or dev mode. "postgres"
+// is the service name used by docker-compose.yml.
+var localDatabaseHosts = map[string]bool{
+	"localhost": true,
+	"127.0.0.1": true,
+	"::1":       true,
+	"postgres":  true,
+}
+
+// EphemeralJWTSecret returns a random secret for this process only. It is used when a caller builds
+// handlers without configuration. Tokens signed with it stop verifying after a restart, so this
+// never weakens a deployment: there is no public, well-known secret anywhere in the code.
+func EphemeralJWTSecret() string {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		panic("config: cannot read random bytes for the ephemeral JWT secret: " + err.Error())
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+// requireLocalDatabase refuses a non-local database host in local or dev mode. A developer's shell
+// that still points at a deployed database would otherwise run with dev-only behaviour against
+// production data.
+func requireLocalDatabase(env, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL is not a valid URL: %w", err)
+	}
+	if !localDatabaseHosts[u.Hostname()] {
+		return fmt.Errorf("APP_ENV=%s refuses a non-local DATABASE_URL host %q; use a local database, or run with APP_ENV=production", env, u.Hostname())
+	}
+	return nil
+}
 
 // Config encapsulates validated runtime configuration settings.
 type Config struct {
@@ -78,15 +115,20 @@ func Load() (*Config, error) {
 	env = strings.ToLower(strings.TrimSpace(env))
 	isDevOrLocal := env == "local" || env == "dev" || env == "development"
 
+	// The secret is required in every environment. There is no built-in default, so a
+	// misconfigured host cannot run with a secret that is public in this repository.
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		if isDevOrLocal {
-			jwtSecret = "bayesmarket-development-hmac-sha256-default-secret-key-32b"
-		} else {
-			return nil, fmt.Errorf("JWT_SECRET environment variable is required in %s environment (minimum 32 characters)", env)
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required in every environment (minimum 32 characters)")
+	}
+	if len(jwtSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters long")
+	}
+
+	if isDevOrLocal && dbURL != "" {
+		if err := requireLocalDatabase(env, dbURL); err != nil {
+			return nil, err
 		}
-	} else if !isDevOrLocal && len(jwtSecret) < 32 {
-		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters long in %s environment", env)
 	}
 
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")

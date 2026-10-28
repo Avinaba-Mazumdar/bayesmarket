@@ -1,8 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { catchError, Observable, of } from 'rxjs';
+import { Observable } from 'rxjs';
 import {
-    AppConfig,
     AuthResponse,
     BuyQuoteResponse,
     CashOutRequest,
@@ -180,8 +179,8 @@ export class ApiService {
     /**
      * Claim testnet USDC.
      */
-    claim(token: string): Observable<ClaimResponse> {
-        const headers = this.buildHeaders(token);
+    claim(token: string, idempotencyKey: string): Observable<ClaimResponse> {
+        const headers = this.buildHeaders(token, idempotencyKey);
         return this.http.post<ClaimResponse>(`${this.baseUrl}/claim`, {}, { headers });
     }
 
@@ -264,21 +263,4 @@ export class ApiService {
         return this.http.post<VoidMarketResponse>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}/void`, {}, { headers });
     }
 
-    /**
-     * Fetch runtime system configuration including APP_ENV and is_dev mode.
-     */
-    getConfig(): Observable<AppConfig> {
-        return this.http.get<AppConfig>(`${this.baseUrl}/config`).pipe(
-            catchError(() =>
-                of({
-                    app_env:
-                        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-                            ? 'local'
-                            : 'production',
-                    is_dev: typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'),
-                    google_auth_enabled: false
-                })
-            )
-        );
-    }
 }

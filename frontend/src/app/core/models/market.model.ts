@@ -295,8 +295,3 @@ export interface CreateMarketResponse {
     created_at: string;
 }
 
-export interface AppConfig {
-    app_env: string;
-    is_dev: boolean;
-    google_auth_enabled: boolean;
-}

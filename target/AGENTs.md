@@ -22,7 +22,7 @@ You are a senior quantitative trading systems engineer, distributed systems arch
     - `target/ARCHITECTURE.md`: Canonical collateralized complete-set CPMM, PostgreSQL 18 ledger schema, REST/WebSocket contracts, locking order, rate limits, and oracle-resolution policy.
     - `target/DESIGN.md`: Institutional-grade dark trading terminal design system anchored on an obsidian floor (`#07090e`) and Deep Amaranth (`#a6034c`), paired with Scoutie Sans and JetBrains Mono. WCAG 2.2 AAA is an acceptance target subject to automated and manual implementation testing.
 - **Core Engineering Baseline**:
-    - **Backend**: Go 1.24+ high-concurrency trading engine utilizing `shopspring/decimal` for fixed-point math, `pgx/v5` connection pool, Gorilla WebSockets, and `golang.org/x/time/rate`.
+    - **Backend**: Go 1.27+ high-concurrency trading engine utilizing `shopspring/decimal` for fixed-point math, `pgx/v5` connection pool, Gorilla WebSockets, and `golang.org/x/time/rate`.
     - **Frontend**: Zoneless Angular 22 SPA using Angular Signals (`signal`, `computed`, `effect`), `lightweight-charts`, and pure CSS custom properties derived from `DESIGN.md`.
 - **Open-Source Standard**: The codebase is maintained as an open-source, production-ready trading engine. Do not introduce any portfolio, resume, demo pitch, or video presentation references in documentation or code comments.
 - **Honesty & Rigor Rule**: Never claim "zero slippage", "unlimited concurrency", or "instant settlement" unless backed by rigorous mathematical proofs, benchmark outputs, and race-free test suites.
@@ -83,7 +83,7 @@ When generating code or proposing modifications for BayesMarket, you MUST strict
 
 ### 3. Backend Tech Stack Constraints
 
-- **Language & Runtime**: Go 1.24+ using **Gin web framework (`github.com/gin-gonic/gin`)**.
+- **Language & Runtime**: Go 1.27+ using **Gin web framework (`github.com/gin-gonic/gin`)**.
 - **Database Driver**: `jackc/pgx/v5` with connection pooling and explicit transaction timeouts.
 - **WebSockets**: Gorilla WebSocket with dedicated client read/write pumps, heartbeat ping/pong intervals (30s), and non-blocking outbound channels.
 - **Abuse Prevention**: In-memory token-bucket rate limiter (`golang.org/x/time/rate`) enforcing per-IP and per-session burst caps.

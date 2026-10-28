@@ -17,7 +17,19 @@ const (
 	MarketStatusLocked    MarketStatus = "locked"
 	MarketStatusResolved  MarketStatus = "resolved"
 	MarketStatusSettled   MarketStatus = "settled"
+	MarketStatusVoided    MarketStatus = "voided"
 )
+
+// APIMarketStatuses are the statuses the API returns for a market. It must equal the MarketStatus union in
+// frontend/src/app/core/models/market.model.ts; TestMarketStatusesMatchFrontendUnion enforces this. Draft and
+// settled remain allowed by the schema for older rows but are not produced by the application.
+var APIMarketStatuses = []MarketStatus{
+	MarketStatusActive,
+	MarketStatusSuspended,
+	MarketStatusLocked,
+	MarketStatusResolved,
+	MarketStatusVoided,
+}
 
 // Outcome represents binary prediction outcomes.
 type Outcome string

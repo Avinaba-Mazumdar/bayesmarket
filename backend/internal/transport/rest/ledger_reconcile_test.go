@@ -106,7 +106,7 @@ func TestLedgerReconciliation(t *testing.T) {
 	reconcile("after partial sell")
 
 	code, body = call(http.MethodPost, "/api/v1/admin/markets/"+marketID+"/resolve", adminToken, key("rec-resolve"),
-		map[string]interface{}{"winning_outcome": "NO", "oracle_proof": "Official source", "resolve_early": true})
+		map[string]interface{}{"winning_outcome": "NO", "oracle_proof": "https://example.com/evidence/official-release", "resolve_early": true})
 	if code != http.StatusOK {
 		t.Fatalf("resolve: %d %v", code, body)
 	}

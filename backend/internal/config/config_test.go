@@ -54,6 +54,7 @@ func TestConfig_DefaultEnvironmentIsProduction(t *testing.T) {
 
 func TestConfig_MigrationAndAutoMigrate(t *testing.T) {
 	t.Setenv("APP_ENV", "local")
+	t.Setenv("JWT_SECRET", testJWTSecret)
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/bayesmarket")
 	t.Setenv("MIGRATION_DATABASE_URL", "postgres://admin:secret@localhost:5432/bayesmarket")
 	t.Setenv("AUTO_MIGRATE", "false")

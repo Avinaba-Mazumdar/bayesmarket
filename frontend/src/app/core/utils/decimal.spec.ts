@@ -1,4 +1,19 @@
-import { addDecimal, applyTolerance, compareDecimal, formatUsd, normalizeDecimal, subtractDecimal, truncateDecimal } from './decimal';
+import {
+    absDecimal,
+    addDecimal,
+    applyTolerance,
+    compareDecimal,
+    diffDecimal,
+    divideDecimal,
+    formatDecimal,
+    formatUsd,
+    multiplyDecimal,
+    normalizeDecimal,
+    shiftDecimal,
+    subtractDecimal,
+    trimDecimal,
+    truncateDecimal
+} from './decimal';
 
 describe('decimal utils', () => {
     describe('applyTolerance', () => {
@@ -90,5 +105,42 @@ describe('decimal utils', () => {
         it('falls back for invalid input', () => {
             expect(formatUsd('n/a')).toBe('$0.00');
         });
+    });
+});
+
+describe('display helpers', () => {
+    it('rounds half-up at the requested places and groups thousands', () => {
+        expect(formatDecimal('1234.565', 2, true)).toBe('1,234.57');
+        expect(formatDecimal('0.0049', 2)).toBe('0.00');
+        expect(formatDecimal('-2.5', 0)).toBe('-3');
+        expect(formatDecimal('abc', 2)).toBeNull();
+    });
+
+    it('does not show float artefacts', () => {
+        expect(formatDecimal('0.1', 2)).toBe('0.10');
+        expect(formatDecimal('1.005', 2)).toBe('1.01');
+    });
+
+    it('removes a sign and computes differences without clamping', () => {
+        expect(absDecimal('-3.20')).toBe('3.2');
+        expect(diffDecimal('5', '7', 2)).toBe('-2.00');
+    });
+
+    it('multiplies and divides exactly', () => {
+        expect(multiplyDecimal('1000.12345678', '0.37', 2)).toBe('370.05');
+        expect(divideDecimal('1', '3', 4)).toBe('0.3333');
+        expect(divideDecimal('1', '0', 4)).toBeNull();
+    });
+
+    it('shifts by powers of ten exactly', () => {
+        expect(shiftDecimal('0.6812', 2, 1)).toBe('68.1');
+        expect(shiftDecimal('1000', -2, 8)).toBe('10.00000000');
+    });
+
+    it('trims trailing zeros for display', () => {
+        expect(trimDecimal('60.00000000')).toBe('60');
+        expect(trimDecimal('0.00000000')).toBe('0');
+        expect(trimDecimal('1.50')).toBe('1.5');
+        expect(trimDecimal('100')).toBe('100');
     });
 });
