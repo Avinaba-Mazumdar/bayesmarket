@@ -9,9 +9,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bayesmarket/bayesmarket/internal/middleware"
@@ -54,6 +52,9 @@ type EditMarketRequest struct {
 type ResolveMarketRequest struct {
 	WinningOutcome string `json:"winning_outcome" binding:"required"`
 	OracleProof    string `json:"oracle_proof" binding:"required"`
+	// ResolveEarly must be set to settle a market before its resolution_date (e.g. the event
+	// already happened). Without it, early resolution is refused.
+	ResolveEarly bool `json:"resolve_early"`
 }
 
 // ResolveMarketResponse defines the settlement receipt returned upon successful resolution.
@@ -69,48 +70,11 @@ type ResolveMarketResponse struct {
 	ResolvedAt       string `json:"resolved_at"`
 }
 
-// oracleCacheEntry holds in-memory cached oracle proof verification with a 60-second TTL.
-type oracleCacheEntry struct {
-	proofHash  string
-	outcome    string
-	verifiedAt time.Time
-}
-
-type oracleCache struct {
-	mu    sync.RWMutex
-	items map[string]oracleCacheEntry
-}
-
-func newOracleCache() *oracleCache {
-	return &oracleCache{items: make(map[string]oracleCacheEntry)}
-}
-
-func (c *oracleCache) get(marketID string) (oracleCacheEntry, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	entry, ok := c.items[marketID]
-	if !ok || time.Since(entry.verifiedAt) > 60*time.Second {
-		return oracleCacheEntry{}, false
-	}
-	return entry, true
-}
-
-func (c *oracleCache) set(marketID, outcome, proofHash string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items[marketID] = oracleCacheEntry{
-		proofHash:  proofHash,
-		outcome:    outcome,
-		verifiedAt: time.Now(),
-	}
-}
-
 // AdminHandler manages administrative operations including market resolution and payout distribution.
 type AdminHandler struct {
 	pool        *pgxpool.Pool
 	hub         *ws.Hub
 	locks       *marketLockRegistry
-	cache       *oracleCache
 	marketCache *MarketCache
 }
 
@@ -120,7 +84,6 @@ func NewAdminHandler(pool *pgxpool.Pool, hub *ws.Hub) *AdminHandler {
 		pool:  pool,
 		hub:   hub,
 		locks: newMarketLockRegistry(),
-		cache: newOracleCache(),
 	}
 }
 
@@ -193,27 +156,9 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 		return
 	}
 
-	// 60-second in-memory oracle cache evaluation
-	if entry, cached := h.cache.get(marketID.String()); cached {
-		if entry.outcome != winningOutcome {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "oracle_proof_conflict",
-				"message": fmt.Sprintf("Recent cached oracle verification indicated outcome '%s', conflicting with requested '%s'", entry.outcome, winningOutcome),
-			})
-			return
-		}
-		if entry.proofHash != proofHash {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "oracle_proof_conflict",
-				"message": "Recent cached oracle verification utilized a conflicting proof hash for this market",
-			})
-			return
-		}
-	}
-
 	// Execute settlement with resilient retry loop for transient database concurrency conflicts
 	responseObj, err := ExecuteSerializableWithRetry(ctx, 25, func() (*ResolveMarketResponse, error) {
-		return h.executeResolutionTx(ctx, marketID, winningOutcome, proofHash, oracleProof, actorID, idempotencyKey)
+		return h.executeResolutionTx(ctx, marketID, winningOutcome, proofHash, oracleProof, req.ResolveEarly, actorID, idempotencyKey)
 	})
 
 	if err != nil {
@@ -243,9 +188,6 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 		h.marketCache.Invalidate(marketID.String())
 	}
 
-	// 8. Cache verified oracle response for 60 seconds
-	h.cache.set(marketID.String(), winningOutcome, proofHash)
-
 	// 9. Broadcast MARKET_RESOLVED WebSocket frame to connected clients
 	if h.hub != nil {
 		h.hub.BroadcastMarketResolved(ws.MarketResolvedMessage{
@@ -265,6 +207,7 @@ func (h *AdminHandler) executeResolutionTx(
 	winningOutcome string,
 	proofHash string,
 	oracleProof string,
+	resolveEarly bool,
 	actorID uuid.UUID,
 	idempotencyKey string,
 ) (*ResolveMarketResponse, error) {
@@ -276,15 +219,16 @@ func (h *AdminHandler) executeResolutionTx(
 		_ = tx.Rollback(ctx)
 	}()
 
-	// 1. Lock and verify market state (Hierarchy Level 1: Market)
+	// Lock order (ARCHITECTURE.md "Row-lock order"): market -> pool -> users -> positions
 	var currentStatus, currentWinningOutcome, resolutionSource string
+	var resolutionDate time.Time
 	marketQuery := `
-		SELECT status, COALESCE(winning_outcome, ''), resolution_source
+		SELECT status, COALESCE(winning_outcome, ''), resolution_source, resolution_date
 		FROM markets
 		WHERE id = $1
 		FOR UPDATE;
 	`
-	err = tx.QueryRow(ctx, marketQuery, marketID).Scan(&currentStatus, &currentWinningOutcome, &resolutionSource)
+	err = tx.QueryRow(ctx, marketQuery, marketID).Scan(&currentStatus, &currentWinningOutcome, &resolutionSource, &resolutionDate)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, &AppError{StatusCode: http.StatusNotFound, ErrorCode: "market_not_found", Message: "Market does not exist"}
@@ -292,74 +236,48 @@ func (h *AdminHandler) executeResolutionTx(
 		return nil, err
 	}
 
-	if currentStatus == "voided" {
-		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_voided", Message: "Voided markets cannot be resolved"}
-	}
-	if currentStatus == "resolved" {
+	switch currentStatus {
+	case "active", "suspended", "locked":
+	case "resolved", "settled":
 		return nil, &AppError{
 			StatusCode: http.StatusConflict,
 			ErrorCode:  "market_already_resolved",
 			Message:    fmt.Sprintf("Market is already resolved with outcome '%s'", currentWinningOutcome),
 		}
+	case "voided":
+		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_voided", Message: "Voided markets cannot be resolved"}
+	default:
+		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_not_resolvable", Message: fmt.Sprintf("Markets in status '%s' cannot be resolved", currentStatus)}
 	}
 
-	// 2. Lock liquidity pool collateral (Hierarchy Level 2: Pool)
-	var collateralReserve decimal.Decimal
-	poolQuery := `
-		SELECT collateral_reserve
-		FROM liquidity_pools
-		WHERE market_id = $1
-		FOR UPDATE;
-	`
-	err = tx.QueryRow(ctx, poolQuery, marketID).Scan(&collateralReserve)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Mark market as resolved
-	updateMarketQuery := `
-		UPDATE markets
-		SET status = 'resolved', winning_outcome = $1
-		WHERE id = $2;
-	`
-	if _, err := tx.Exec(ctx, updateMarketQuery, winningOutcome, marketID); err != nil {
-		return nil, err
-	}
-
-	// 4. Distribute complete-set collateral ($1.00 per share) to winning positions
-	winningPositionsQuery := `
-		SELECT id, user_id, shares_owned
-		FROM user_positions
-		WHERE market_id = $1 AND outcome = $2 AND shares_owned > 0
-		FOR UPDATE;
-	`
-	rows, err := tx.Query(ctx, winningPositionsQuery, marketID, winningOutcome)
-	if err != nil {
-		return nil, err
-	}
-
-	type winRecord struct {
-		posID  uuid.UUID
-		userID uuid.UUID
-		shares decimal.Decimal
-	}
-	var winners []winRecord
-	for rows.Next() {
-		var w winRecord
-		if scanErr := rows.Scan(&w.posID, &w.userID, &w.shares); scanErr == nil {
-			winners = append(winners, w)
+	if !resolveEarly && time.Now().UTC().Before(resolutionDate) {
+		return nil, &AppError{
+			StatusCode: http.StatusConflict,
+			ErrorCode:  "resolution_date_not_reached",
+			Message:    fmt.Sprintf("Market resolution date (%s) has not passed. Set resolve_early to settle before it.", resolutionDate.UTC().Format(time.RFC3339)),
 		}
 	}
-	rows.Close()
 
-	// Sort winners deterministically by user ID to prevent database deadlock
-	sort.Slice(winners, func(i, j int) bool {
-		return winners[i].userID.String() < winners[j].userID.String()
-	})
+	var collateralReserve decimal.Decimal
+	err = tx.QueryRow(ctx, "SELECT collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE;", marketID).Scan(&collateralReserve)
+	if err != nil {
+		return nil, err
+	}
 
-	totalPayout := decimal.Zero
-	for _, w := range winners {
-		totalPayout = totalPayout.Add(w.shares.Truncate(8))
+	if err := lockOpenPositionHolders(ctx, tx, marketID); err != nil {
+		return nil, err
+	}
+
+	// Winners redeem $1.00 per share from collateral
+	var totalPayout decimal.Decimal
+	var winnerCount int
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(shares_owned), 0), COUNT(*)
+		FROM user_positions
+		WHERE market_id = $1 AND outcome = $2 AND shares_owned > 0;
+	`, marketID, winningOutcome).Scan(&totalPayout, &winnerCount)
+	if err != nil {
+		return nil, err
 	}
 
 	// Solvency assertion: pool collateral must be sufficient to back all winning payouts
@@ -375,105 +293,56 @@ func (h *AdminHandler) executeResolutionTx(
 
 	settlementTxID := uuid.New()
 
-	for _, w := range winners {
-		payout := w.shares.Truncate(8)
-
-		// Credit user cash balance
-		creditUserQuery := `
-			UPDATE users
-			SET cash_balance = cash_balance + $1, last_active = NOW()
-			WHERE id = $2;
-		`
-		if _, err := tx.Exec(ctx, creditUserQuery, payout, w.userID); err != nil {
-			return nil, err
-		}
-
-		// Zero out winning shares
-		zeroPosQuery := `
-			UPDATE user_positions
-			SET shares_owned = 0, updated_at = NOW()
-			WHERE id = $1;
-		`
-		if _, err := tx.Exec(ctx, zeroPosQuery, w.posID); err != nil {
-			return nil, err
-		}
-
-		// Double-entry bookkeeping ledger
-		insertLedger := `
-			INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
-			VALUES 
-				($1, $2, $3, 'user_cash', 'USDC', $4, 'settlement'),
-				($1, $2, $3, 'pool_collateral', 'USDC', $5, 'settlement'),
-				($1, $2, $3, $6, $7, $8, 'settlement'),
-				($1, $2, $3, 'pool_shares', $7, $9, 'settlement');
-		`
-		posAccount := "position_" + strings.ToLower(winningOutcome)
-		negPayout := payout.Neg()
-		negShares := w.shares.Neg()
-		if _, err := tx.Exec(ctx, insertLedger,
-			settlementTxID, w.userID, marketID,
-			payout, negPayout, posAccount, winningOutcome, negShares, w.shares,
-		); err != nil {
-			return nil, err
-		}
+	// Set-based settlement: a fixed number of statements regardless of holder count.
+	// Every open position is burned; winning positions are also paid from collateral.
+	if _, err := tx.Exec(ctx, `
+		WITH open AS (
+			SELECT user_id, outcome, shares_owned
+			FROM user_positions
+			WHERE market_id = $2 AND shares_owned > 0
+		)
+		INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
+		SELECT $1::uuid, user_id, $2::uuid, 'position_' || lower(outcome), outcome, -shares_owned, 'settlement' FROM open
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'outcome_supply', outcome, shares_owned, 'settlement' FROM open
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'pool_collateral', 'USDC', -shares_owned, 'settlement' FROM open WHERE outcome = $3
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'user_cash', 'USDC', shares_owned, 'settlement' FROM open WHERE outcome = $3;
+	`, settlementTxID, marketID, winningOutcome); err != nil {
+		return nil, err
 	}
 
-	// 5. Zero out all losing positions for audit hygiene
-	losingPositionsQuery := `
-		SELECT id, user_id, outcome, shares_owned
-		FROM user_positions
-		WHERE market_id = $1 AND outcome != $2 AND shares_owned > 0
-		FOR UPDATE;
-	`
-	loseRows, err := tx.Query(ctx, losingPositionsQuery, marketID, winningOutcome)
-	if err == nil {
-		type loseRecord struct {
-			posID   uuid.UUID
-			userID  uuid.UUID
-			outcome string
-			shares  decimal.Decimal
-		}
-		var losers []loseRecord
-		for loseRows.Next() {
-			var l loseRecord
-			if scanErr := loseRows.Scan(&l.posID, &l.userID, &l.outcome, &l.shares); scanErr == nil {
-				losers = append(losers, l)
-			}
-		}
-		loseRows.Close()
-
-		sort.Slice(losers, func(i, j int) bool {
-			return losers[i].userID.String() < losers[j].userID.String()
-		})
-
-		for _, l := range losers {
-			zeroLoseQuery := `
-				UPDATE user_positions
-				SET shares_owned = 0, updated_at = NOW()
-				WHERE id = $1;
-			`
-			_, _ = tx.Exec(ctx, zeroLoseQuery, l.posID)
-
-			insertLoseLedger := `
-				INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
-				VALUES 
-					($1, $2, $3, $4, $5, $6, 'settlement'),
-					($1, $2, $3, 'pool_shares', $5, $7, 'settlement');
-			`
-			posAccount := "position_" + strings.ToLower(l.outcome)
-			negShares := l.shares.Neg()
-			_, _ = tx.Exec(ctx, insertLoseLedger, settlementTxID, l.userID, marketID, posAccount, l.outcome, negShares, l.shares)
-		}
+	if _, err := tx.Exec(ctx, `
+		UPDATE users u
+		SET cash_balance = u.cash_balance + p.shares_owned, last_active = NOW()
+		FROM user_positions p
+		WHERE p.user_id = u.id AND p.market_id = $1 AND p.outcome = $2 AND p.shares_owned > 0;
+	`, marketID, winningOutcome); err != nil {
+		return nil, err
 	}
 
-	// 6. Deduct total payout from liquidity pool collateral reserve
-	remainingCollateral := collateralReserve.Sub(totalPayout)
-	updatePoolQuery := `
+	if _, err := tx.Exec(ctx, `
+		UPDATE user_positions
+		SET shares_owned = 0, updated_at = NOW()
+		WHERE market_id = $1 AND shares_owned > 0;
+	`, marketID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx, `
 		UPDATE liquidity_pools
-		SET collateral_reserve = $1, updated_at = NOW()
+		SET collateral_reserve = collateral_reserve - $1, updated_at = NOW()
 		WHERE market_id = $2;
-	`
-	if _, err := tx.Exec(ctx, updatePoolQuery, remainingCollateral, marketID); err != nil {
+	`, totalPayout, marketID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE markets SET status = 'resolved', winning_outcome = $1 WHERE id = $2;", winningOutcome, marketID); err != nil {
+		return nil, err
+	}
+
+	if err := assertTransactionBalanced(ctx, tx, settlementTxID); err != nil {
 		return nil, err
 	}
 
@@ -481,38 +350,57 @@ func (h *AdminHandler) executeResolutionTx(
 	settlementPayload := fmt.Sprintf("%s:%s:%s:%s:%s", marketID.String(), winningOutcome, totalPayout.StringFixed(8), proofHash, nowStr)
 	settlementDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(settlementPayload)))
 
-	log.Printf("[AUTHORITATIVE RESOLUTION AUDIT] MarketID=%s WinningOutcome=%s TotalPayout=%s Winners=%d ProofHash=%s SettlementDigest=%s ActorID=%s ResolutionSource=%q",
-		marketID.String(), winningOutcome, totalPayout.StringFixed(8), len(winners), proofHash, settlementDigest, actorID.String(), resolutionSource)
-
 	responseObj := ResolveMarketResponse{
 		Status:           "resolved",
 		MarketID:         marketID.String(),
 		WinningOutcome:   winningOutcome,
 		TotalPayoutUSDC:  totalPayout.StringFixed(8),
-		WinnersCredited:  len(winners),
+		WinnersCredited:  winnerCount,
 		OracleProof:      oracleProof,
 		ProofHash:        proofHash,
 		SettlementDigest: settlementDigest,
 		ResolvedAt:       nowStr,
 	}
 
-	// 7. Store idempotency receipt
 	respJSON, err := json.Marshal(responseObj)
-	if err == nil && actorID != uuid.Nil {
-		insertIdempQuery := `
-			INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
-			VALUES ($1, 'resolve', $2, $3)
-			ON CONFLICT (actor_id, operation, idempotency_key) DO NOTHING;
-		`
-		_, _ = tx.Exec(ctx, insertIdempQuery, actorID, idempotencyKey, respJSON)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
+		VALUES ($1, 'resolve', $2, $3);
+	`, actorID, idempotencyKey, respJSON); err != nil {
+		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
+	log.Printf("[AUTHORITATIVE RESOLUTION AUDIT] MarketID=%s WinningOutcome=%s TotalPayout=%s Winners=%d ProofHash=%s SettlementDigest=%s ActorID=%s ResolutionSource=%q",
+		marketID.String(), winningOutcome, totalPayout.StringFixed(8), winnerCount, proofHash, settlementDigest, actorID.String(), resolutionSource)
+
 	return &responseObj, nil
+}
+
+// lockOpenPositionHolders takes row locks on every user holding an open position in the market,
+// in user-ID order, then on those positions. Callers must already hold the market and pool locks.
+func lockOpenPositionHolders(ctx context.Context, tx pgx.Tx, marketID uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `
+		SELECT u.id FROM users u
+		WHERE u.id IN (SELECT user_id FROM user_positions WHERE market_id = $1 AND shares_owned > 0)
+		ORDER BY u.id
+		FOR UPDATE;
+	`, marketID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `
+		SELECT id FROM user_positions
+		WHERE market_id = $1 AND shares_owned > 0
+		ORDER BY user_id, outcome
+		FOR UPDATE;
+	`, marketID)
+	return err
 }
 
 // HandleVerifyAdmin validates the admin credential and returns 200 OK.
@@ -683,6 +571,7 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	// Fixed-point CPMM inventory derivation:
 	// Setting R_yes = Collateral * (1 - P_yes) and R_no = Collateral - R_yes guarantees:
 	// R_yes + R_no = Collateral exact to 8 decimal places, so P_yes = R_no / Collateral
+	collateral = collateral.Truncate(8)
 	reserveYes := collateral.Mul(probNo).Truncate(8)
 	reserveNo := collateral.Sub(reserveYes)
 	if reserveYes.LessThanOrEqual(decimal.Zero) || reserveNo.LessThanOrEqual(decimal.Zero) || reserveYes.Add(reserveNo).GreaterThan(collateral) {
@@ -757,6 +646,22 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "database_error",
 				"message": "Failed to insert liquidity pool",
+			})
+			return
+		}
+
+		// Seed collateral comes from the treasury and is recorded like any other mutation
+		ledgerSQL, ledgerArgs, err := buildLedgerInsert(uuid.New(), entryMarketSeed,
+			marketSeedEntries(marketID, collateral, reserveYes, reserveNo))
+		if err == nil {
+			_, err = tx.Exec(ctx, ledgerSQL, ledgerArgs...)
+		}
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			log.Printf("[Admin CreateMarket] failed to record seed ledger: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "database_error",
+				"message": "Failed to record market seed ledger",
 			})
 			return
 		}
@@ -1026,11 +931,12 @@ func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
 	}
 
 	// Trades and positions are only written while the market row is locked, so this check cannot race.
+	// The market's own seed posting is not user activity.
 	var hasActivity bool
 	activityQuery := `
 		SELECT EXISTS (SELECT 1 FROM trades WHERE market_id = $1)
 			OR EXISTS (SELECT 1 FROM user_positions WHERE market_id = $1)
-			OR EXISTS (SELECT 1 FROM ledger_entries WHERE market_id = $1);
+			OR EXISTS (SELECT 1 FROM ledger_entries WHERE market_id = $1 AND entry_type <> 'market_seed');
 	`
 	if err := tx.QueryRow(ctx, activityQuery, marketID).Scan(&hasActivity); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to check market activity"})
@@ -1044,8 +950,12 @@ func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
 		return
 	}
 
-	// Cascades to liquidity_pools
-	if _, err := tx.Exec(ctx, "DELETE FROM markets WHERE id = $1;", marketID); err != nil {
+	// An untraded market only has its treasury seed posting; it is removed with the market
+	// (ledger_entries.market_id is ON DELETE RESTRICT). Cascades to liquidity_pools.
+	if _, err := tx.Exec(ctx, "DELETE FROM ledger_entries WHERE market_id = $1 AND entry_type = 'market_seed';", marketID); err == nil {
+		_, err = tx.Exec(ctx, "DELETE FROM markets WHERE id = $1;", marketID)
+	}
+	if err != nil {
 		log.Printf("[ERROR] Failed to delete market %s: %v", marketID.String(), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to delete market"})
 		return
@@ -1164,7 +1074,7 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 1. Lock market (same hierarchy as resolution: market -> pool -> positions -> users)
+	// Lock order (ARCHITECTURE.md "Row-lock order"): market -> pool -> users -> positions
 	var currentStatus string
 	err = tx.QueryRow(ctx, "SELECT status FROM markets WHERE id = $1 FOR UPDATE;", marketID).Scan(&currentStatus)
 	if err != nil {
@@ -1180,49 +1090,25 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_already_voided", Message: "Market is already voided"}
 	}
 
-	// 2. Lock pool collateral
 	var collateralReserve decimal.Decimal
 	err = tx.QueryRow(ctx, "SELECT collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE;", marketID).Scan(&collateralReserve)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Lock open positions, ordered by user so lock acquisition is deterministic
-	rows, err := tx.Query(ctx, `
-		SELECT id, user_id, outcome, shares_owned, total_invested_usdc
-		FROM user_positions
-		WHERE market_id = $1 AND shares_owned > 0
-		ORDER BY user_id, outcome
-		FOR UPDATE;
-	`, marketID)
-	if err != nil {
-		return nil, err
-	}
-	type refundRecord struct {
-		posID   uuid.UUID
-		userID  uuid.UUID
-		outcome string
-		shares  decimal.Decimal
-		refund  decimal.Decimal
-	}
-	var refunds []refundRecord
-	for rows.Next() {
-		var r refundRecord
-		if err := rows.Scan(&r.posID, &r.userID, &r.outcome, &r.shares, &r.refund); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		r.refund = r.refund.Truncate(8)
-		refunds = append(refunds, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	if err := lockOpenPositionHolders(ctx, tx, marketID); err != nil {
 		return nil, err
 	}
 
-	totalRefund := decimal.Zero
-	for _, r := range refunds {
-		totalRefund = totalRefund.Add(r.refund)
+	var totalRefund decimal.Decimal
+	var positionCount int
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(total_invested_usdc), 0), COUNT(*)
+		FROM user_positions
+		WHERE market_id = $1 AND shares_owned > 0;
+	`, marketID).Scan(&totalRefund, &positionCount)
+	if err != nil {
+		return nil, err
 	}
 
 	// Solvency assertion: refunds are paid from the collateral that backs the issued shares
@@ -1236,46 +1122,62 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		}
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE markets SET status = 'voided' WHERE id = $1;", marketID); err != nil {
+	refundTxID := uuid.New()
+
+	// Set-based refund: positions are cancelled (burned) and their cost basis returned from collateral
+	if _, err := tx.Exec(ctx, `
+		WITH open AS (
+			SELECT user_id, outcome, shares_owned, total_invested_usdc
+			FROM user_positions
+			WHERE market_id = $2 AND shares_owned > 0
+		)
+		INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
+		SELECT $1::uuid, user_id, $2::uuid, 'position_' || lower(outcome), outcome, -shares_owned, 'refund' FROM open
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'outcome_supply', outcome, shares_owned, 'refund' FROM open
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'pool_collateral', 'USDC', -total_invested_usdc, 'refund' FROM open WHERE total_invested_usdc > 0
+		UNION ALL
+		SELECT $1::uuid, user_id, $2::uuid, 'user_cash', 'USDC', total_invested_usdc, 'refund' FROM open WHERE total_invested_usdc > 0;
+	`, refundTxID, marketID); err != nil {
 		return nil, err
 	}
 
-	refundTxID := uuid.New()
-	for _, r := range refunds {
-		if _, err := tx.Exec(ctx, `
-			UPDATE users
-			SET cash_balance = cash_balance + $1, last_active = NOW()
-			WHERE id = $2;
-		`, r.refund, r.userID); err != nil {
-			return nil, err
-		}
+	if _, err := tx.Exec(ctx, `
+		UPDATE users u
+		SET cash_balance = u.cash_balance + r.refund, last_active = NOW()
+		FROM (
+			SELECT user_id, SUM(total_invested_usdc) AS refund
+			FROM user_positions
+			WHERE market_id = $1 AND shares_owned > 0
+			GROUP BY user_id
+		) r
+		WHERE r.user_id = u.id;
+	`, marketID); err != nil {
+		return nil, err
+	}
 
-		if _, err := tx.Exec(ctx, `
-			UPDATE user_positions
-			SET shares_owned = 0, updated_at = NOW()
-			WHERE id = $1;
-		`, r.posID); err != nil {
-			return nil, err
-		}
-
-		posAccount := "position_" + strings.ToLower(r.outcome)
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
-			VALUES
-				($1, $2, $3, 'user_cash', 'USDC', $4, 'refund'),
-				($1, $2, $3, 'pool_collateral', 'USDC', $5, 'refund'),
-				($1, $2, $3, $6, $7, $8, 'refund'),
-				($1, $2, $3, 'pool_shares', $7, $9, 'refund');
-		`, refundTxID, r.userID, marketID, r.refund, r.refund.Neg(), posAccount, r.outcome, r.shares.Neg(), r.shares); err != nil {
-			return nil, err
-		}
+	if _, err := tx.Exec(ctx, `
+		UPDATE user_positions
+		SET shares_owned = 0, updated_at = NOW()
+		WHERE market_id = $1 AND shares_owned > 0;
+	`, marketID); err != nil {
+		return nil, err
 	}
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE liquidity_pools
-		SET collateral_reserve = $1, updated_at = NOW()
+		SET collateral_reserve = collateral_reserve - $1, updated_at = NOW()
 		WHERE market_id = $2;
-	`, collateralReserve.Sub(totalRefund), marketID); err != nil {
+	`, totalRefund, marketID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE markets SET status = 'voided' WHERE id = $1;", marketID); err != nil {
+		return nil, err
+	}
+
+	if err := assertTransactionBalanced(ctx, tx, refundTxID); err != nil {
 		return nil, err
 	}
 
@@ -1283,7 +1185,7 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 		Status:            "voided",
 		MarketID:          marketID.String(),
 		TotalRefundUSDC:   totalRefund.StringFixed(8),
-		PositionsRefunded: len(refunds),
+		PositionsRefunded: positionCount,
 		VoidedAt:          time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -1303,7 +1205,7 @@ func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid
 	}
 
 	log.Printf("[ADMIN ACTION] Voided market %s: refunded %s USDC across %d positions (ActorID=%s)",
-		marketID.String(), totalRefund.StringFixed(8), len(refunds), actorID.String())
+		marketID.String(), totalRefund.StringFixed(8), positionCount, actorID.String())
 
 	return &responseObj, nil
 }

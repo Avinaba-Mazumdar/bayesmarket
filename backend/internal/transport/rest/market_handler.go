@@ -83,8 +83,8 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			if parsed > 100 {
-				parsed = 100
+			if parsed > publicListMax {
+				parsed = publicListMax
 			}
 			limit = parsed
 		}
@@ -97,7 +97,9 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 		}
 	}
 
-	// Fast path: check in-memory cache when not paginating offset
+	// Fast path: the cache holds the canonical first page (publicListMax markets) per category and
+	// each request slices its own limit from it, so one client's ?limit cannot shrink the list
+	// served to everyone else.
 	if offset == 0 && h.cache != nil {
 		if cached, ok := h.cache.GetMarkets(category); ok {
 			if len(cached) > limit {
@@ -111,7 +113,11 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	rows, err := h.listMarkets(ctx, category, "active", limit, offset)
+	queryLimit := limit
+	if offset == 0 {
+		queryLimit = publicListMax
+	}
+	rows, err := h.listMarkets(ctx, category, "active", queryLimit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "database_error",
@@ -130,12 +136,18 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 		}
 	}
 
-	if h.cache != nil {
+	if h.cache != nil && offset == 0 {
 		h.cache.SetMarkets(category, markets)
 	}
 
+	if len(markets) > limit {
+		markets = markets[:limit]
+	}
 	c.JSON(http.StatusOK, markets)
 }
+
+// publicListMax is the largest page the public market list serves and caches.
+const publicListMax = 100
 
 // adminListableStatuses are the market statuses the admin console can filter by.
 var adminListableStatuses = map[string]bool{
@@ -302,13 +314,14 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
+	keyPredicate, keyArg := marketKeyPredicate("m", param)
 	query := `
-		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url, 
+		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url,
 		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
 		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
 		FROM markets m
 		JOIN liquidity_pools p ON p.market_id = m.id
-		WHERE m.id::text = $1 OR m.slug = $1;
+		WHERE ` + keyPredicate + `;
 	`
 	var (
 		id, slug, title, desc, cat, resSource, status string
@@ -317,7 +330,7 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 		rYes, rNo, collateral, volume                 decimal.Decimal
 	)
 
-	err := h.pool.QueryRow(ctx, query, param).Scan(
+	err := h.pool.QueryRow(ctx, query, keyArg).Scan(
 		&id, &slug, &title, &desc, &cat, &imgURL,
 		&resSource, &resDate, &status, &winningOutcome, &createdAt,
 		&rYes, &rNo, &collateral, &volume,
@@ -414,9 +427,15 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 	forceFresh := c.Query("fresh") == "true" || c.GetHeader("Cache-Control") == "no-cache"
 
 	if h.cache != nil && !forceFresh {
-		if _, cachedReserves, cachedUUID, ok := h.cache.GetMarket(marketIDParam); ok && cachedReserves != nil && cachedUUID != nil {
-			marketUUID = *cachedUUID
-			poolReserves = *cachedReserves
+		if state, ok := h.cache.GetQuoteState(marketIDParam); ok {
+			// Tradability is re-checked on every hit: an entry may describe a market that is not
+			// active (e.g. cached by a detail read) or whose resolution date has since passed.
+			if appErr := checkTradable(state.Status, state.ResolutionDate); appErr != nil {
+				c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+				return
+			}
+			marketUUID = state.MarketUUID
+			poolReserves = state.Reserves
 			foundInCache = true
 		}
 	}
@@ -425,16 +444,17 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 
+		keyPredicate, keyArg := marketKeyPredicate("m", marketIDParam)
 		query := `
 			SELECT m.id, m.status, m.resolution_date, p.reserve_yes, p.reserve_no, p.collateral_reserve
 			FROM markets m
 			JOIN liquidity_pools p ON p.market_id = m.id
-			WHERE m.id::text = $1 OR m.slug = $1;
+			WHERE ` + keyPredicate + `;
 		`
 		var marketStatus string
 		var resDate time.Time
 		var rYes, rNo, collateral decimal.Decimal
-		err := h.pool.QueryRow(ctx, query, marketIDParam).Scan(&marketUUID, &marketStatus, &resDate, &rYes, &rNo, &collateral)
+		err := h.pool.QueryRow(ctx, query, keyArg).Scan(&marketUUID, &marketStatus, &resDate, &rYes, &rNo, &collateral)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Market not found"})
@@ -444,12 +464,8 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 			return
 		}
 
-		if marketStatus != "active" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "market_not_active", "message": "Market is not open for trading"})
-			return
-		}
-		if time.Now().UTC().After(resDate) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "market_expired", "message": "Market trading has closed: resolution date has passed"})
+		if appErr := checkTradable(marketStatus, resDate); appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 			return
 		}
 
@@ -460,7 +476,7 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 		}
 
 		if h.cache != nil {
-			h.cache.SetReserves(marketUUID.String(), marketIDParam, poolReserves, marketUUID)
+			h.cache.SetReserves(marketUUID.String(), marketIDParam, poolReserves, marketUUID, marketStatus, resDate)
 		}
 	}
 

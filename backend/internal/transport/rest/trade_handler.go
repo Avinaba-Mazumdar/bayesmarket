@@ -287,7 +287,12 @@ func (h *TradeHandler) executeOrderTx(
 
 	newCashBalance := currentCashBalance.Sub(amount)
 	tradeID := uuid.New()
-	positionAccount := "position_" + strings.ToLower(string(outcome))
+
+	ledgerSQL, ledgerArgs, err := buildLedgerInsert(tradeID, entryTrade,
+		buyEntries(userID, marketUUID, string(outcome), amount, quote.SharesReceived))
+	if err != nil {
+		return nil, err
+	}
 
 	resp := &OrderResponse{
 		TradeID:        tradeID.String(),
@@ -354,23 +359,8 @@ func (h *TradeHandler) executeOrderTx(
 		`, finalSharesOwned, finalAvgPrice, newInvested, userID, marketUUID, string(outcome))
 	}
 
-	// 5. Immutable ledger entries (double-entry bookkeeping)
-	batch.Queue(`
-		INSERT INTO ledger_entries (
-			transaction_id, user_id, market_id, account, asset, delta, entry_type, created_at
-		) VALUES 
-		($1, $2, $3, 'user_cash', 'USDC', $4, 'trade', NOW()),
-		($1, $2, $3, 'pool_collateral', 'USDC', $5, 'trade', NOW()),
-		($1, $2, $3, $6, $7, $8, 'trade', NOW()),
-		($1, $2, $3, 'pool_shares', $7, $9, 'trade', NOW());
-	`, tradeID, userID, marketUUID,
-		amount.Neg(),
-		amount,
-		positionAccount,
-		string(outcome),
-		quote.SharesReceived,
-		quote.SharesReceived.Neg(),
-	)
+	// 5. Immutable double-entry ledger: cash, collateral, complete-set mint, reserves, position
+	batch.Queue(ledgerSQL, ledgerArgs...)
 
 	// 6. Idempotency receipt
 	QueueIdempotencyRecord(batch, userID, "place_order", idempotencyKey, respBytes)
@@ -560,7 +550,12 @@ func (h *TradeHandler) executeCashOutTx(
 	}
 
 	tradeID := uuid.New()
-	positionAccount := "position_" + strings.ToLower(string(outcome))
+
+	ledgerSQL, ledgerArgs, err := buildLedgerInsert(tradeID, entryTrade,
+		sellEntries(userID, marketUUID, string(outcome), shares, quote.PayoutUSDC))
+	if err != nil {
+		return nil, err
+	}
 
 	resp := &CashOutResponse{
 		TradeID:         tradeID.String(),
@@ -618,23 +613,8 @@ func (h *TradeHandler) executeCashOutTx(
 		quote.PayoutUSDC, shares, quote.AvgPrice, quote.PriceImpactPct,
 	)
 
-	// 5. Immutable double-entry ledger entries
-	batch.Queue(`
-		INSERT INTO ledger_entries (
-			transaction_id, user_id, market_id, account, asset, delta, entry_type, created_at
-		) VALUES 
-		($1, $2, $3, 'pool_collateral', 'USDC', $4, 'trade', NOW()),
-		($1, $2, $3, 'user_cash', 'USDC', $5, 'trade', NOW()),
-		($1, $2, $3, $6, $7, $8, 'trade', NOW()),
-		($1, $2, $3, 'pool_shares', $7, $9, 'trade', NOW());
-	`, tradeID, userID, marketUUID,
-		quote.PayoutUSDC.Neg(),
-		quote.PayoutUSDC,
-		positionAccount,
-		string(outcome),
-		shares.Neg(),
-		shares,
-	)
+	// 5. Immutable double-entry ledger: cash, collateral, complete-set burn, reserves, position
+	batch.Queue(ledgerSQL, ledgerArgs...)
 
 	// 6. Store idempotency receipt
 	QueueIdempotencyRecord(batch, userID, "cashout", idempotencyKey, respBytes)
@@ -679,33 +659,57 @@ func lockAndVerifyUserBalance(ctx context.Context, tx pgx.Tx, userID uuid.UUID, 
 	return balance, nil
 }
 
+// marketKeyPredicate returns an index-friendly WHERE predicate (on $1) and its argument for a
+// market identified by UUID or slug. A UUID matches the primary key; anything else matches the
+// unique slug. Casting id::text with an OR would force a sequential scan on every call.
+func marketKeyPredicate(alias, idOrSlug string) (string, any) {
+	prefix := ""
+	if alias != "" {
+		prefix = alias + "."
+	}
+	idOrSlug = strings.TrimSpace(idOrSlug)
+	if id, err := uuid.Parse(idOrSlug); err == nil {
+		return prefix + "id = $1", id
+	}
+	return prefix + "slug = $1", idOrSlug
+}
+
 func lockAndVerifyActiveMarket(ctx context.Context, tx pgx.Tx, marketIDParam string) (uuid.UUID, error) {
 	var marketUUID uuid.UUID
 	var marketStatus string
 	var resolutionDate time.Time
-	query := `SELECT id, status, resolution_date FROM markets WHERE id::text = $1 OR slug = $1 FOR UPDATE;`
-	err := tx.QueryRow(ctx, query, marketIDParam).Scan(&marketUUID, &marketStatus, &resolutionDate)
+	keyPredicate, keyArg := marketKeyPredicate("", marketIDParam)
+	query := `SELECT id, status, resolution_date FROM markets WHERE ` + keyPredicate + ` FOR UPDATE;`
+	err := tx.QueryRow(ctx, query, keyArg).Scan(&marketUUID, &marketStatus, &resolutionDate)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, &AppError{StatusCode: http.StatusNotFound, ErrorCode: "not_found", Message: "Market not found"}
 		}
 		return uuid.Nil, err
 	}
-	if marketStatus != "active" {
-		return uuid.Nil, &AppError{
+	if appErr := checkTradable(marketStatus, resolutionDate); appErr != nil {
+		return uuid.Nil, appErr
+	}
+	return marketUUID, nil
+}
+
+// checkTradable returns an error unless the market is active and before its resolution date.
+func checkTradable(status string, resolutionDate time.Time) *AppError {
+	if status != "active" {
+		return &AppError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  "market_not_active",
 			Message:    "Market is not open for trading",
 		}
 	}
 	if time.Now().UTC().After(resolutionDate) {
-		return uuid.Nil, &AppError{
+		return &AppError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  "market_expired",
 			Message:    "Market trading has closed: resolution date has passed",
 		}
 	}
-	return marketUUID, nil
+	return nil
 }
 
 func lockAndVerifyUserPosition(ctx context.Context, tx pgx.Tx, userID, marketUUID uuid.UUID, outcome amm.Outcome, requiredShares decimal.Decimal) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {

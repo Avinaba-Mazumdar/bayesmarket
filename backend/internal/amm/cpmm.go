@@ -156,21 +156,29 @@ func CalculateCompleteSetBuy(depositUSDC decimal.Decimal, outcome Outcome, pool 
 	k := pool.ReserveYes.Mul(pool.ReserveNo)
 	var sharesReceived, newReserveYes, newReserveNo, initialPrice decimal.Decimal
 
+	// Rounding policy: the deposit is truncated to storage precision and the pool's post-trade
+	// inventory is rounded UP to storage precision, so k' >= k and the user's shares absorb the
+	// sub-unit remainder. Every stored value is then exact: R' + shares == R + d with no drift.
+	depositUSDC = depositUSDC.Truncate(StoragePrecision)
+	if depositUSDC.IsZero() {
+		return BuyQuote{}, ErrZeroOrNegativeDeposit
+	}
+
 	if outcome == OutcomeYES {
 		initialPrice = pYesInit
 		newReserveNo = pool.ReserveNo.Add(depositUSDC)
-		newReserveYes = k.DivRound(newReserveNo, CalculationPrecision)
+		newReserveYes = k.DivRound(newReserveNo, CalculationPrecision).RoundCeil(StoragePrecision)
 		// Delta YES = R_YES + d - R_YES'
 		sharesReceived = pool.ReserveYes.Add(depositUSDC).Sub(newReserveYes)
 	} else {
 		initialPrice = pNoInit
 		newReserveYes = pool.ReserveYes.Add(depositUSDC)
-		newReserveNo = k.DivRound(newReserveYes, CalculationPrecision)
+		newReserveNo = k.DivRound(newReserveYes, CalculationPrecision).RoundCeil(StoragePrecision)
 		// Delta NO = R_NO + d - R_NO'
 		sharesReceived = pool.ReserveNo.Add(depositUSDC).Sub(newReserveNo)
 	}
 
-	if sharesReceived.LessThanOrEqual(Zero) || sharesReceived.Truncate(StoragePrecision).IsZero() {
+	if sharesReceived.LessThanOrEqual(Zero) {
 		return BuyQuote{}, ErrInsufficientPoolLiquidity
 	}
 
@@ -237,6 +245,7 @@ func CalculateCompleteSetSell(sharesToSell decimal.Decimal, outcome Outcome, poo
 	if err := ValidatePoolReserves(pool); err != nil {
 		return SellQuote{}, err
 	}
+	sharesToSell = sharesToSell.Truncate(StoragePrecision)
 	if sharesToSell.LessThanOrEqual(Zero) {
 		return SellQuote{}, ErrZeroOrNegativeShares
 	}
@@ -273,10 +282,13 @@ func CalculateCompleteSetSell(sharesToSell decimal.Decimal, outcome Outcome, poo
 	}
 
 	// d = (A - sqrt(A^2 - 4sR)) / 2
-	payoutUSDC := A.Sub(sqrtDiscriminant).DivRound(Two, CalculationPrecision)
+	// Rounding policy: truncate the payout to storage precision BEFORE deriving reserves, so the
+	// user is paid exactly what collateral and reserves lose (no drift) and k' >= k (pool keeps
+	// the sub-unit remainder).
+	payoutUSDC := A.Sub(sqrtDiscriminant).DivRound(Two, CalculationPrecision).Truncate(StoragePrecision)
 
 	// Boundary checks
-	if payoutUSDC.LessThanOrEqual(Zero) || payoutUSDC.Truncate(StoragePrecision).IsZero() {
+	if payoutUSDC.LessThanOrEqual(Zero) {
 		return SellQuote{}, ErrInsufficientPoolLiquidity
 	}
 	if payoutUSDC.GreaterThan(pool.CollateralReserve) {

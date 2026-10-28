@@ -456,3 +456,105 @@ func BenchmarkCalculateCompleteSetSell(b *testing.B) {
 		_, _ = amm.CalculateCompleteSetSell(shares, amm.OutcomeYES, pool)
 	}
 }
+
+// TestStorageRoundingConservation runs a deterministic random walk of buys and sells with
+// 8-decimal inputs and checks, at every step, that the values written to storage conserve
+// collateral and shares exactly and never decrease k (L5: no sub-unit drift on buy or sell).
+func TestStorageRoundingConservation(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	scale := decimal.New(1, -amm.StoragePrecision)
+	is8dp := func(d decimal.Decimal) bool { return d.Equal(d.Truncate(amm.StoragePrecision)) }
+	randAmount := func(maxUnits int64) decimal.Decimal {
+		// 0.00000001 .. maxUnits with a random 8-decimal fraction
+		return decimal.NewFromInt(rng.Int63n(maxUnits*100_000_000) + 1).Mul(scale)
+	}
+
+	pool := amm.PoolReserves{
+		ReserveYes:        decimal.RequireFromString("7321.12345678"),
+		ReserveNo:         decimal.RequireFromString("2678.87654322"),
+		CollateralReserve: decimal.RequireFromString("10000"),
+	}
+	holdings := map[amm.Outcome]decimal.Decimal{amm.OutcomeYES: decimal.Zero, amm.OutcomeNO: decimal.Zero}
+	netCash := decimal.Zero // collateral the pool should hold beyond its seed
+
+	for i := 0; i < 3000; i++ {
+		outcome := amm.OutcomeYES
+		if rng.Intn(2) == 1 {
+			outcome = amm.OutcomeNO
+		}
+		kBefore := pool.ReserveYes.Mul(pool.ReserveNo)
+
+		if rng.Intn(3) > 0 || holdings[outcome].IsZero() {
+			d := randAmount(500)
+			q, err := amm.CalculateCompleteSetBuy(d, outcome, pool)
+			if err != nil {
+				t.Fatalf("step %d: buy %s %s failed: %v", i, d, outcome, err)
+			}
+			for _, v := range []decimal.Decimal{q.SharesReceived, q.NewReserveYes, q.NewReserveNo, q.NewCollateral} {
+				if !is8dp(v) {
+					t.Fatalf("step %d: buy produced value beyond storage precision: %s", i, v)
+				}
+			}
+			// Exact conservation of the bought outcome: R + d == R' + shares
+			rIn, rInNew, rOut, rOutNew := pool.ReserveNo, q.NewReserveNo, pool.ReserveYes, q.NewReserveYes
+			if outcome == amm.OutcomeNO {
+				rIn, rInNew, rOut, rOutNew = pool.ReserveYes, q.NewReserveYes, pool.ReserveNo, q.NewReserveNo
+			}
+			if !rOut.Add(d).Equal(rOutNew.Add(q.SharesReceived)) {
+				t.Fatalf("step %d: buy leaked shares: R+d=%s, R'+shares=%s", i, rOut.Add(d), rOutNew.Add(q.SharesReceived))
+			}
+			if !rInNew.Equal(rIn.Add(d)) || !q.NewCollateral.Equal(pool.CollateralReserve.Add(d)) {
+				t.Fatalf("step %d: buy did not move reserve/collateral by exactly d", i)
+			}
+			holdings[outcome] = holdings[outcome].Add(q.SharesReceived)
+			netCash = netCash.Add(d)
+			pool = amm.PoolReserves{ReserveYes: q.NewReserveYes, ReserveNo: q.NewReserveNo, CollateralReserve: q.NewCollateral}
+		} else {
+			s := holdings[outcome]
+			if rng.Intn(2) == 0 {
+				s = s.Div(decimal.NewFromInt(2)).Truncate(amm.StoragePrecision)
+			}
+			if s.IsZero() {
+				continue
+			}
+			q, err := amm.CalculateCompleteSetSell(s, outcome, pool)
+			if err != nil {
+				t.Fatalf("step %d: sell %s %s failed: %v", i, s, outcome, err)
+			}
+			for _, v := range []decimal.Decimal{q.PayoutUSDC, q.NewReserveYes, q.NewReserveNo, q.NewCollateral} {
+				if !is8dp(v) {
+					t.Fatalf("step %d: sell produced value beyond storage precision: %s", i, v)
+				}
+			}
+			// Exact: R_sold' = R_sold + s - payout, R_other' = R_other - payout, C' = C - payout
+			rSold, rSoldNew, rOther, rOtherNew := pool.ReserveYes, q.NewReserveYes, pool.ReserveNo, q.NewReserveNo
+			if outcome == amm.OutcomeNO {
+				rSold, rSoldNew, rOther, rOtherNew = pool.ReserveNo, q.NewReserveNo, pool.ReserveYes, q.NewReserveYes
+			}
+			if !rSoldNew.Equal(rSold.Add(s).Sub(q.PayoutUSDC)) || !rOtherNew.Equal(rOther.Sub(q.PayoutUSDC)) {
+				t.Fatalf("step %d: sell reserves not derived from the paid amount", i)
+			}
+			if !q.NewCollateral.Equal(pool.CollateralReserve.Sub(q.PayoutUSDC)) {
+				t.Fatalf("step %d: collateral moved by %s but user was paid %s", i, pool.CollateralReserve.Sub(q.NewCollateral), q.PayoutUSDC)
+			}
+			holdings[outcome] = holdings[outcome].Sub(s)
+			netCash = netCash.Sub(q.PayoutUSDC)
+			pool = amm.PoolReserves{ReserveYes: q.NewReserveYes, ReserveNo: q.NewReserveNo, CollateralReserve: q.NewCollateral}
+		}
+
+		if kAfter := pool.ReserveYes.Mul(pool.ReserveNo); kAfter.LessThan(kBefore) {
+			t.Fatalf("step %d: k decreased from %s to %s", i, kBefore, kAfter)
+		}
+	}
+
+	// Ledger-style reconciliation: collateral == seed + net cash in, to the last unit
+	if !pool.CollateralReserve.Equal(decimal.NewFromInt(10000).Add(netCash)) {
+		t.Errorf("collateral drifted: pool=%s, seed+net=%s", pool.CollateralReserve, decimal.NewFromInt(10000).Add(netCash))
+	}
+	// Solvency: every outstanding share of either outcome is backed by $1 of collateral
+	for o, held := range holdings {
+		if held.GreaterThan(pool.CollateralReserve) {
+			t.Errorf("insolvent: %s holders own %s shares, collateral is %s", o, held, pool.CollateralReserve)
+		}
+	}
+}

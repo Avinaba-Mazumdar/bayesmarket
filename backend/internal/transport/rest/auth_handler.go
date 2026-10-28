@@ -172,9 +172,9 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 			) < $3
 			RETURNING id, is_guest, auth_provider, cash_balance, created_at;
 		`
-		err := h.pool.QueryRow(ctx, query, initialBalance, clientIP, dailyCap).Scan(
-			&userID, &isGuest, &authProvider, &cashBalance, &createdAt,
-		)
+		err := insertSeededUser(ctx, h.pool, func(tx pgx.Tx) pgx.Row {
+			return tx.QueryRow(ctx, query, initialBalance, clientIP, dailyCap)
+		}, initialBalance, &userID, &isGuest, &authProvider, &cashBalance, &createdAt)
 		if err != nil {
 			log.Printf("[HandleGuestAuth] Database insert error: %v (clientIP: %s)\n", err, clientIP)
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -991,9 +991,9 @@ func (h *AuthHandler) upsertGoogleUser(
 		newBalance  decimal.Decimal
 		newCreated  time.Time
 	)
-	err = h.pool.QueryRow(ctx, insertQuery, googleID, email, name, avatarURL, initialBalance, clientIP).Scan(
-		&newID, &newIsGuest, &newProvider, &newBalance, &newCreated, &newIsAdmin,
-	)
+	err = insertSeededUser(ctx, h.pool, func(tx pgx.Tx) pgx.Row {
+		return tx.QueryRow(ctx, insertQuery, googleID, email, name, avatarURL, initialBalance, clientIP)
+	}, initialBalance, &newID, &newIsGuest, &newProvider, &newBalance, &newCreated, &newIsAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert new registered user: %w", err)
 	}

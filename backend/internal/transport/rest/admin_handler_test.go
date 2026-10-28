@@ -179,7 +179,7 @@ func TestAdminResolveLiveWorkflow(t *testing.T) {
 	// 4. Resolve market to YES via admin API
 	superadminToken := getSuperadminToken(t, pool, cfg)
 	idempKey := fmt.Sprintf("resolve-%d", time.Now().UnixNano())
-	resolvePayload := `{"winning_outcome":"YES","oracle_proof":"Official BLS Labor Release #2026-09"}`
+	resolvePayload := `{"winning_outcome":"YES","oracle_proof":"Official BLS Labor Release #2026-09","resolve_early":true}`
 	url := fmt.Sprintf("/api/v1/admin/markets/%s/resolve", testMarketID.String())
 
 	w := httptest.NewRecorder()
@@ -643,7 +643,7 @@ func TestResolvedMarketReportsWinningOutcome(t *testing.T) {
 	adminToken := getSuperadminToken(t, pool, cfg)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/v1/admin/markets/"+marketID.String()+"/resolve",
-		bytes.NewBufferString(`{"winning_outcome":"NO","oracle_proof":"Official source"}`))
+		bytes.NewBufferString(`{"winning_outcome":"NO","oracle_proof":"Official source","resolve_early":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	req.Header.Set("Idempotency-Key", fmt.Sprintf("resolve-no-%d", time.Now().UnixNano()))

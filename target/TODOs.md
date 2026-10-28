@@ -176,9 +176,9 @@ Implement atomic trade placement, database row-level locking (`SELECT ... FOR UP
     - Create `backend/internal/transport/rest/trade_handler.go` handling `POST /api/v1/markets/:id/orders`.
     - Payload validation: `{ outcome: "YES"|"NO", amount_usdc: "100.00000000", min_shares_out: "135.20000000" }` (quoted shares × (1 − tolerance); see ARCHITECTURE.md §6).
     - Enforce atomic transaction boundary:
-        1. Begin a `SERIALIZABLE` transaction and lock user row first (`SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE`).
-        2. Check balance sufficiency (`cash_balance >= amount`).
-        3. Lock market metadata, then its liquidity-pool row (`SELECT status FROM markets WHERE id = $1 FOR UPDATE`; then `SELECT reserve_yes, reserve_no, collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE`).
+        1. Begin a `SERIALIZABLE` transaction and lock market metadata, then its liquidity-pool row (`SELECT status FROM markets WHERE id = $1 FOR UPDATE`; then `SELECT reserve_yes, reserve_no, collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE`).
+        2. Lock the user row (`SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE`).
+        3. Check balance sufficiency (`cash_balance >= amount`).
         4. Compute the collateralized complete-set swap via `internal/amm` and reject the fill if it is below `min_shares_out`.
         5. Deduct user cash balance; update virtual reserves and collateral reserve.
         6. Insert a `trades` record with the required `Idempotency-Key`, returning the original receipt on a retry.
@@ -187,7 +187,7 @@ Implement atomic trade placement, database row-level locking (`SELECT ... FOR UP
 - [x] **Task 5.2: Atomic "Cash Out" Share Liquidation Handler**
     - Implement `POST /api/v1/portfolio/cashout`:
         - Requires bearer authentication and `Idempotency-Key`, and validates user owns sufficient shares of the specified outcome.
-        - Inside one serializable transaction, locks user cash balance, user position, market, then liquidity pool in the global lock order.
+        - Inside one serializable transaction, locks market, liquidity pool, user cash balance, then user position in the global lock order.
         - Sells shares through the collateralized complete-set AMM, credits user cash balance, decrements user position, and records trade plus immutable ledger entries.
 
 - [x] **Task 5.3: Concurrency & Balance Collision Test Suite**

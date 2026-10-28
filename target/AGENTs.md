@@ -77,7 +77,7 @@ When generating code or proposing modifications for BayesMarket, you MUST strict
 ### 2. Database Concurrency & Atomic Balance Ledger
 
 - **Atomic Balance Mutation**: Updating user balances, pool collateral, virtual reserves, positions, and immutable ledger entries must occur inside a single PostgreSQL transaction.
-- **Row-Level Locking**: Within every trade, cash-out, and settlement transaction, lock rows in one global order—user, position (when applicable), market, then liquidity pool—using `SELECT ... FOR UPDATE` before evaluating balance sufficiency or computing swap mechanics.
+- **Row-Level Locking**: Within every trade, cash-out, and settlement transaction, lock rows in one global order—market, then liquidity pool, then user(s), then position(s)—using `SELECT ... FOR UPDATE`before evaluating balance sufficiency or computing swap mechanics.
 - **Immutable Ledger History**: Every balance, collateral, or position mutation must generate append-only `ledger_entries` tied to a transaction identifier. Snapshot balances and pool reserves are never updated without corresponding ledger entries.
 - **Idempotency**: All mutation endpoints (`POST /api/v1/markets/:id/orders`, `POST /api/v1/claim`, cash-out, and resolution) require an `Idempotency-Key` and enforce it with a database unique constraint scoped to the actor and operation.
 

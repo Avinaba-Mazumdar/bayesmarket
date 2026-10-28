@@ -173,11 +173,11 @@ sequenceDiagram
     else Limit OK
         Limiter-->>API: Allow
         API->>DB: BEGIN TRANSACTION (ISOLATION SERIALIZABLE)
-        API->>DB: SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE
-        DB-->>API: User Balance ($1,000.00)
         API->>DB: SELECT status FROM markets WHERE id = $2 FOR UPDATE
         API->>DB: SELECT * FROM liquidity_pools WHERE market_id = $2 FOR UPDATE
         DB-->>API: Current inventories and collateral (R_yes, R_no, C, k)
+        API->>DB: SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE
+        DB-->>API: User Balance ($1,000.00)
 
         API->>AMM: CalculateCompleteSetBuy(R_yes, R_no, C, k, amount); reject if shares < min_shares_out
         alt Slippage Exceeded or Insufficient Balance
@@ -612,10 +612,10 @@ CREATE TABLE ledger_entries (
     transaction_id UUID NOT NULL,
     user_id UUID REFERENCES users(id) ON DELETE RESTRICT,
     market_id UUID REFERENCES markets(id) ON DELETE RESTRICT,
-    account VARCHAR(32) NOT NULL,              -- 'user_cash', 'pool_collateral', 'position_yes', 'position_no'
+    account VARCHAR(32) NOT NULL,              -- see "Ledger Accounts" below
     asset VARCHAR(8) NOT NULL,                 -- 'USDC', 'YES', 'NO'
     delta NUMERIC(28, 8) NOT NULL,
-    entry_type VARCHAR(32) NOT NULL,           -- 'trade', 'faucet', 'settlement', 'refund'
+    entry_type VARCHAR(32) NOT NULL,           -- 'trade', 'claim', 'settlement', 'refund', 'user_seed', 'market_seed'
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
@@ -646,6 +646,31 @@ CREATE INDEX idx_positions_user ON user_positions(user_id);
 CREATE INDEX idx_ledger_entries_transaction ON ledger_entries(transaction_id);
 CREATE INDEX idx_faucet_ip_time ON faucet_claims(ip_address, claimed_at DESC);
 ```
+
+#### Ledger Accounts (double entry)
+
+Every posting nets to zero per asset within its `transaction_id`, so the running sum of an account always equals the snapshot it mirrors and every balance can be rebuilt from `ledger_entries`:
+
+| Account                        | Asset    | Mirrors                                                                                                         |
+| :----------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------- |
+| `user_cash`                    | USDC     | `users.cash_balance`                                                                                            |
+| `pool_collateral`              | USDC     | `liquidity_pools.collateral_reserve`                                                                            |
+| `system_treasury`              | USDC     | Counter-account for minted money: starting balances (`user_seed`), `claim`, `market_seed`                       |
+| `position_yes` / `position_no` | YES / NO | `user_positions.shares_owned`                                                                                   |
+| `pool_reserve`                 | YES / NO | `liquidity_pools.reserve_yes` / `reserve_no`                                                                    |
+| `pool_inventory`               | YES / NO | Real shares held by the pool beyond its virtual reserve, set at seeding                                         |
+| `outcome_supply`               | YES / NO | Minus the shares in existence: complete sets are minted on buy and seeding, burned on sell, settlement and void |
+
+Postings per entry type:
+
+- **`market_seed`**: treasury −C, collateral +C; C YES and C NO minted (`outcome_supply` −C each); `pool_reserve` +R_yes / +R_no; the remainder to `pool_inventory`.
+- **`user_seed`, `claim`**: treasury −amount, `user_cash` +amount.
+- **`trade` BUY d → s shares**: cash −d, collateral +d; d YES and d NO minted; `pool_reserve` of the bought side +(d − s), other side +d; position +s.
+- **`trade` SELL s → payout p**: collateral −p, cash +p; position −s; `pool_reserve` of the sold side +(s − p), other side −p; p complete sets burned (`outcome_supply` +p each).
+- **`settlement`**: every open position is burned (position −s, `outcome_supply` +s); winning positions also move s USDC from collateral to cash.
+- **`refund`** (void): every open position is burned; its cost basis moves from collateral to cash.
+
+Application code posts through one helper that rejects unbalanced postings and values beyond 8 decimal places; set-based settlement and void are checked for balance before commit. Rows written before this model (account `pool_shares`, and seeds or claims without a treasury leg) are not reconcilable and are left untouched.
 
 ---
 
@@ -876,7 +901,9 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 - **Cash-out endpoint**: `POST /api/v1/portfolio/cashout`, with bearer authentication and an `Idempotency-Key`; it accepts decimal-string `shares` and a required `min_payout_usdc`, derived from a fresh SELL quote's `payout_usdc` × (1 − tolerance), and rejects the sale with `slippage_exceeded` if the payout would fall below it.
 - **Resolution endpoint**: `POST /api/v1/admin/markets/:id/resolve`.
 - **Headers**: `Authorization: Bearer <admin-token>` and `Idempotency-Key: <opaque-client-key>`.
-- **Payload**: `{ "winning_outcome": "YES", "oracle_proof": "immutable source reference" }`.
+- **Payload**: `{ "winning_outcome": "YES", "oracle_proof": "immutable source reference", "resolve_early": false }`.
+- **Preconditions**: the market is `active`, `suspended` or `locked`, and `now >= resolution_date` unless `resolve_early` is `true` (the event was decided before the deadline). Otherwise `409 resolution_date_not_reached`, `market_already_resolved` or `market_voided`.
+- **Execution**: settlement is set-based (a fixed number of statements regardless of the number of holders) and follows the row-lock order in §8.1.
 - **Response `200 OK`**: Locks the market, records the resolution proof, and atomically distributes $1.00 per winning share with immutable ledger entries.
 - **Void endpoint**: `POST /api/v1/admin/markets/:id/void` with the same headers and no payload. Locks market → pool → open positions, asserts that the total refund does not exceed `collateral_reserve`, credits each holder the position's `total_invested_usdc` (cost basis), zeroes the position, debits pool collateral, and writes `refund` ledger entries (`user_cash`, `pool_collateral`, `position_<outcome>`, `pool_shares`). The market moves to the terminal `voided` status; it can no longer be traded, edited or resolved, and voiding a resolved market returns `409`.
 
@@ -965,6 +992,11 @@ flowchart TD
     UPDATE liquidity_pools SET reserve_yes = $2, reserve_no = $3 WHERE market_id = $1;
     COMMIT;
     ```
+3. **Row-lock order (deadlock prevention)**: every transaction that mutates money takes row locks in one global order: **market → liquidity pool → user(s) → position(s)**.
+    - Trades and cash-outs lock one user, then that user's position.
+    - Settlement and void lock every holder of an open position in ascending user-ID order (`ORDER BY id FOR UPDATE`), then those positions, before any set-based update.
+    - Claims lock only the user row; market edit and delete lock only the market row.
+    - All position rows of a market are mutated only while its market row is locked, so no two money paths can wait on each other in opposite directions. Serializable aborts and deadlocks are still retried by `ExecuteSerializableWithRetry` as a backstop.
 
 ### 8.2 CAP Theorem Positioning
 

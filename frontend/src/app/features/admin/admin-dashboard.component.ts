@@ -34,6 +34,7 @@ import { InputComponent } from '../../shared/components/input/input.component';
 import { LabelComponent } from '../../shared/components/label/label.component';
 import { SelectComponent, SelectOption } from '../../shared/components/select/select.component';
 import { TextareaComponent } from '../../shared/components/textarea/textarea.component';
+import { SwitchComponent } from '../../shared/components/switch/switch.component';
 import { BrandIconComponent } from '../../shared/components/brand-icon/brand-icon.component';
 
 @Component({
@@ -52,6 +53,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
         LabelComponent,
         SelectComponent,
         TextareaComponent,
+        SwitchComponent,
         LucideCheck,
         LucideShieldCheck,
         LucidePlus,
@@ -493,13 +495,31 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                 />
                             </div>
 
+                            @if (selectedMarketBeforeDeadline(); as deadline) {
+                                <div class="form-group resolve-early-group" role="group" aria-labelledby="resolve-early-label">
+                                    <div class="resolve-early-row">
+                                        <app-switch
+                                            id="resolve-early-switch"
+                                            [checked]="resolveEarly()"
+                                            (checkedChange)="resolveEarly.set($event)"
+                                            ariaLabel="Resolve before the resolution date"
+                                        />
+                                        <app-label id="resolve-early-label" htmlFor="resolve-early-switch">Resolve before the resolution date</app-label>
+                                    </div>
+                                    <p class="field-hint">
+                                        This market's resolution date is {{ deadline | date: 'medium' }}. Only resolve early if the outcome is already decided
+                                        and the proof above shows it.
+                                    </p>
+                                </div>
+                            }
+
                             <div class="form-actions">
                                 <app-button
                                     variant="primary"
                                     size="lg"
                                     [fullWidth]="true"
                                     [loading]="isResolving()"
-                                    [disabled]="!selectedMarketId() || !oracleProof()"
+                                    [disabled]="!selectedMarketId() || !oracleProof() || (!!selectedMarketBeforeDeadline() && !resolveEarly())"
                                     (btnClick)="onSubmitResolveMarket()"
                                     ariaLabel="Execute market resolution and payouts"
                                 >
@@ -1258,6 +1278,19 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 border: 1px solid var(--hairline);
             }
 
+            .resolve-early-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                min-height: 44px;
+            }
+
+            .field-hint {
+                margin: 0;
+                font-size: 13px;
+                color: var(--muted);
+            }
+
             /* Dialog actions and Delete Body */
             .dialog-actions {
                 justify-content: flex-end;
@@ -1343,6 +1376,14 @@ export class AdminDashboardComponent implements OnInit {
     readonly selectedMarketId = signal<string>('');
     readonly winningOutcome = signal<'YES' | 'NO'>('YES');
     readonly oracleProof = signal<string>('');
+    readonly resolveEarly = signal<boolean>(false);
+
+    /** Resolution date of the selected market when it has not passed yet, otherwise null. */
+    readonly selectedMarketBeforeDeadline = computed<string | null>(() => {
+        const market = this.allMarkets().find((m) => m.id === this.selectedMarketId());
+        if (!market) return null;
+        return new Date(market.resolution_date).getTime() > Date.now() ? market.resolution_date : null;
+    });
     readonly resolutionSummary = signal<ResolveMarketResponse | null>(null);
 
     // Edit Market Modal fields
@@ -1672,9 +1713,11 @@ export class AdminDashboardComponent implements OnInit {
 
         this.isResolving.set(true);
         const idempotencyKey = `resolve-${marketId}-${Date.now()}`;
-        this.apiService.resolveMarket(marketId, { winning_outcome: outcome, oracle_proof: proof }, this.getEffectiveToken(), idempotencyKey).subscribe({
+        const request = { winning_outcome: outcome, oracle_proof: proof, resolve_early: !!this.selectedMarketBeforeDeadline() && this.resolveEarly() };
+        this.apiService.resolveMarket(marketId, request, this.getEffectiveToken(), idempotencyKey).subscribe({
             next: (res) => {
                 this.isResolving.set(false);
+                this.resolveEarly.set(false);
                 this.resolutionSummary.set(res);
                 this.toastService.success('Market Resolved', `Outcome ${res.winning_outcome} settled. Credited ${res.winners_credited} traders.`);
                 this.loadMarkets();

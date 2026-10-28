@@ -227,13 +227,11 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 		return
 	}
 
-	// Insert double-entry ledger record
-	txID := uuid.New()
-	insertLedger := `
-		INSERT INTO ledger_entries (transaction_id, user_id, account, asset, delta, entry_type)
-		VALUES ($1, $2, 'user_cash', 'USDC', $3, 'claim');
-	`
-	_, err = tx.Exec(ctx, insertLedger, txID, userID, claimGrant)
+	// Double-entry ledger: treasury -> user cash
+	ledgerSQL, ledgerArgs, err := buildLedgerInsert(uuid.New(), entryClaim, treasuryGrantEntries(userID, claimGrant))
+	if err == nil {
+		_, err = tx.Exec(ctx, ledgerSQL, ledgerArgs...)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to record ledger entry"})
 		return

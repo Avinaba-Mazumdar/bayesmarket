@@ -141,6 +141,8 @@ export interface CashOutResponse {
 export interface ResolveMarketRequest {
     winning_outcome: 'YES' | 'NO';
     oracle_proof: string;
+    /** Required to settle before the market's resolution_date. */
+    resolve_early?: boolean;
 }
 
 export interface ResolveMarketResponse {

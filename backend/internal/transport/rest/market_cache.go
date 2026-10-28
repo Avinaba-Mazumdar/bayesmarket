@@ -10,12 +10,23 @@ import (
 )
 
 type cachedMarketItem struct {
-	marketUUID uuid.UUID
-	id         string
-	slug       string
-	summary    MarketSummaryResponse
-	reserves   amm.PoolReserves
-	expiresAt  time.Time
+	marketUUID     uuid.UUID
+	id             string
+	slug           string
+	summary        MarketSummaryResponse
+	reserves       amm.PoolReserves
+	status         string
+	resolutionDate time.Time
+	expiresAt      time.Time
+}
+
+// QuoteState is the cached market state needed to price a quote: reserves plus the
+// tradability fields that must be re-checked on every cache hit.
+type QuoteState struct {
+	MarketUUID     uuid.UUID
+	Reserves       amm.PoolReserves
+	Status         string
+	ResolutionDate time.Time
 }
 
 type cachedMarketList struct {
@@ -93,19 +104,39 @@ func (c *MarketCache) GetMarket(idOrSlug string) (*MarketSummaryResponse, *amm.P
 	return summaryPtr, &reservesCopy, &uuidCopy, true
 }
 
+// GetQuoteState returns cached reserves with the market's status and resolution date.
+func (c *MarketCache) GetQuoteState(idOrSlug string) (QuoteState, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	item, ok := c.items[strings.TrimSpace(idOrSlug)]
+	if !ok || time.Now().After(item.expiresAt) || item.status == "" {
+		return QuoteState{}, false
+	}
+	return QuoteState{
+		MarketUUID:     item.marketUUID,
+		Reserves:       item.reserves,
+		Status:         item.status,
+		ResolutionDate: item.resolutionDate,
+	}, true
+}
+
 // SetMarket stores individual market details and pool reserves by both ID and Slug.
 func (c *MarketCache) SetMarket(id, slug string, summary MarketSummaryResponse, reserves amm.PoolReserves, marketUUID uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	resolutionDate, _ := time.Parse(time.RFC3339, summary.ResolutionDate)
 	expiresAt := time.Now().Add(c.defaultTTL)
 	item := &cachedMarketItem{
-		marketUUID: marketUUID,
-		id:         id,
-		slug:       slug,
-		summary:    summary,
-		reserves:   reserves,
-		expiresAt:  expiresAt,
+		marketUUID:     marketUUID,
+		id:             id,
+		slug:           slug,
+		summary:        summary,
+		reserves:       reserves,
+		status:         summary.Status,
+		resolutionDate: resolutionDate,
+		expiresAt:      expiresAt,
 	}
 
 	if id != "" {
@@ -116,8 +147,9 @@ func (c *MarketCache) SetMarket(id, slug string, summary MarketSummaryResponse, 
 	}
 }
 
-// SetReserves updates or initializes pool reserves without overwriting existing summary metadata.
-func (c *MarketCache) SetReserves(id, slug string, reserves amm.PoolReserves, marketUUID uuid.UUID) {
+// SetReserves updates or initializes pool reserves and tradability state without overwriting
+// existing summary metadata.
+func (c *MarketCache) SetReserves(id, slug string, reserves amm.PoolReserves, marketUUID uuid.UUID, status string, resolutionDate time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -131,12 +163,14 @@ func (c *MarketCache) SetReserves(id, slug string, reserves amm.PoolReserves, ma
 	}
 
 	item := &cachedMarketItem{
-		marketUUID: marketUUID,
-		id:         id,
-		slug:       slug,
-		summary:    summary,
-		reserves:   reserves,
-		expiresAt:  expiresAt,
+		marketUUID:     marketUUID,
+		id:             id,
+		slug:           slug,
+		summary:        summary,
+		reserves:       reserves,
+		status:         status,
+		resolutionDate: resolutionDate,
+		expiresAt:      expiresAt,
 	}
 
 	if id != "" {
@@ -147,7 +181,7 @@ func (c *MarketCache) SetReserves(id, slug string, reserves amm.PoolReserves, ma
 	}
 }
 
-// GetMarketUUID returns the canonical UUID for a given market ID or slug if cached.
+// GetMarketUUIDreturns the canonical UUID for a given market ID or slug if cached.
 func (c *MarketCache) GetMarketUUID(idOrSlug string) (uuid.UUID, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
