@@ -10,7 +10,7 @@ import { PortfolioResponse } from '../../core/models/market.model';
 describe('PortfolioViewComponent', () => {
     let fixture: ComponentFixture<PortfolioViewComponent>;
     let component: PortfolioViewComponent;
-    let apiServiceSpy: { getPortfolio: any; createGuestSession: any; cashOut: any };
+    let apiServiceSpy: { getPortfolio: any; createGuestSession: any; cashOut: any; getSellQuote: any };
     let authStore: AuthStore;
 
     const mockPortfolioResponse: PortfolioResponse = {
@@ -38,7 +38,8 @@ describe('PortfolioViewComponent', () => {
         apiServiceSpy = {
             getPortfolio: vi.fn().mockReturnValue(of(mockPortfolioResponse)),
             createGuestSession: vi.fn().mockReturnValue(of({ token: 'test-token', user: { id: 'u-1', cash_balance: '1250' } })),
-            cashOut: vi.fn()
+            cashOut: vi.fn(),
+            getSellQuote: vi.fn().mockReturnValue(of({ action: 'SELL', payout_usdc: '50.00000000', price_impact_pct: '-1.00000000' }))
         };
 
         await TestBed.configureTestingModule({

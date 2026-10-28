@@ -83,33 +83,6 @@ func ParseBoundedPositiveDecimal(raw string, fieldName string, maxVal decimal.De
 	return val, nil
 }
 
-// ParseSlippagePct parses a slippage percentage string or returns the default value.
-func ParseSlippagePct(raw string, defaultPct decimal.Decimal) (decimal.Decimal, *AppError) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return defaultPct, nil
-	}
-
-	val, err := decimal.NewFromString(trimmed)
-	if err != nil || val.IsNegative() {
-		return decimal.Zero, &AppError{
-			StatusCode: http.StatusBadRequest,
-			ErrorCode:  "invalid_slippage",
-			Message:    "max_slippage_pct must be non-negative",
-		}
-	}
-
-	if val.GreaterThan(decimal.NewFromInt(100)) {
-		return decimal.Zero, &AppError{
-			StatusCode: http.StatusBadRequest,
-			ErrorCode:  "invalid_slippage",
-			Message:    "max_slippage_pct cannot exceed 100%",
-		}
-	}
-
-	return val, nil
-}
-
 // ParseOptionalBoundedPositiveDecimal parses an optional string into a non-negative decimal bounded by maxVal.
 // If empty, it returns defaultVal without error.
 func ParseOptionalBoundedPositiveDecimal(raw string, fieldName string, defaultVal, maxVal decimal.Decimal) (decimal.Decimal, *AppError) {

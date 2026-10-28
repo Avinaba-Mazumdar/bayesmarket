@@ -71,12 +71,13 @@ func (h *TradeHandler) resolveMarketLockKey(param string) string {
 }
 
 // PlaceOrderRequest defines the input payload for placing a buy order.
+//
+// MinSharesOut is the client's slippage floor: the quoted shares_received reduced by its tolerance.
+// The order is rejected if pool state moved since the quote so that fewer shares would be filled.
 type PlaceOrderRequest struct {
-	Outcome        string `json:"outcome"`
-	AmountUSDC     string `json:"amount_usdc"`
-	MaxSlippagePct string `json:"max_slippage_pct,omitempty"`
-	MinSharesOut   string `json:"min_shares_out,omitempty"`
-	ExpectedPrice  string `json:"expected_price,omitempty"`
+	Outcome      string `json:"outcome"`
+	AmountUSDC   string `json:"amount_usdc"`
+	MinSharesOut string `json:"min_shares_out"`
 }
 
 // OrderResponse represents the authoritative execution receipt for a trade.
@@ -101,7 +102,7 @@ type CashOutRequest struct {
 	MarketID      string `json:"market_id"`
 	Outcome       string `json:"outcome"`
 	Shares        string `json:"shares"`
-	MinPayoutUSDC string `json:"min_payout_usdc,omitempty"`
+	MinPayoutUSDC string `json:"min_payout_usdc"` // Quoted payout_usdc reduced by the client's slippage tolerance
 }
 
 // CashOutResponse represents the authoritative receipt for a share liquidation.
@@ -174,30 +175,17 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 		return
 	}
 
-	maxSlippage, valErr := ParseSlippagePct(req.MaxSlippagePct, decimal.NewFromFloat(5.0))
+	if strings.TrimSpace(req.MinSharesOut) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "min_shares_out_required",
+			"message": "min_shares_out is required: derive it from a quote's shares_received and your slippage tolerance",
+		})
+		return
+	}
+	minSharesOut, valErr := ParsePositiveDecimal(req.MinSharesOut, "min_shares_out")
 	if valErr != nil {
 		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
 		return
-	}
-
-	var minSharesOut decimal.Decimal
-	if req.MinSharesOut != "" {
-		minShares, valErr := ParsePositiveDecimal(req.MinSharesOut, "min_shares_out")
-		if valErr != nil {
-			c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
-			return
-		}
-		minSharesOut = minShares
-	}
-
-	var expectedPrice decimal.Decimal
-	if req.ExpectedPrice != "" {
-		expPrice, valErr := ParsePositiveDecimal(req.ExpectedPrice, "expected_price")
-		if valErr != nil {
-			c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
-			return
-		}
-		expectedPrice = expPrice
 	}
 
 	// 1. Fast path: check idempotency receipt outside tx
@@ -209,7 +197,7 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 
 	// 2. Execute with resilient serializable retry loop
 	finalResponse, err := ExecuteSerializableWithRetry(ctx, 25, func() (*OrderResponse, error) {
-		return h.executeOrderTx(ctx, userID, idempotencyKey, marketIDParam, outcome, amount, maxSlippage, minSharesOut, expectedPrice)
+		return h.executeOrderTx(ctx, userID, idempotencyKey, marketIDParam, outcome, amount, minSharesOut)
 	})
 
 	if err != nil {
@@ -248,9 +236,7 @@ func (h *TradeHandler) executeOrderTx(
 	marketIDParam string,
 	outcome amm.Outcome,
 	amount decimal.Decimal,
-	maxSlippage decimal.Decimal,
 	minSharesOut decimal.Decimal,
-	expectedPrice decimal.Decimal,
 ) (*OrderResponse, error) {
 	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
@@ -283,30 +269,13 @@ func (h *TradeHandler) executeOrderTx(
 		return nil, &AppError{StatusCode: http.StatusBadRequest, ErrorCode: "amm_error", Message: "Invalid trade parameters for buy order"}
 	}
 
-	if quote.PriceImpactPct.GreaterThan(maxSlippage) {
+	// Slippage guard: price impact is already priced into the quote the user accepted, so only
+	// movement since that quote (fewer shares than the client's floor) rejects the order.
+	if quote.SharesReceived.LessThan(minSharesOut) {
 		return nil, &AppError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  "slippage_exceeded",
-			Message:    "Price impact (" + quote.PriceImpactPct.StringFixed(4) + "%) exceeds maximum allowed slippage (" + maxSlippage.StringFixed(4) + "%)",
-		}
-	}
-
-	if minSharesOut.IsPositive() && quote.SharesReceived.LessThan(minSharesOut) {
-		return nil, &AppError{
-			StatusCode: http.StatusBadRequest,
-			ErrorCode:  "slippage_exceeded",
-			Message:    fmt.Sprintf("Execution output (%s shares) is below quoted minimum (%s shares)", quote.SharesReceived.StringFixed(4), minSharesOut.StringFixed(4)),
-		}
-	}
-
-	if expectedPrice.IsPositive() {
-		maxAllowedPrice := expectedPrice.Mul(decimal.NewFromInt(1).Add(maxSlippage.Div(decimal.NewFromInt(100))))
-		if quote.AvgPrice.GreaterThan(maxAllowedPrice) {
-			return nil, &AppError{
-				StatusCode: http.StatusBadRequest,
-				ErrorCode:  "slippage_exceeded",
-				Message:    fmt.Sprintf("Execution price ($%s) exceeded maximum allowed limit ($%s) from quoted price ($%s)", quote.AvgPrice.StringFixed(4), maxAllowedPrice.StringFixed(4), expectedPrice.StringFixed(4)),
-			}
+			Message:    fmt.Sprintf("Price moved since your quote: order would fill %s shares, below your minimum of %s. Request a new quote.", quote.SharesReceived.StringFixed(4), minSharesOut.StringFixed(4)),
 		}
 	}
 
@@ -470,7 +439,14 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 		return
 	}
 
-	minPayout, valErr := ParseOptionalBoundedPositiveDecimal(req.MinPayoutUSDC, "min_payout_usdc", decimal.Zero, MaxTradeAmountUSDC)
+	if strings.TrimSpace(req.MinPayoutUSDC) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "min_payout_usdc_required",
+			"message": "min_payout_usdc is required: derive it from a SELL quote's payout_usdc and your slippage tolerance",
+		})
+		return
+	}
+	minPayout, valErr := ParseBoundedPositiveDecimal(req.MinPayoutUSDC, "min_payout_usdc", MaxTradeAmountUSDC)
 	if valErr != nil {
 		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
 		return
@@ -564,11 +540,11 @@ func (h *TradeHandler) executeCashOutTx(
 		return nil, &AppError{StatusCode: http.StatusBadRequest, ErrorCode: "amm_error", Message: "Invalid trade parameters for cashout"}
 	}
 
-	if minPayout.GreaterThan(decimal.Zero) && quote.PayoutUSDC.LessThan(minPayout) {
+	if quote.PayoutUSDC.LessThan(minPayout) {
 		return nil, &AppError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  "slippage_exceeded",
-			Message:    "Payout (" + quote.PayoutUSDC.StringFixed(4) + " USDC) is below minimum acceptable (" + minPayout.StringFixed(4) + " USDC)",
+			Message:    fmt.Sprintf("Price moved since your quote: payout would be %s USDC, below your minimum of %s USDC. Request a new quote.", quote.PayoutUSDC.StringFixed(4), minPayout.StringFixed(4)),
 		}
 	}
 

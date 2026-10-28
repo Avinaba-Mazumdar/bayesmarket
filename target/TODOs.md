@@ -174,12 +174,12 @@ Implement atomic trade placement, database row-level locking (`SELECT ... FOR UP
 
 - [x] **Task 5.1: Atomic Order Execution Pipeline**
     - Create `backend/internal/transport/rest/trade_handler.go` handling `POST /api/v1/markets/:id/orders`.
-    - Payload validation: `{ outcome: "YES"|"NO", amount_usdc: "100.00000000", max_slippage_pct: "2.00000000" }`.
+    - Payload validation: `{ outcome: "YES"|"NO", amount_usdc: "100.00000000", min_shares_out: "135.20000000" }` (quoted shares × (1 − tolerance); see ARCHITECTURE.md §6).
     - Enforce atomic transaction boundary:
         1. Begin a `SERIALIZABLE` transaction and lock user row first (`SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE`).
         2. Check balance sufficiency (`cash_balance >= amount`).
         3. Lock market metadata, then its liquidity-pool row (`SELECT status FROM markets WHERE id = $1 FOR UPDATE`; then `SELECT reserve_yes, reserve_no, collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE`).
-        4. Compute the collateralized complete-set swap via `internal/amm` and verify price slippage does not exceed `max_slippage_pct`.
+        4. Compute the collateralized complete-set swap via `internal/amm` and reject the fill if it is below `min_shares_out`.
         5. Deduct user cash balance; update virtual reserves and collateral reserve.
         6. Insert a `trades` record with the required `Idempotency-Key`, returning the original receipt on a retry.
         7. Upsert user position in `user_positions` and write balanced immutable `ledger_entries` for cash, collateral, and shares.

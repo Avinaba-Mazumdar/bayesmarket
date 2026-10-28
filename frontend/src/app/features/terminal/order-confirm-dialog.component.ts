@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LucideArrowUp, LucideArrowDown, LucideInfo } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
+import { applyTolerance, truncateDecimal } from '../../core/utils/decimal';
 import { OrderResponse } from '../../core/models/market.model';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
@@ -67,8 +68,12 @@ import { OrderIntent } from './order-terminal.component';
                             </span>
                         </div>
                         <div class="table-row" role="row">
-                            <span class="cell-label" role="rowheader">Max Slippage Limit</span>
+                            <span class="cell-label" role="rowheader">Slippage Tolerance</span>
                             <span class="cell-val tabular-nums" role="cell"> {{ ord.maxSlippagePct }}% </span>
+                        </div>
+                        <div class="table-row" role="row">
+                            <span class="cell-label" role="rowheader">Min. Shares Received</span>
+                            <span class="cell-val tabular-nums min-shares-val" role="cell"> {{ formattedMinShares() }} Shares </span>
                         </div>
                         <div class="table-row" role="row">
                             <span class="cell-label" role="rowheader">Est. Price Impact</span>
@@ -340,6 +345,18 @@ export class OrderConfirmDialogComponent {
         return isNaN(n) ? '0.0000' : n.toFixed(4);
     });
 
+    /** Server-side slippage floor: the quoted shares reduced by the user's tolerance. */
+    protected readonly minSharesOut = computed(() => {
+        const ord = this.intent();
+        if (!ord?.quote) return null;
+        return applyTolerance(ord.quote.shares_received, ord.maxSlippagePct);
+    });
+
+    protected readonly formattedMinShares = computed(() => {
+        const min = this.minSharesOut();
+        return min === null ? '—' : truncateDecimal(min, 2);
+    });
+
     protected readonly formattedImpact = computed(() => {
         const ord = this.intent();
         if (!ord?.quote) return '0.00';
@@ -360,13 +377,14 @@ export class OrderConfirmDialogComponent {
             return;
         }
 
+        const minSharesOut = this.minSharesOut();
+        if (minSharesOut === null) {
+            this.toastService.error('Invalid Quote', 'Could not derive a minimum fill from the quote. Edit the order and try again.');
+            return;
+        }
+
         this.isExecuting.set(true);
         const idempotencyKey = `order-ui-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-        const quotedShares = parseFloat(ord.quote.shares_received);
-        const slippagePct = parseFloat(ord.maxSlippagePct || '5.0');
-        const slippageFactor = isNaN(slippagePct) ? 0.05 : slippagePct / 100;
-        const minSharesOut = !isNaN(quotedShares) && quotedShares > 0 ? (quotedShares * Math.max(0, 1 - slippageFactor)).toFixed(8) : undefined;
 
         this.apiService
             .placeOrder(
@@ -374,9 +392,7 @@ export class OrderConfirmDialogComponent {
                 {
                     outcome: ord.outcome,
                     amount_usdc: ord.amountUSDC,
-                    max_slippage_pct: ord.maxSlippagePct,
-                    min_shares_out: minSharesOut,
-                    expected_price: ord.quote.avg_price
+                    min_shares_out: minSharesOut
                 },
                 token,
                 idempotencyKey

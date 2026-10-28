@@ -165,7 +165,7 @@ sequenceDiagram
 
     User->>Client: Clicks "Buy $50 YES"
     Client->>Client: Set Optimistic Pending State
-    Client->>API: POST /api/v1/markets/:id/orders {outcome, amount_usdc, max_slippage_pct} + Idempotency-Key
+    Client->>API: POST /api/v1/markets/:id/orders {outcome, amount_usdc, min_shares_out} + Idempotency-Key
     API->>Limiter: Allow(IP, GuestUUID)?
     alt Rate Limit Exceeded
         Limiter-->>API: 429 Too Many Requests
@@ -179,7 +179,7 @@ sequenceDiagram
         API->>DB: SELECT * FROM liquidity_pools WHERE market_id = $2 FOR UPDATE
         DB-->>API: Current inventories and collateral (R_yes, R_no, C, k)
 
-        API->>AMM: CalculateCompleteSetBuy(R_yes, R_no, C, k, amount, max_slippage)
+        API->>AMM: CalculateCompleteSetBuy(R_yes, R_no, C, k, amount); reject if shares < min_shares_out
         alt Slippage Exceeded or Insufficient Balance
             AMM-->>API: ErrSlippageExceeded / ErrInsufficientFunds
             API->>DB: ROLLBACK
@@ -662,11 +662,10 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
     "success": false,
     "error": {
         "code": "ERR_SLIPPAGE_EXCEEDED",
-        "message": "Execution slippage 3.2% exceeded maximum tolerance of 2.0%",
+        "message": "Price moved since your quote: order would fill 136.2000 shares, below your minimum of 136.5000. Request a new quote.",
         "details": {
-            "quoted_price": "0.72000000",
-            "actual_price": "0.74300000",
-            "max_slippage_pct": "2.00000000"
+            "shares_filled": "136.20000000",
+            "min_shares_out": "136.50000000"
         },
         "trace_id": "tr_8f8b1c4e28b9"
     }
@@ -675,15 +674,15 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 
 #### Financial Error Taxonomy
 
-| Error Code                   | HTTP Status             | Description                                                          |
-| :--------------------------- | :---------------------- | :------------------------------------------------------------------- |
-| `ERR_INSUFFICIENT_FUNDS`     | `400 Bad Request`       | User balance is less than required trade amount.                     |
-| `ERR_SLIPPAGE_EXCEEDED`      | `400 Bad Request`       | Price shifted beyond `max_slippage_pct` between quote and execution. |
-| `ERR_MINIMUM_TRADE_SIZE`     | `400 Bad Request`       | Trade amount is below the minimum threshold ($0.000001 USDC).        |
-| `ERR_POOL_RESERVE_EXHAUSTED` | `400 Bad Request`       | Trade would drain reserves below safety threshold ($100.00 USDC).    |
-| `ERR_MARKET_NOT_TRADABLE`    | `409 Conflict`          | Market is locked, suspended, or already resolved.                    |
-| `ERR_RATE_LIMIT_EXCEEDED`    | `429 Too Many Requests` | Token-bucket limit exceeded. Includes `Retry-After` header.          |
-| `ERR_CLAIM_COOLDOWN`         | `429 Too Many Requests` | Claim submitted before 5-minute cooldown expired.                    |
+| Error Code                   | HTTP Status             | Description                                                                                         |
+| :--------------------------- | :---------------------- | :-------------------------------------------------------------------------------------------------- |
+| `ERR_INSUFFICIENT_FUNDS`     | `400 Bad Request`       | User balance is less than required trade amount.                                                    |
+| `ERR_SLIPPAGE_EXCEEDED`      | `400 Bad Request`       | Pool moved since the quote so the fill is below `min_shares_out` (BUY) or `min_payout_usdc` (SELL). |
+| `ERR_MINIMUM_TRADE_SIZE`     | `400 Bad Request`       | Trade amount is below the minimum threshold ($0.000001 USDC).                                       |
+| `ERR_POOL_RESERVE_EXHAUSTED` | `400 Bad Request`       | Trade would drain reserves below safety threshold ($100.00 USDC).                                   |
+| `ERR_MARKET_NOT_TRADABLE`    | `409 Conflict`          | Market is locked, suspended, or already resolved.                                                   |
+| `ERR_RATE_LIMIT_EXCEEDED`    | `429 Too Many Requests` | Token-bucket limit exceeded. Includes `Retry-After` header.                                         |
+| `ERR_CLAIM_COOLDOWN`         | `429 Too Many Requests` | Claim submitted before 5-minute cooldown expired.                                                   |
 
 ---
 
@@ -821,9 +820,11 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 {
     "outcome": "YES",
     "amount_usdc": "100.00000000",
-    "max_slippage_pct": "2.50000000"
+    "min_shares_out": "135.20000000"
 }
 ```
+
+- **Slippage semantics**: `min_shares_out` is required. The client derives it from a fresh quote's `shares_received` × (1 − tolerance), truncated to 8 decimal places. Price impact is already priced into the quote the user accepted, so the server rejects the order only when pool state moved since that quote and fewer shares would be filled. There is no separate cap on absolute price impact.
 
 - **Response `200 OK`**:
 
@@ -872,7 +873,7 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 
 #### 8. Cash Out and Admin Market Resolution
 
-- **Cash-out endpoint**: `POST /api/v1/portfolio/cashout`, with bearer authentication and an `Idempotency-Key`; it accepts decimal-string shares and returns an authoritative sell quote/receipt.
+- **Cash-out endpoint**: `POST /api/v1/portfolio/cashout`, with bearer authentication and an `Idempotency-Key`; it accepts decimal-string `shares` and a required `min_payout_usdc`, derived from a fresh SELL quote's `payout_usdc` × (1 − tolerance), and rejects the sale with `slippage_exceeded` if the payout would fall below it.
 - **Resolution endpoint**: `POST /api/v1/admin/markets/:id/resolve`.
 - **Headers**: `Authorization: Bearer <admin-token>` and `Idempotency-Key: <opaque-client-key>`.
 - **Payload**: `{ "winning_outcome": "YES", "oracle_proof": "immutable source reference" }`.

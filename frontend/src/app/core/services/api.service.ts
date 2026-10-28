@@ -22,6 +22,7 @@ import {
     QuoteRequest,
     ResolveMarketRequest,
     ResolveMarketResponse,
+    SellQuoteResponse,
     UserProfile,
     VoidMarketResponse
 } from '../models/market.model';
@@ -129,6 +130,18 @@ export class ApiService {
             : `${this.baseUrl}/markets/${encodeURIComponent(marketId)}/quote`;
         const headers = fresh ? new HttpHeaders({ 'Cache-Control': 'no-cache' }) : undefined;
         return this.http.post<BuyQuoteResponse>(url, request, { headers });
+    }
+
+    /**
+     * Get a fresh, uncached authoritative SELL quote for liquidating shares.
+     */
+    getSellQuote(marketId: string, outcome: 'YES' | 'NO', shares: string): Observable<SellQuoteResponse> {
+        const headers = new HttpHeaders({ 'Cache-Control': 'no-cache' });
+        return this.http.post<SellQuoteResponse>(
+            `${this.baseUrl}/markets/${encodeURIComponent(marketId)}/quote?fresh=true`,
+            { action: 'SELL', outcome, shares },
+            { headers }
+        );
     }
 
     /**

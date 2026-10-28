@@ -99,7 +99,9 @@ describe('OrderConfirmDialogComponent', () => {
         expect(el.querySelector('.shares-val')?.textContent?.trim()).toContain('147.05 Shares');
 
         const rows = el.querySelectorAll('.financial-table .table-row');
-        expect(rows.length).toBe(5);
+        expect(rows.length).toBe(6);
+        // 147.05 quoted shares with 2.0% tolerance
+        expect(el.querySelector('.min-shares-val')?.textContent?.trim()).toBe('144.10 Shares');
         expect(el.querySelector('.balance-preview')?.textContent?.trim()).toBe('$900.00');
     });
 
@@ -130,7 +132,7 @@ describe('OrderConfirmDialogComponent', () => {
             {
                 outcome: 'YES',
                 amount_usdc: '100',
-                max_slippage_pct: '2.0'
+                min_shares_out: '144.10900000'
             },
             'test-auth-token',
             expect.any(String)

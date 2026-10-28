@@ -102,9 +102,9 @@ func TestConcurrency_DoubleSpendAttack(t *testing.T) {
 			<-startChan // wait for synchronized release
 
 			orderPayload := map[string]string{
-				"outcome":          "YES",
-				"amount_usdc":      "100.00000000",
-				"max_slippage_pct": "10.00000000",
+				"outcome":        "YES",
+				"amount_usdc":    "100.00000000",
+				"min_shares_out": "0.00000001",
 			}
 			bodyBytes, _ := json.Marshal(orderPayload)
 
@@ -257,9 +257,9 @@ func TestConcurrency_HighContentionPool(t *testing.T) {
 			<-startChan
 
 			orderPayload := map[string]string{
-				"outcome":          "YES",
-				"amount_usdc":      orderAmount.StringFixed(8),
-				"max_slippage_pct": "20.00000000",
+				"outcome":        "YES",
+				"amount_usdc":    orderAmount.StringFixed(8),
+				"min_shares_out": "0.00000001",
 			}
 			bodyBytes, _ := json.Marshal(orderPayload)
 
@@ -345,9 +345,9 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 
 	// Buy 100 USDC of YES
 	orderPayload := map[string]string{
-		"outcome":          "YES",
-		"amount_usdc":      "100.00000000",
-		"max_slippage_pct": "5.00000000",
+		"outcome":        "YES",
+		"amount_usdc":    "100.00000000",
+		"min_shares_out": "0.00000001",
 	}
 	bodyBytes, _ := json.Marshal(orderPayload)
 	wOrder := httptest.NewRecorder()
@@ -368,9 +368,10 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 	// Cash out half of the shares
 	halfShares := sharesOwnedDec.DivRound(decimal.NewFromInt(2), 8)
 	cashOutPayload := map[string]string{
-		"market_id": marketID,
-		"outcome":   "YES",
-		"shares":    halfShares.StringFixed(8),
+		"market_id":       marketID,
+		"outcome":         "YES",
+		"shares":          halfShares.StringFixed(8),
+		"min_payout_usdc": "0.00000001",
 	}
 	cashOutBytes, _ := json.Marshal(cashOutPayload)
 
@@ -404,9 +405,10 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 
 	// Attempting to sell more shares than owned must return HTTP 400
 	excessPayload := map[string]string{
-		"market_id": marketID,
-		"outcome":   "YES",
-		"shares":    sharesOwnedDec.Mul(decimal.NewFromInt(10)).StringFixed(8),
+		"market_id":       marketID,
+		"outcome":         "YES",
+		"shares":          sharesOwnedDec.Mul(decimal.NewFromInt(10)).StringFixed(8),
+		"min_payout_usdc": "0.00000001",
 	}
 	excessBytes, _ := json.Marshal(excessPayload)
 	wExcess := httptest.NewRecorder()
@@ -422,9 +424,10 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 
 	// Attempting to sell an outcome where user has no position at all (e.g. NO) must return HTTP 400
 	noPosPayload := map[string]string{
-		"market_id": marketID,
-		"outcome":   "NO",
-		"shares":    "10.00000000",
+		"market_id":       marketID,
+		"outcome":         "NO",
+		"shares":          "10.00000000",
+		"min_payout_usdc": "0.00000001",
 	}
 	noPosBytes, _ := json.Marshal(noPosPayload)
 	wNoPos := httptest.NewRecorder()
@@ -443,7 +446,7 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 		t.Errorf("Expected error code 'insufficient_shares', got %v", noPosErr["error"])
 	}
 
-	// Attempting to cash out with min_payout_usdc > 100 (which previously failed validation because of ParseSlippagePct)
+	// Attempting to cash out with an unattainable min_payout_usdc floor must be rejected as slippage
 	highPayoutPayload := map[string]string{
 		"market_id":       marketID,
 		"outcome":         "YES",
@@ -494,9 +497,9 @@ func TestOrder_IdempotencyReplay(t *testing.T) {
 
 	idempKey := "idemp-test-replay-" + uuid.New().String()
 	orderPayload := map[string]string{
-		"outcome":          "YES",
-		"amount_usdc":      "50.00000000",
-		"max_slippage_pct": "5.00000000",
+		"outcome":        "YES",
+		"amount_usdc":    "50.00000000",
+		"min_shares_out": "0.00000001",
 	}
 	bodyBytes, _ := json.Marshal(orderPayload)
 
@@ -539,5 +542,128 @@ func TestOrder_IdempotencyReplay(t *testing.T) {
 	_ = pool.QueryRow(ctx, "SELECT cash_balance FROM users WHERE id = $1", userID).Scan(&cashDB)
 	if cashDB != "950.00000000" {
 		t.Fatalf("Double charge occurred! Expected cash balance 950.00000000, got %s", cashDB)
+	}
+}
+
+// TestSlippage_FloorsComeFromQuote verifies slippage is enforced only as drift from the quote:
+// a large order whose price impact exceeds the tolerance still fills when its floor is derived from
+// the quote, and a full cash-out succeeds with a floor derived from the SELL quote.
+func TestSlippage_FloorsComeFromQuote(t *testing.T) {
+	pool, _, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Dedicated 10,000 USDC 50/50 market so price impact is deterministic
+	marketID := uuid.New()
+	slug := fmt.Sprintf("test-slippage-%d", time.Now().UnixNano())
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO markets (id, slug, title, description, category, resolution_source, resolution_date, status)
+		VALUES ($1, $2, 'Test Slippage Market', 'Slippage semantics', 'macro', 'Oracle Official', NOW() + INTERVAL '1 day', 'active');
+	`, marketID, slug); err != nil {
+		t.Fatalf("Failed to create test market: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1, 5000.00000000, 5000.00000000, 10000.00000000, 25000000.00000000, 0.00000000);
+	`, marketID); err != nil {
+		t.Fatalf("Failed to create test liquidity pool: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM ledger_entries WHERE market_id = $1", marketID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM markets WHERE id = $1", marketID)
+	}()
+
+	wAuth := httptest.NewRecorder()
+	reqAuth, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/guest", nil)
+	router.ServeHTTP(wAuth, reqAuth)
+	var authData struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(wAuth.Body.Bytes(), &authData)
+	if authData.Token == "" {
+		t.Fatalf("Failed to provision guest: %d %s", wAuth.Code, wAuth.Body.String())
+	}
+
+	post := func(url string, payload map[string]string, idempKey string) (*httptest.ResponseRecorder, map[string]interface{}) {
+		body, _ := json.Marshal(payload)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+authData.Token)
+		if idempKey != "" {
+			req.Header.Set("Idempotency-Key", idempKey)
+		}
+		router.ServeHTTP(w, req)
+		var out map[string]interface{}
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return w, out
+	}
+	quoteURL := fmt.Sprintf("/api/v1/markets/%s/quote", marketID)
+	orderURL := fmt.Sprintf("/api/v1/markets/%s/orders", marketID)
+	tolerance := decimal.RequireFromString("0.99") // 1% tolerance, the UI default
+
+	// 1. BUY quote for 500 USDC: price impact is far above 1%
+	w, buyQuote := post(quoteURL, map[string]string{"action": "BUY", "outcome": "YES", "amount_usdc": "500.00000000"}, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("BUY quote failed: %d %s", w.Code, w.Body.String())
+	}
+	quotedShares := decimal.RequireFromString(buyQuote["shares_received"].(string))
+	if impact := decimal.RequireFromString(buyQuote["price_impact_pct"].(string)); impact.LessThanOrEqual(decimal.NewFromInt(1)) {
+		t.Fatalf("Test precondition: expected price impact above 1%%, got %s", impact)
+	}
+
+	// 2. min_shares_out is required
+	w, errBody := post(orderURL, map[string]string{"outcome": "YES", "amount_usdc": "500.00000000"}, "slip-missing-"+uuid.New().String())
+	if w.Code != http.StatusBadRequest || errBody["error"] != "min_shares_out_required" {
+		t.Errorf("Expected 400 min_shares_out_required, got %d %v", w.Code, errBody["error"])
+	}
+
+	// 3. A floor above what the pool can fill is rejected as slippage
+	w, errBody = post(orderURL, map[string]string{
+		"outcome": "YES", "amount_usdc": "500.00000000",
+		"min_shares_out": quotedShares.Add(decimal.NewFromInt(1)).StringFixed(8),
+	}, "slip-floor-"+uuid.New().String())
+	if w.Code != http.StatusBadRequest || errBody["error"] != "slippage_exceeded" {
+		t.Errorf("Expected 400 slippage_exceeded for unattainable floor, got %d %v", w.Code, errBody["error"])
+	}
+
+	// 4. The same large order fills when its floor is quote x (1 - tolerance)
+	w, buyResp := post(orderURL, map[string]string{
+		"outcome": "YES", "amount_usdc": "500.00000000",
+		"min_shares_out": quotedShares.Mul(tolerance).Truncate(8).StringFixed(8),
+	}, "slip-ok-"+uuid.New().String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Expected large order to fill within quote tolerance, got %d %s", w.Code, w.Body.String())
+	}
+	if filled := decimal.RequireFromString(buyResp["shares_filled"].(string)); !filled.Equal(quotedShares) {
+		t.Errorf("Expected fill to match the unchanged quote: quoted %s, filled %s", quotedShares, filled)
+	}
+
+	// 5. Full cash-out with a floor from the SELL quote succeeds even though impact exceeds 2%
+	sharesOwned := buyResp["new_shares_owned"].(string)
+	w, sellQuote := post(quoteURL, map[string]string{"action": "SELL", "outcome": "YES", "shares": sharesOwned}, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("SELL quote failed: %d %s", w.Code, w.Body.String())
+	}
+	quotedPayout := decimal.RequireFromString(sellQuote["payout_usdc"].(string))
+
+	w, errBody = post("/api/v1/portfolio/cashout", map[string]string{
+		"market_id": marketID.String(), "outcome": "YES", "shares": sharesOwned,
+	}, "slip-cash-missing-"+uuid.New().String())
+	if w.Code != http.StatusBadRequest || errBody["error"] != "min_payout_usdc_required" {
+		t.Errorf("Expected 400 min_payout_usdc_required, got %d %v", w.Code, errBody["error"])
+	}
+
+	w, cashResp := post("/api/v1/portfolio/cashout", map[string]string{
+		"market_id": marketID.String(), "outcome": "YES", "shares": sharesOwned,
+		"min_payout_usdc": quotedPayout.Mul(tolerance).Truncate(8).StringFixed(8),
+	}, "slip-cash-ok-"+uuid.New().String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected full cash-out within quote tolerance, got %d %s", w.Code, w.Body.String())
+	}
+	if paid := decimal.RequireFromString(cashResp["payout_usdc"].(string)); !paid.Equal(quotedPayout) {
+		t.Errorf("Expected payout to match the unchanged SELL quote: quoted %s, paid %s", quotedPayout, paid)
 	}
 }

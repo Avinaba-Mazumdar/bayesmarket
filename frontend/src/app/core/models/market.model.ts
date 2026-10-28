@@ -46,12 +46,26 @@ export interface BuyQuoteResponse {
     new_collateral: string;
 }
 
+export interface SellQuoteResponse {
+    market_id: string;
+    action: 'SELL';
+    outcome: 'YES' | 'NO';
+    shares_to_sell: string;
+    payout_usdc: string;
+    avg_price: string;
+    initial_price: string;
+    new_price: string;
+    price_impact_pct: string;
+    new_reserve_yes: string;
+    new_reserve_no: string;
+    new_collateral: string;
+}
+
 export interface PlaceOrderRequest {
     outcome: 'YES' | 'NO';
     amount_usdc: string;
-    max_slippage_pct?: string;
-    min_shares_out?: string;
-    expected_price?: string;
+    /** Quoted shares_received reduced by the slippage tolerance; the server rejects fills below it. */
+    min_shares_out: string;
 }
 
 export interface OrderResponse {
@@ -105,7 +119,8 @@ export interface CashOutRequest {
     market_id: string;
     outcome: 'YES' | 'NO';
     shares: string;
-    min_payout_usdc?: string;
+    /** Quoted payout_usdc reduced by the slippage tolerance; the server rejects payouts below it. */
+    min_payout_usdc: string;
 }
 
 export interface CashOutResponse {

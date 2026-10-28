@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, model, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, model, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LucideArrowUp, LucideArrowDown, LucideCircleAlert } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
-import { CashOutResponse, UserPosition } from '../../core/models/market.model';
+import { CashOutResponse, SellQuoteResponse, UserPosition } from '../../core/models/market.model';
+import { applyTolerance, truncateDecimal } from '../../core/utils/decimal';
 import { DialogComponent } from '../../shared/components/dialog/dialog.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
@@ -62,16 +63,21 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                         </div>
 
                         <div class="table-row" role="row">
-                            <span class="cell-label" role="rowheader">Estimated Gross Proceeds</span>
+                            <span class="cell-label" role="rowheader">Quoted Payout</span>
                             <span class="cell-val tabular-nums highlight-val" role="cell">
-                                {{ '$' + formattedProceeds() + ' USDC' }}
+                                {{ formattedProceeds() }}
                             </span>
                         </div>
 
                         <div class="table-row" role="row">
-                            <span class="cell-label" role="rowheader">Min Payout (2% Slippage Guard)</span>
-                            <span class="cell-val tabular-nums" role="cell">
-                                {{ '$' + formattedMinPayout() + ' USDC' }}
+                            <span class="cell-label" role="rowheader">Est. Price Impact</span>
+                            <span class="cell-val tabular-nums" role="cell">{{ formattedImpact() }}</span>
+                        </div>
+
+                        <div class="table-row" role="row">
+                            <span class="cell-label" role="rowheader">Min Payout ({{ slippageTolerancePct }}% Slippage Tolerance)</span>
+                            <span class="cell-val tabular-nums min-payout-val" role="cell">
+                                {{ formattedMinPayout() }}
                             </span>
                         </div>
 
@@ -93,9 +99,20 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                         </div>
                     </div>
 
+                    @if (quoteError(); as err) {
+                        <div class="amm-notice quote-error" role="alert">
+                            <svg lucideCircleAlert class="notice-glyph" [size]="16" aria-hidden="true"></svg>
+                            <span>{{ err }}</span>
+                            <app-button variant="outline" size="default" ariaLabel="Retry sell quote" (btnClick)="refreshQuote()">Retry Quote</app-button>
+                        </div>
+                    }
+
                     <div class="amm-notice" role="note">
                         <svg lucideCircleAlert class="notice-glyph" [size]="16" aria-hidden="true"></svg>
-                        <span> Shares sell atomically into the AMM bonding curve. Proceeds are credited immediately to your USDC balance. </span>
+                        <span>
+                            Shares sell into the AMM bonding curve, so large sales move the price. The sale is rejected if the price moves against you by more
+                            than the tolerance since this quote.
+                        </span>
                     </div>
                 </div>
             }
@@ -109,8 +126,8 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                     <app-button
                         variant="primary"
                         size="default"
-                        [loading]="isExecuting()"
-                        [disabled]="isExecuting()"
+                        [loading]="isExecuting() || isQuoting()"
+                        [disabled]="isExecuting() || minPayout() === null"
                         ariaLabel="Confirm liquidation and sell shares for USDC"
                         (btnClick)="onConfirmCashOut(pos)"
                     >
@@ -294,7 +311,56 @@ export class CashOutDialogComponent {
     private readonly toastService = inject(ToastService);
     private readonly destroyRef = inject(DestroyRef);
 
+    /** Max adverse movement between the SELL quote and execution. */
+    readonly slippageTolerancePct = '2.0';
+
     readonly isExecuting = signal<boolean>(false);
+    readonly isQuoting = signal<boolean>(false);
+    readonly sellQuote = signal<SellQuoteResponse | null>(null);
+    readonly quoteError = signal<string | null>(null);
+
+    /** Server-side slippage floor: the quoted payout reduced by the tolerance. */
+    readonly minPayout = computed(() => {
+        const quote = this.sellQuote();
+        return quote ? applyTolerance(quote.payout_usdc, this.slippageTolerancePct) : null;
+    });
+
+    constructor() {
+        // Fetch an authoritative SELL quote whenever the dialog opens for a position
+        effect(() => {
+            const pos = this.position();
+            if (this.isOpen() && pos) {
+                untracked(() => this.refreshQuote());
+            } else {
+                untracked(() => {
+                    this.sellQuote.set(null);
+                    this.quoteError.set(null);
+                });
+            }
+        });
+    }
+
+    refreshQuote(): void {
+        const pos = this.position();
+        if (!pos) return;
+
+        this.isQuoting.set(true);
+        this.quoteError.set(null);
+        this.sellQuote.set(null);
+        this.apiService
+            .getSellQuote(pos.market_id, pos.outcome, pos.shares_owned)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (quote) => {
+                    this.isQuoting.set(false);
+                    this.sellQuote.set(quote);
+                },
+                error: (err) => {
+                    this.isQuoting.set(false);
+                    this.quoteError.set(err?.error?.message || 'Could not get a sell quote for this position.');
+                }
+            });
+    }
 
     protected readonly formattedShares = computed(() => {
         const pos = this.position();
@@ -311,19 +377,19 @@ export class CashOutDialogComponent {
     });
 
     protected readonly formattedProceeds = computed(() => {
-        const pos = this.position();
-        if (!pos) return '0.00';
-        const val = parseFloat(pos.current_value_usdc || pos.market_value || '0');
-        if (!isNaN(val) && val > 0) return val.toFixed(2);
-        const shares = parseFloat(pos.shares_owned || '0');
-        const price = parseFloat(pos.current_price || '0');
-        return isNaN(shares) || isNaN(price) ? '0.00' : (shares * price).toFixed(2);
+        const quote = this.sellQuote();
+        if (quote) return `$${truncateDecimal(quote.payout_usdc, 2)} USDC`;
+        return this.isQuoting() ? 'Quoting…' : '—';
+    });
+
+    protected readonly formattedImpact = computed(() => {
+        const quote = this.sellQuote();
+        return quote ? `${truncateDecimal(quote.price_impact_pct.replace(/^-/, ''), 2)}%` : '—';
     });
 
     protected readonly formattedMinPayout = computed(() => {
-        const proceeds = parseFloat(this.formattedProceeds()) || 0;
-        const minPayout = Math.max(0, proceeds * 0.98);
-        return minPayout.toFixed(2);
+        const min = this.minPayout();
+        return min === null ? '—' : `$${truncateDecimal(min, 2)} USDC`;
     });
 
     protected readonly isPnLPositive = computed(() => {
@@ -336,7 +402,7 @@ export class CashOutDialogComponent {
     protected readonly estimatedPostBalance = computed(() => {
         const balStr = this.authStore.cashBalance().replace(/[$,]/g, '');
         const currentBal = parseFloat(balStr) || 0;
-        const proceeds = parseFloat(this.formattedProceeds()) || 0;
+        const proceeds = parseFloat(this.sellQuote()?.payout_usdc ?? '0') || 0;
         return (currentBal + proceeds).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     });
 
@@ -353,20 +419,22 @@ export class CashOutDialogComponent {
             return;
         }
 
+        const minPayout = this.minPayout();
+        if (minPayout === null) {
+            this.toastService.error('Quote Required', 'Wait for the sell quote before confirming.');
+            return;
+        }
+
         this.isExecuting.set(true);
         const idempotencyKey = `cashout-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-        const proceeds = parseFloat(this.formattedProceeds()) || 0;
-        // Apply 2% maximum slippage protection against front-running and AMM reserve drift
-        const minPayout = Math.max(0, proceeds * 0.98);
 
         this.apiService
             .cashOut(
                 {
                     market_id: pos.market_id,
                     outcome: pos.outcome,
-                    shares: parseFloat(pos.shares_owned).toFixed(8),
-                    min_payout_usdc: minPayout > 0 ? minPayout.toFixed(8) : undefined
+                    shares: pos.shares_owned,
+                    min_payout_usdc: minPayout
                 },
                 token,
                 idempotencyKey
@@ -392,6 +460,10 @@ export class CashOutDialogComponent {
                     this.isExecuting.set(false);
                     const msg = err?.error?.message || 'Failed to liquidate outcome shares back into the pool.';
                     this.toastService.error('Liquidation Failed', msg);
+                    // The pool moved; show the current price before the user retries
+                    if (err?.error?.error === 'slippage_exceeded') {
+                        this.refreshQuote();
+                    }
                 }
             });
     }
