@@ -107,12 +107,24 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                         </div>
                         <div class="banner-body">
                             <div class="banner-title-row">
-                                <h2 class="banner-title">Market Resolved: {{ winningOutcomeDisplay() }} Won</h2>
+                                <h2 class="banner-title">
+                                    @if (winningOutcomeDisplay(); as outcome) {
+                                        Market Resolved: {{ outcome }} Won
+                                    } @else {
+                                        Market Resolved
+                                    }
+                                </h2>
                                 <app-badge variant="secondary" size="sm">OFFICIAL SETTLEMENT</app-badge>
                             </div>
                             <p class="banner-description">
-                                This binary prediction market has officially settled. All winning shares (<strong>{{ winningOutcomeDisplay() }}</strong
-                                >) have been redeemed at the fixed oracle price of <strong>$1.00 USDC</strong> per share. Losing shares have expired at $0.00.
+                                This binary prediction market has officially settled.
+                                @if (winningOutcomeDisplay(); as outcome) {
+                                    All winning shares (<strong>{{ outcome }}</strong
+                                    >)
+                                } @else {
+                                    All winning shares
+                                }
+                                have been redeemed at the fixed oracle price of <strong>$1.00 USDC</strong> per share. Losing shares have expired at $0.00.
                             </p>
                         </div>
                     </section>
@@ -545,14 +557,15 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
 
     // Oracle Market Resolution state
     readonly isResolvedBannerVisible = signal<boolean>(false);
-    readonly winningOutcome = signal<string | null>(null);
+    readonly winningOutcome = signal<'YES' | 'NO' | null>(null);
 
     protected readonly isResolved = computed(() => {
         return this.market()?.status === 'resolved' || this.isResolvedBannerVisible();
     });
 
     protected readonly winningOutcomeDisplay = computed(() => {
-        return this.winningOutcome() || this.market()?.winning_outcome || 'YES';
+        // Never guess: show the outcome only when the server or the MARKET_RESOLVED frame reported it
+        return this.winningOutcome() ?? this.market()?.winning_outcome ?? null;
     });
 
     constructor() {

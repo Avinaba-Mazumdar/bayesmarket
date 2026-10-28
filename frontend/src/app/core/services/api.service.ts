@@ -15,13 +15,15 @@ import {
     GoogleCallbackRequest,
     GoogleVerifyRequest,
     Market,
+    MarketStatus,
     OrderResponse,
     PlaceOrderRequest,
     PortfolioResponse,
     QuoteRequest,
     ResolveMarketRequest,
     ResolveMarketResponse,
-    UserProfile
+    UserProfile,
+    VoidMarketResponse
 } from '../models/market.model';
 
 @Injectable({
@@ -100,6 +102,15 @@ export class ApiService {
     getMarkets(category?: string): Observable<Market[]> {
         const url = category && category !== 'all' ? `${this.baseUrl}/markets?category=${encodeURIComponent(category)}` : `${this.baseUrl}/markets`;
         return this.http.get<Market[]>(url);
+    }
+
+    /**
+     * Fetch markets in every lifecycle status for the admin console, optionally filtered by status.
+     */
+    getAdminMarkets(token?: string | null, status?: MarketStatus): Observable<Market[]> {
+        const headers = this.buildHeaders(token);
+        const query = status ? `?status=${encodeURIComponent(status)}` : '';
+        return this.http.get<Market[]>(`${this.baseUrl}/admin/markets${query}`, { headers });
     }
 
     /**
@@ -185,11 +196,19 @@ export class ApiService {
     }
 
     /**
-     * Administratively delete a prediction market and its dependent records.
+     * Administratively delete a prediction market. The backend refuses markets with trading history.
      */
     deleteMarket(marketId: string, token?: string | null): Observable<DeleteMarketResponse> {
         const headers = this.buildHeaders(token);
         return this.http.delete<DeleteMarketResponse>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}`, { headers });
+    }
+
+    /**
+     * Administratively void a prediction market, refunding every open position at cost basis.
+     */
+    voidMarket(marketId: string, token: string | null | undefined, idempotencyKey: string): Observable<VoidMarketResponse> {
+        const headers = this.buildHeaders(token, idempotencyKey);
+        return this.http.post<VoidMarketResponse>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}/void`, {}, { headers });
     }
 
     /**

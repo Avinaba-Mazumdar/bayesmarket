@@ -49,6 +49,7 @@ type MarketSummaryResponse struct {
 	ResolutionSource  string           `json:"resolution_source"`
 	ResolutionDate    string           `json:"resolution_date"`
 	Status            string           `json:"status"`
+	WinningOutcome    *string          `json:"winning_outcome"` // "YES" or "NO" once resolved, otherwise null
 	ProbabilityYes    string           `json:"probability_yes"`
 	ProbabilityNo     string           `json:"probability_no"`
 	ProbabilityYesPct string           `json:"probability_yes_pct"`
@@ -110,17 +111,7 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	query := `
-		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url, 
-		       m.resolution_source, m.resolution_date, m.status, m.created_at,
-		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
-		FROM markets m
-		JOIN liquidity_pools p ON p.market_id = m.id
-		WHERE ($1 = '' OR m.category = $1) AND m.status = 'active'
-		ORDER BY m.created_at ASC
-		LIMIT $2 OFFSET $3;
-	`
-	rows, err := h.pool.Query(ctx, query, category, limit, offset)
+	rows, err := h.listMarkets(ctx, category, "active", limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "database_error",
@@ -128,28 +119,126 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 		})
 		return
 	}
+
+	markets := make([]MarketSummaryResponse, 0, len(rows))
+	for _, r := range rows {
+		markets = append(markets, r.summary)
+
+		// Populate single-market cache as well
+		if h.cache != nil {
+			h.cache.SetMarket(r.summary.ID, r.summary.Slug, r.summary, r.reserves, r.id)
+		}
+	}
+
+	if h.cache != nil {
+		h.cache.SetMarkets(category, markets)
+	}
+
+	c.JSON(http.StatusOK, markets)
+}
+
+// adminListableStatuses are the market statuses the admin console can filter by.
+var adminListableStatuses = map[string]bool{
+	"active":    true,
+	"suspended": true,
+	"locked":    true,
+	"resolved":  true,
+	"voided":    true,
+}
+
+// HandleAdminListMarkets returns markets in every lifecycle status so admins can manage
+// suspended, locked, resolved and voided markets. It bypasses the public market cache.
+//
+// GET /api/v1/admin/markets?status=&category=&limit=&offset=
+func (h *MarketHandler) HandleAdminListMarkets(c *gin.Context) {
+	category := strings.ToLower(strings.TrimSpace(c.Query("category")))
+
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	if status != "" && !adminListableStatuses[status] {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid_status",
+			"message": "status must be one of 'active', 'suspended', 'locked', 'resolved' or 'voided'",
+		})
+		return
+	}
+
+	limit := 200
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			if parsed > 500 {
+				parsed = 500
+			}
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := h.listMarkets(ctx, category, status, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "database_error",
+			"message": "Failed to query prediction markets",
+		})
+		return
+	}
+
+	markets := make([]MarketSummaryResponse, 0, len(rows))
+	for _, r := range rows {
+		markets = append(markets, r.summary)
+	}
+
+	c.JSON(http.StatusOK, markets)
+}
+
+type marketListRow struct {
+	id       uuid.UUID
+	summary  MarketSummaryResponse
+	reserves amm.PoolReserves
+}
+
+// listMarkets queries markets with their pool state. An empty category or status matches all.
+func (h *MarketHandler) listMarkets(ctx context.Context, category, status string, limit, offset int) ([]marketListRow, error) {
+	query := `
+		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url,
+		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
+		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
+		FROM markets m
+		JOIN liquidity_pools p ON p.market_id = m.id
+		WHERE ($1 = '' OR m.category = $1) AND ($2 = '' OR m.status = $2)
+		ORDER BY m.created_at ASC
+		LIMIT $3 OFFSET $4;
+	`
+	rows, err := h.pool.Query(ctx, query, category, status, limit, offset)
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
-	var markets []MarketSummaryResponse
+	var result []marketListRow
 	for rows.Next() {
 		var (
-			id, slug, title, desc, cat, resSource, status string
-			imgURL                                        *string
-			resDate, createdAt                            time.Time
-			rYes, rNo, collateral, volume                 decimal.Decimal
+			id                                           uuid.UUID
+			slug, title, desc, cat, resSource, mktStatus string
+			imgURL, winningOutcome                       *string
+			resDate, createdAt                           time.Time
+			rYes, rNo, collateral, volume                decimal.Decimal
 		)
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&id, &slug, &title, &desc, &cat, &imgURL,
-			&resSource, &resDate, &status, &createdAt,
+			&resSource, &resDate, &mktStatus, &winningOutcome, &createdAt,
 			&rYes, &rNo, &collateral, &volume,
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to parse market row",
-			})
-			return
+		); err != nil {
+			return nil, err
 		}
 
 		poolReserves := amm.PoolReserves{
@@ -161,48 +250,35 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 		pYesPct := pYes.Mul(decimal.NewFromInt(100)).StringFixed(2)
 		pNoPct := pNo.Mul(decimal.NewFromInt(100)).StringFixed(2)
 
-		summary := MarketSummaryResponse{
-			ID:                id,
-			Slug:              slug,
-			Title:             title,
-			Description:       desc,
-			Category:          cat,
-			ImageURL:          imgURL,
-			ResolutionSource:  resSource,
-			ResolutionDate:    resDate.Format(time.RFC3339),
-			Status:            status,
-			ProbabilityYes:    pYes.StringFixed(8),
-			ProbabilityNo:     pNo.StringFixed(8),
-			ProbabilityYesPct: pYesPct,
-			ProbabilityNoPct:  pNoPct,
-			Reserves: ReservesResponse{
-				ReserveYes:        rYes.StringFixed(8),
-				ReserveNo:         rNo.StringFixed(8),
-				CollateralReserve: collateral.StringFixed(8),
-				TotalVolumeUSDC:   volume.StringFixed(8),
+		result = append(result, marketListRow{
+			id:       id,
+			reserves: poolReserves,
+			summary: MarketSummaryResponse{
+				ID:                id.String(),
+				Slug:              slug,
+				Title:             title,
+				Description:       desc,
+				Category:          cat,
+				ImageURL:          imgURL,
+				ResolutionSource:  resSource,
+				ResolutionDate:    resDate.Format(time.RFC3339),
+				Status:            mktStatus,
+				WinningOutcome:    winningOutcome,
+				ProbabilityYes:    pYes.StringFixed(8),
+				ProbabilityNo:     pNo.StringFixed(8),
+				ProbabilityYesPct: pYesPct,
+				ProbabilityNoPct:  pNoPct,
+				Reserves: ReservesResponse{
+					ReserveYes:        rYes.StringFixed(8),
+					ReserveNo:         rNo.StringFixed(8),
+					CollateralReserve: collateral.StringFixed(8),
+					TotalVolumeUSDC:   volume.StringFixed(8),
+				},
+				CreatedAt: createdAt.Format(time.RFC3339),
 			},
-			CreatedAt: createdAt.Format(time.RFC3339),
-		}
-
-		markets = append(markets, summary)
-
-		// Populate single-market cache as well
-		if h.cache != nil {
-			if mUUID, parseErr := uuid.Parse(id); parseErr == nil {
-				h.cache.SetMarket(id, slug, summary, poolReserves, mUUID)
-			}
-		}
+		})
 	}
-
-	if markets == nil {
-		markets = []MarketSummaryResponse{}
-	}
-
-	if h.cache != nil {
-		h.cache.SetMarkets(category, markets)
-	}
-
-	c.JSON(http.StatusOK, markets)
+	return result, rows.Err()
 }
 
 // HandleGetMarketByID returns detailed market metadata by UUID or Slug.
@@ -228,7 +304,7 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 
 	query := `
 		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url, 
-		       m.resolution_source, m.resolution_date, m.status, m.created_at,
+		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
 		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
 		FROM markets m
 		JOIN liquidity_pools p ON p.market_id = m.id
@@ -236,14 +312,14 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 	`
 	var (
 		id, slug, title, desc, cat, resSource, status string
-		imgURL                                        *string
+		imgURL, winningOutcome                        *string
 		resDate, createdAt                            time.Time
 		rYes, rNo, collateral, volume                 decimal.Decimal
 	)
 
 	err := h.pool.QueryRow(ctx, query, param).Scan(
 		&id, &slug, &title, &desc, &cat, &imgURL,
-		&resSource, &resDate, &status, &createdAt,
+		&resSource, &resDate, &status, &winningOutcome, &createdAt,
 		&rYes, &rNo, &collateral, &volume,
 	)
 	if err != nil {
@@ -272,6 +348,7 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 		ResolutionSource:  resSource,
 		ResolutionDate:    resDate.Format(time.RFC3339),
 		Status:            status,
+		WinningOutcome:    winningOutcome,
 		ProbabilityYes:    pYes.StringFixed(8),
 		ProbabilityNo:     pNo.StringFixed(8),
 		ProbabilityYesPct: pYes.Mul(decimal.NewFromInt(100)).StringFixed(2),

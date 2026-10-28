@@ -19,7 +19,14 @@ import {
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
-import { Market, CreateMarketRequest, CreateMarketResponse, EditMarketRequest, ResolveMarketResponse } from '../../core/models/market.model';
+import {
+    Market,
+    CreateMarketRequest,
+    CreateMarketResponse,
+    EditableMarketStatus,
+    EditMarketRequest,
+    ResolveMarketResponse
+} from '../../core/models/market.model';
 import { DialogComponent } from '../../shared/components/dialog/dialog.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { BadgeComponent, BadgeVariant } from '../../shared/components/badge/badge.component';
@@ -90,7 +97,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                     (click)="activeTab.set('manage')"
                 >
                     <svg lucideSlidersVertical [size]="16" aria-hidden="true"></svg>
-                    <span>Manage Markets ({{ activeMarkets().length }})</span>
+                    <span>Manage Markets ({{ allMarkets().length }})</span>
                 </button>
 
                 <button
@@ -114,7 +121,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                     (click)="activeTab.set('resolve')"
                 >
                     <svg lucideCircleCheck [size]="16" aria-hidden="true"></svg>
-                    <span>Resolve Active Market</span>
+                    <span>Resolve Market</span>
                 </button>
             </div>
 
@@ -123,13 +130,11 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 <div class="tab-pane manage-markets-pane">
                     <div class="manage-header-row">
                         <div>
-                            <h2 class="section-title">All Live Prediction Markets</h2>
-                            <p class="section-desc">Full administrative control: inspect status, modify parameters, or permanently purge markets.</p>
+                            <h2 class="section-title">All Prediction Markets</h2>
+                            <p class="section-desc">Every market in every status. Inspect status, edit parameters, or void and delete markets.</p>
                         </div>
                         <div class="manage-header-actions">
-                            <app-button variant="outline" size="sm" (btnClick)="loadActiveMarkets()" ariaLabel="Refresh markets list">
-                                Refresh List
-                            </app-button>
+                            <app-button variant="outline" size="sm" (btnClick)="loadMarkets()" ariaLabel="Refresh markets list"> Refresh List </app-button>
                             <app-button variant="primary" size="sm" (btnClick)="activeTab.set('create')" ariaLabel="Create new market">
                                 <svg lucidePlus [size]="14" aria-hidden="true"></svg>
                                 <span>Create Market</span>
@@ -137,13 +142,13 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                         </div>
                     </div>
 
-                    @if (activeMarkets().length === 0) {
+                    @if (allMarkets().length === 0) {
                         <div class="empty-markets-card">
                             <div class="empty-icon-circle">
                                 <svg lucideSlidersVertical [size]="32" aria-hidden="true"></svg>
                             </div>
-                            <h3 class="empty-title">Zero Markets in Neon Database</h3>
-                            <p class="empty-desc">All pre-fed markets have been purged. Use the creation form to deploy your first live prediction market.</p>
+                            <h3 class="empty-title">No Markets Yet</h3>
+                            <p class="empty-desc">Use the creation form to deploy your first prediction market.</p>
                             <app-button variant="primary" size="default" (btnClick)="activeTab.set('create')" ariaLabel="Create first market">
                                 <svg lucidePlus [size]="16" aria-hidden="true"></svg>
                                 <span>Create Prediction Market</span>
@@ -164,7 +169,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @for (m of activeMarkets(); track m.id) {
+                                    @for (m of allMarkets(); track m.id) {
                                         <tr>
                                             <td class="td-market">
                                                 <div class="market-cell-title">
@@ -196,6 +201,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                                     <app-button
                                                         variant="secondary"
                                                         size="sm"
+                                                        [disabled]="isTerminal(m)"
                                                         (btnClick)="openEditModal(m)"
                                                         ariaLabel="Edit market {{ m.title }}"
                                                     >
@@ -205,11 +211,12 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                                     <app-button
                                                         variant="destructive"
                                                         size="sm"
+                                                        [disabled]="isTerminal(m)"
                                                         (btnClick)="openDeleteModal(m)"
-                                                        ariaLabel="Delete market {{ m.title }}"
+                                                        ariaLabel="Void or delete market {{ m.title }}"
                                                     >
                                                         <svg lucideTrash [size]="14" aria-hidden="true"></svg>
-                                                        <span>Delete</span>
+                                                        <span>Void / Delete</span>
                                                     </app-button>
                                                 </div>
                                             </td>
@@ -421,7 +428,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 </div>
             }
 
-            <!-- Tab 2: Resolve Active Market View -->
+            <!-- Tab 2: Resolve Market View -->
             @if (activeTab() === 'resolve') {
                 <div class="tab-pane resolve-market-pane">
                     <div class="form-card resolve-card">
@@ -432,14 +439,14 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
 
                         <div class="market-form">
                             <div class="form-group">
-                                <app-label htmlFor="resolve-market-select">Select Active Market *</app-label>
+                                <app-label htmlFor="resolve-market-select">Select Market (active, suspended or locked) *</app-label>
                                 <app-select
                                     id="resolve-market-select"
                                     [options]="marketOptions()"
                                     [value]="selectedMarketId()"
                                     (valueChange)="selectedMarketId.set($event)"
                                     placeholder="Choose market to resolve..."
-                                    ariaLabel="Active market selector"
+                                    ariaLabel="Market to resolve"
                                 />
                             </div>
 
@@ -554,7 +561,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 [open]="!!editingMarket()"
                 (closed)="closeEditModal()"
                 title="Edit Prediction Market"
-                description="Modify live market question, status, or resolution criteria."
+                description="Modify market question, status, or resolution criteria."
                 size="lg"
                 role="dialog"
                 ariaLabel="Edit Prediction Market Dialog"
@@ -655,15 +662,15 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
             <app-dialog
                 [open]="!!deletingMarket()"
                 (closed)="closeDeleteModal()"
-                title="Delete Prediction Market"
+                title="Void or Delete Prediction Market"
                 description="Permanently delete prediction market and purge double-entry records."
                 size="sm"
                 role="alertdialog"
-                ariaLabel="Delete Prediction Market Alert"
+                ariaLabel="Void or Delete Prediction Market Alert"
             >
                 @if (deletingMarket(); as dm) {
                     <div class="delete-body">
-                        <p class="delete-warning-text">Are you sure you want to permanently delete this market?</p>
+                        <p class="delete-warning-text">How do you want to remove this market?</p>
                         <div class="delete-market-preview">
                             <span class="preview-label">Market Question:</span>
                             <strong class="preview-title">{{ dm.title }}</strong>
@@ -671,9 +678,10 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                         </div>
                         <div class="danger-box">
                             <p class="danger-text">
-                                Warning: This permanently removes the market record, all liquidity pool balances, order-flow trades, and double-entry ledger
-                                entries from Neon DB. This action cannot be reversed.
+                                Void &amp; Refund cancels the market and returns each open position's cost basis to its holder. Trade and ledger history is
+                                kept. A voided market can't be traded, edited or resolved again.
                             </p>
+                            <p class="danger-text">Delete permanently removes the market. It only works for markets that have never been traded.</p>
                         </div>
 
                         <div class="dialog-actions">
@@ -681,14 +689,26 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                 Cancel
                             </app-button>
                             <app-button
+                                variant="secondary"
+                                size="default"
+                                type="button"
+                                [disabled]="isVoidingSubmitting()"
+                                [loading]="isDeletingSubmitting()"
+                                (btnClick)="confirmDeleteMarket()"
+                                ariaLabel="Permanently delete untraded market"
+                            >
+                                Delete
+                            </app-button>
+                            <app-button
                                 variant="destructive"
                                 size="default"
                                 type="button"
-                                [loading]="isDeletingSubmitting()"
-                                (btnClick)="confirmDeleteMarket()"
-                                ariaLabel="Confirm permanent deletion"
+                                [disabled]="isDeletingSubmitting()"
+                                [loading]="isVoidingSubmitting()"
+                                (btnClick)="confirmVoidMarket()"
+                                ariaLabel="Void market and refund open positions"
                             >
-                                Permanently Delete
+                                Void &amp; Refund
                             </app-button>
                         </div>
                     </div>
@@ -1299,6 +1319,7 @@ export class AdminDashboardComponent implements OnInit {
     readonly isResolving = signal<boolean>(false);
     readonly isEditingSubmitting = signal<boolean>(false);
     readonly isDeletingSubmitting = signal<boolean>(false);
+    readonly isVoidingSubmitting = signal<boolean>(false);
     readonly isDev = signal<boolean>(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
 
     readonly activeTab = signal<'manage' | 'create' | 'resolve'>('manage');
@@ -1315,8 +1336,10 @@ export class AdminDashboardComponent implements OnInit {
 
     readonly createdMarket = signal<CreateMarketResponse | null>(null);
 
+    // Every market in every status, from the admin list endpoint
+    readonly allMarkets = signal<Market[]>([]);
+
     // Resolve Market Form fields
-    readonly activeMarkets = signal<Market[]>([]);
     readonly selectedMarketId = signal<string>('');
     readonly winningOutcome = signal<'YES' | 'NO'>('YES');
     readonly oracleProof = signal<string>('');
@@ -1326,7 +1349,7 @@ export class AdminDashboardComponent implements OnInit {
     readonly editingMarket = signal<Market | null>(null);
     readonly editTitle = signal<string>('');
     readonly editCategory = signal<string>('ai');
-    readonly editStatus = signal<'active' | 'suspended' | 'closed' | 'resolved'>('active');
+    readonly editStatus = signal<EditableMarketStatus>('active');
     readonly editResolutionDateInput = signal<string>('');
     readonly editDescription = signal<string>('');
     readonly editResolutionSource = signal<string>('');
@@ -1334,12 +1357,14 @@ export class AdminDashboardComponent implements OnInit {
 
     // Delete Market Modal fields
     readonly deletingMarket = signal<Market | null>(null);
+    // Generated once per opened dialog so a retried void replays instead of executing twice
+    private voidIdempotencyKey = '';
 
     constructor() {
         // Auto-load markets whenever admin permissions are active
         effect(() => {
             if (this.authStore.isAdmin()) {
-                this.loadActiveMarkets();
+                this.loadMarkets();
             }
         });
     }
@@ -1349,7 +1374,7 @@ export class AdminDashboardComponent implements OnInit {
     }
 
     onStatusChange(val: string): void {
-        if (val === 'active' || val === 'suspended' || val === 'closed' || val === 'resolved') {
+        if (val === 'active' || val === 'suspended' || val === 'locked') {
             this.editStatus.set(val);
         }
     }
@@ -1364,13 +1389,12 @@ export class AdminDashboardComponent implements OnInit {
     readonly statusOptions: SelectOption[] = [
         { value: 'active', label: 'Active (Trading Open)' },
         { value: 'suspended', label: 'Suspended (Trading Halted)' },
-        { value: 'closed', label: 'Closed (Awaiting Settlement)' },
-        { value: 'resolved', label: 'Resolved (Finalized)' }
+        { value: 'locked', label: 'Locked (Awaiting Resolution)' }
     ];
 
     readonly marketOptions = computed<SelectOption[]>(() => {
-        return this.activeMarkets()
-            .filter((m) => m.status === 'active')
+        return this.allMarkets()
+            .filter((m) => !this.isTerminal(m))
             .map((m) => ({
                 value: m.id,
                 label: m.title
@@ -1416,14 +1440,20 @@ export class AdminDashboardComponent implements OnInit {
             case 'active':
                 return 'profit';
             case 'suspended':
+            case 'locked':
                 return 'warning';
-            case 'closed':
-                return 'secondary';
             case 'resolved':
                 return 'resolved';
+            case 'voided':
+                return 'secondary';
             default:
                 return 'outline';
         }
+    }
+
+    /** Resolved and voided markets are final: they can't be edited, voided, deleted or resolved. */
+    isTerminal(m: Market): boolean {
+        return m.status === 'resolved' || m.status === 'voided';
     }
 
     private getEffectiveToken(): string | null {
@@ -1441,7 +1471,7 @@ export class AdminDashboardComponent implements OnInit {
         });
 
         if (this.authStore.isAdmin()) {
-            this.loadActiveMarkets();
+            this.loadMarkets();
         }
     }
 
@@ -1466,12 +1496,12 @@ export class AdminDashboardComponent implements OnInit {
         return `${y}-${m}-${day}T${hours}:${minutes}`;
     }
 
-    loadActiveMarkets(): void {
-        this.apiService.getMarkets().subscribe({
+    loadMarkets(): void {
+        this.apiService.getAdminMarkets(this.getEffectiveToken()).subscribe({
             next: (markets) => {
-                this.activeMarkets.set(markets);
+                this.allMarkets.set(markets);
             },
-            error: (err) => console.warn('Failed to load active markets:', err)
+            error: (err) => console.warn('Failed to load markets:', err)
         });
     }
 
@@ -1509,7 +1539,7 @@ export class AdminDashboardComponent implements OnInit {
                 this.title.set('');
                 this.description.set('');
                 this.resolutionSource.set('');
-                this.loadActiveMarkets();
+                this.loadMarkets();
             },
             error: (err) => {
                 this.isSubmitting.set(false);
@@ -1524,7 +1554,7 @@ export class AdminDashboardComponent implements OnInit {
         this.editingMarket.set(m);
         this.editTitle.set(m.title);
         this.editCategory.set(m.category);
-        this.editStatus.set(m.status);
+        this.editStatus.set(m.status === 'suspended' || m.status === 'locked' ? m.status : 'active');
         this.editResolutionDateInput.set(this.formatForDateTimeLocal(m.resolution_date));
         this.editDescription.set(m.description || '');
         this.editResolutionSource.set(m.resolution_source || '');
@@ -1566,7 +1596,7 @@ export class AdminDashboardComponent implements OnInit {
                 this.isEditingSubmitting.set(false);
                 this.closeEditModal();
                 this.toastService.success('Market Updated', `"${updated.title}" successfully updated!`);
-                this.loadActiveMarkets();
+                this.loadMarkets();
             },
             error: (err) => {
                 this.isEditingSubmitting.set(false);
@@ -1578,6 +1608,7 @@ export class AdminDashboardComponent implements OnInit {
 
     // --- Market Deletion ---
     openDeleteModal(m: Market): void {
+        this.voidIdempotencyKey = `void-${m.id}-${crypto.randomUUID()}`;
         this.deletingMarket.set(m);
     }
 
@@ -1595,12 +1626,35 @@ export class AdminDashboardComponent implements OnInit {
                 this.isDeletingSubmitting.set(false);
                 this.closeDeleteModal();
                 this.toastService.success('Market Deleted', `"${m.title}" was permanently removed.`);
-                this.loadActiveMarkets();
+                this.loadMarkets();
             },
             error: (err) => {
                 this.isDeletingSubmitting.set(false);
                 const msg = err?.error?.message || 'Failed to delete market';
                 this.toastService.error('Delete Error', msg);
+            }
+        });
+    }
+
+    confirmVoidMarket(): void {
+        const m = this.deletingMarket();
+        if (!m) return;
+
+        this.isVoidingSubmitting.set(true);
+        this.apiService.voidMarket(m.id, this.getEffectiveToken(), this.voidIdempotencyKey).subscribe({
+            next: (res) => {
+                this.isVoidingSubmitting.set(false);
+                this.closeDeleteModal();
+                this.toastService.success(
+                    'Market Voided',
+                    `"${m.title}" was voided. Refunded ${res.total_refund_usdc} USDC across ${res.positions_refunded} positions.`
+                );
+                this.loadMarkets();
+            },
+            error: (err) => {
+                this.isVoidingSubmitting.set(false);
+                const msg = err?.error?.message || 'Failed to void market';
+                this.toastService.error('Void Error', msg);
             }
         });
     }
@@ -1623,7 +1677,7 @@ export class AdminDashboardComponent implements OnInit {
                 this.isResolving.set(false);
                 this.resolutionSummary.set(res);
                 this.toastService.success('Market Resolved', `Outcome ${res.winning_outcome} settled. Credited ${res.winners_credited} traders.`);
-                this.loadActiveMarkets();
+                this.loadMarkets();
             },
             error: (err) => {
                 this.isResolving.set(false);

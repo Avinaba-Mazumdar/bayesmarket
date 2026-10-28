@@ -331,3 +331,334 @@ func TestAdminMarketCRUDWorkflow(t *testing.T) {
 		t.Errorf("Expected market to be deleted from DB, found count %d", count)
 	}
 }
+
+// TestAdminVoidMarketRefundsPositions verifies that a traded market cannot be hard-deleted and that
+// voiding it refunds every open position at cost basis with balanced ledger entries.
+func TestAdminVoidMarketRefundsPositions(t *testing.T) {
+	pool, cfg, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	testMarketID := uuid.New()
+	testSlug := fmt.Sprintf("test-void-market-%d", time.Now().UnixNano())
+	insertMarket := `
+		INSERT INTO markets (id, slug, title, description, category, resolution_source, resolution_date, status)
+		VALUES ($1, $2, 'Test Void Market', 'Voided for refund test', 'macro', 'Oracle Official', NOW() + INTERVAL '1 day', 'active');
+	`
+	if _, err := pool.Exec(ctx, insertMarket, testMarketID, testSlug); err != nil {
+		t.Fatalf("Failed to create test market: %v", err)
+	}
+	insertPool := `
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1, 10000.00000000, 10000.00000000, 20000.00000000, 100000000.00000000, 0.00000000);
+	`
+	if _, err := pool.Exec(ctx, insertPool, testMarketID); err != nil {
+		t.Fatalf("Failed to create test liquidity pool: %v", err)
+	}
+
+	userYesID := uuid.New()
+	userNoID := uuid.New()
+	for _, uid := range []uuid.UUID{userYesID, userNoID} {
+		if _, err := pool.Exec(ctx, "INSERT INTO users (id, is_guest, cash_balance) VALUES ($1, true, 100.00000000);", uid); err != nil {
+			t.Fatalf("Failed to insert test user: %v", err)
+		}
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM ledger_entries WHERE market_id = $1", testMarketID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM markets WHERE id = $1", testMarketID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id IN ($1, $2)", userYesID, userNoID)
+	}()
+
+	insertPos := `
+		INSERT INTO user_positions (user_id, market_id, outcome, shares_owned, avg_buy_price, total_invested_usdc)
+		VALUES ($1, $2, $3, $4, $5, $6);
+	`
+	if _, err := pool.Exec(ctx, insertPos, userYesID, testMarketID, "YES", "50.00000000", "0.51000000", "25.50000000"); err != nil {
+		t.Fatalf("Failed to insert YES position: %v", err)
+	}
+	if _, err := pool.Exec(ctx, insertPos, userNoID, testMarketID, "NO", "40.00000000", "0.75000000", "30.00000000"); err != nil {
+		t.Fatalf("Failed to insert NO position: %v", err)
+	}
+	insertTrade := `
+		INSERT INTO trades (market_id, user_id, idempotency_key, trade_type, outcome, amount_usdc, shares_filled, execution_price, price_impact_pct)
+		VALUES ($1, $2, $3, 'BUY', 'YES', 25.50000000, 50.00000000, 0.51000000, 0.01000000);
+	`
+	if _, err := pool.Exec(ctx, insertTrade, testMarketID, userYesID, fmt.Sprintf("void-test-%d", time.Now().UnixNano())); err != nil {
+		t.Fatalf("Failed to insert trade: %v", err)
+	}
+
+	adminToken := getSuperadminToken(t, pool, cfg)
+	doReq := func(method, url, body, idempKey string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(method, url, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		if idempKey != "" {
+			req.Header.Set("Idempotency-Key", idempKey)
+		}
+		router.ServeHTTP(w, req)
+		return w
+	}
+	marketURL := "/api/v1/admin/markets/" + testMarketID.String()
+
+	// 1. Hard delete must be refused for a market with trading history
+	if w := doReq(http.MethodDelete, marketURL, "", ""); w.Code != http.StatusConflict {
+		t.Fatalf("Expected 409 deleting a traded market, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 2. Void requires an idempotency key
+	if w := doReq(http.MethodPost, marketURL+"/void", "", ""); w.Code != http.StatusBadRequest {
+		t.Fatalf("Expected 400 voiding without Idempotency-Key, got %d", w.Code)
+	}
+
+	// 3. Void refunds cost basis
+	idempKey := fmt.Sprintf("void-%d", time.Now().UnixNano())
+	w := doReq(http.MethodPost, marketURL+"/void", "", idempKey)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 voiding market, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Status            string `json:"status"`
+		TotalRefundUSDC   string `json:"total_refund_usdc"`
+		PositionsRefunded int    `json:"positions_refunded"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to decode void response: %v", err)
+	}
+	if resp.Status != "voided" || resp.TotalRefundUSDC != "55.50000000" || resp.PositionsRefunded != 2 {
+		t.Errorf("Unexpected void response: %+v", resp)
+	}
+
+	expectedBalances := map[uuid.UUID]decimal.Decimal{
+		userYesID: decimal.RequireFromString("125.5"),
+		userNoID:  decimal.RequireFromString("130"),
+	}
+	for uid, expected := range expectedBalances {
+		var bal, shares decimal.Decimal
+		_ = pool.QueryRow(ctx, "SELECT cash_balance FROM users WHERE id = $1", uid).Scan(&bal)
+		_ = pool.QueryRow(ctx, "SELECT shares_owned FROM user_positions WHERE user_id = $1 AND market_id = $2", uid, testMarketID).Scan(&shares)
+		if !bal.Equal(expected) {
+			t.Errorf("User %s: expected balance %s, got %s", uid, expected, bal)
+		}
+		if !shares.IsZero() {
+			t.Errorf("User %s: expected 0 shares after void, got %s", uid, shares)
+		}
+	}
+
+	var status string
+	var collateral decimal.Decimal
+	_ = pool.QueryRow(ctx, "SELECT status FROM markets WHERE id = $1", testMarketID).Scan(&status)
+	_ = pool.QueryRow(ctx, "SELECT collateral_reserve FROM liquidity_pools WHERE market_id = $1", testMarketID).Scan(&collateral)
+	if status != "voided" {
+		t.Errorf("Expected market status 'voided', got %q", status)
+	}
+	if !collateral.Equal(decimal.RequireFromString("19944.5")) {
+		t.Errorf("Expected collateral 19944.5 after refunds, got %s", collateral)
+	}
+
+	// Every refund must be ledgered and balance per asset
+	var entryCount int
+	var usdcSum, yesSum, noSum decimal.Decimal
+	err := pool.QueryRow(ctx, `
+		SELECT COUNT(*),
+			COALESCE(SUM(delta) FILTER (WHERE asset = 'USDC'), 0),
+			COALESCE(SUM(delta) FILTER (WHERE asset = 'YES'), 0),
+			COALESCE(SUM(delta) FILTER (WHERE asset = 'NO'), 0)
+		FROM ledger_entries WHERE market_id = $1 AND entry_type = 'refund';
+	`, testMarketID).Scan(&entryCount, &usdcSum, &yesSum, &noSum)
+	if err != nil {
+		t.Fatalf("Failed to query refund ledger: %v", err)
+	}
+	if entryCount != 8 || !usdcSum.IsZero() || !yesSum.IsZero() || !noSum.IsZero() {
+		t.Errorf("Unbalanced refund ledger: count=%d usdc=%s yes=%s no=%s", entryCount, usdcSum, yesSum, noSum)
+	}
+
+	// 4. Replay returns the cached receipt
+	w = doReq(http.MethodPost, marketURL+"/void", "", idempKey)
+	if w.Code != http.StatusOK || w.Header().Get("X-Cache-Lookup") != "HIT-IDEMPOTENT" {
+		t.Errorf("Expected idempotent replay, got %d (%s)", w.Code, w.Header().Get("X-Cache-Lookup"))
+	}
+
+	// 5. A voided market is terminal
+	if w := doReq(http.MethodPost, marketURL+"/void", "", idempKey+"-2"); w.Code != http.StatusConflict {
+		t.Errorf("Expected 409 voiding twice, got %d", w.Code)
+	}
+	resolveBody := `{"winning_outcome":"YES","oracle_proof":"Official source"}`
+	if w := doReq(http.MethodPost, marketURL+"/resolve", resolveBody, idempKey+"-resolve"); w.Code != http.StatusConflict {
+		t.Errorf("Expected 409 resolving a voided market, got %d: %s", w.Code, w.Body.String())
+	}
+	if w := doReq(http.MethodPut, marketURL, `{"status":"active"}`, ""); w.Code != http.StatusConflict {
+		t.Errorf("Expected 409 reactivating a voided market, got %d", w.Code)
+	}
+}
+
+// TestAdminListMarketsIncludesAllStatuses verifies the admin list returns non-active markets,
+// filters by status, and is not exposed to unauthenticated callers.
+func TestAdminListMarketsIncludesAllStatuses(t *testing.T) {
+	pool, cfg, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	suspendedID := uuid.New()
+	slug := fmt.Sprintf("test-admin-list-%d", time.Now().UnixNano())
+	insertMarket := `
+		INSERT INTO markets (id, slug, title, description, category, resolution_source, resolution_date, status)
+		VALUES ($1, $2, 'Test Suspended Market', 'Hidden from the public list', 'macro', 'Oracle Official', NOW() + INTERVAL '1 day', 'suspended');
+	`
+	if _, err := pool.Exec(ctx, insertMarket, suspendedID, slug); err != nil {
+		t.Fatalf("Failed to create test market: %v", err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM markets WHERE id = $1", suspendedID) }()
+	insertPool := `
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1, 5000.00000000, 5000.00000000, 10000.00000000, 25000000.00000000, 0.00000000);
+	`
+	if _, err := pool.Exec(ctx, insertPool, suspendedID); err != nil {
+		t.Fatalf("Failed to create test liquidity pool: %v", err)
+	}
+
+	adminToken := getSuperadminToken(t, pool, cfg)
+	list := func(query, token string) (*httptest.ResponseRecorder, []map[string]interface{}) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/admin/markets"+query, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		router.ServeHTTP(w, req)
+		var markets []map[string]interface{}
+		if w.Code == http.StatusOK {
+			if err := json.Unmarshal(w.Body.Bytes(), &markets); err != nil {
+				t.Fatalf("Failed to decode admin market list: %v", err)
+			}
+		}
+		return w, markets
+	}
+	contains := func(markets []map[string]interface{}) bool {
+		for _, m := range markets {
+			if m["id"] == suspendedID.String() {
+				return true
+			}
+		}
+		return false
+	}
+
+	if w, _ := list("", ""); w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
+		t.Errorf("Expected 401/403 without admin token, got %d", w.Code)
+	}
+
+	w, all := list("", adminToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 from admin list, got %d: %s", w.Code, w.Body.String())
+	}
+	if !contains(all) {
+		t.Errorf("Expected suspended market %s in unfiltered admin list", suspendedID)
+	}
+
+	if _, suspended := list("?status=suspended", adminToken); !contains(suspended) {
+		t.Errorf("Expected suspended market in ?status=suspended list")
+	}
+	if _, active := list("?status=active", adminToken); contains(active) {
+		t.Errorf("Did not expect suspended market in ?status=active list")
+	}
+	if w, _ := list("?status=bogus", adminToken); w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for invalid status filter, got %d", w.Code)
+	}
+
+	// The public list must still hide it
+	wPub := httptest.NewRecorder()
+	reqPub, _ := http.NewRequest(http.MethodGet, "/api/v1/markets", nil)
+	router.ServeHTTP(wPub, reqPub)
+	var public []map[string]interface{}
+	_ = json.Unmarshal(wPub.Body.Bytes(), &public)
+	if contains(public) {
+		t.Errorf("Suspended market leaked into the public market list")
+	}
+}
+
+// TestResolvedMarketReportsWinningOutcome verifies market reads expose the stored winning outcome,
+// so a market resolved NO is never shown as a YES win.
+func TestResolvedMarketReportsWinningOutcome(t *testing.T) {
+	pool, cfg, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	marketID := uuid.New()
+	slug := fmt.Sprintf("test-winning-outcome-%d", time.Now().UnixNano())
+	insertMarket := `
+		INSERT INTO markets (id, slug, title, description, category, resolution_source, resolution_date, status)
+		VALUES ($1, $2, 'Test Winning Outcome Market', 'Resolves NO', 'macro', 'Oracle Official', NOW() + INTERVAL '1 day', 'active');
+	`
+	if _, err := pool.Exec(ctx, insertMarket, marketID, slug); err != nil {
+		t.Fatalf("Failed to create test market: %v", err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM markets WHERE id = $1", marketID) }()
+	insertPool := `
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1, 5000.00000000, 5000.00000000, 10000.00000000, 25000000.00000000, 0.00000000);
+	`
+	if _, err := pool.Exec(ctx, insertPool, marketID); err != nil {
+		t.Fatalf("Failed to create test liquidity pool: %v", err)
+	}
+
+	getOutcome := func(url, token string) (interface{}, bool) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, url, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s: expected 200, got %d: %s", url, w.Code, w.Body.String())
+		}
+		var single map[string]interface{}
+		if json.Unmarshal(w.Body.Bytes(), &single) == nil {
+			v, ok := single["winning_outcome"]
+			return v, ok
+		}
+		var list []map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatalf("GET %s: failed to decode body: %v", url, err)
+		}
+		for _, m := range list {
+			if m["id"] == marketID.String() {
+				v, ok := m["winning_outcome"]
+				return v, ok
+			}
+		}
+		t.Fatalf("GET %s: market %s not in list", url, marketID)
+		return nil, false
+	}
+
+	// Unresolved markets report an explicit null
+	if v, ok := getOutcome("/api/v1/markets/"+marketID.String(), ""); !ok || v != nil {
+		t.Errorf("Expected winning_outcome null before resolution, got %v (present=%v)", v, ok)
+	}
+
+	adminToken := getSuperadminToken(t, pool, cfg)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/admin/markets/"+marketID.String()+"/resolve",
+		bytes.NewBufferString(`{"winning_outcome":"NO","oracle_proof":"Official source"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Idempotency-Key", fmt.Sprintf("resolve-no-%d", time.Now().UnixNano()))
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 resolving market, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if v, _ := getOutcome("/api/v1/markets/"+marketID.String(), ""); v != "NO" {
+		t.Errorf("Detail by ID: expected winning_outcome NO, got %v", v)
+	}
+	if v, _ := getOutcome("/api/v1/markets/"+slug, ""); v != "NO" {
+		t.Errorf("Detail by slug: expected winning_outcome NO, got %v", v)
+	}
+	if v, _ := getOutcome("/api/v1/admin/markets?status=resolved", adminToken); v != "NO" {
+		t.Errorf("Admin list: expected winning_outcome NO, got %v", v)
+	}
+}

@@ -292,6 +292,9 @@ func (h *AdminHandler) executeResolutionTx(
 		return nil, err
 	}
 
+	if currentStatus == "voided" {
+		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_voided", Message: "Voided markets cannot be resolved"}
+	}
 	if currentStatus == "resolved" {
 		return nil, &AppError{
 			StatusCode: http.StatusConflict,
@@ -868,10 +871,10 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		return
 	}
 
-	if curStatus == "resolved" || curStatus == "settled" {
+	if curStatus == "resolved" || curStatus == "settled" || curStatus == "voided" {
 		c.JSON(http.StatusConflict, gin.H{
 			"error":   "market_immutable",
-			"message": "Resolved or settled markets cannot be edited",
+			"message": "Resolved, settled or voided markets cannot be edited",
 		})
 		return
 	}
@@ -985,7 +988,8 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	})
 }
 
-// HandleDeleteMarket permanently deletes a prediction market and its dependent records.
+// HandleDeleteMarket permanently deletes a prediction market that has never been traded.
+// Markets with trades, positions, or ledger history must be voided instead so users are refunded.
 //
 // DELETE /api/v1/admin/markets/:id
 func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
@@ -1021,17 +1025,30 @@ func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
 		return
 	}
 
-	// Clean out market-dependent records safely in transactional hierarchy order
-	commands := []string{
-		"DELETE FROM ledger_entries WHERE market_id = $1;",
-		"DELETE FROM trades WHERE market_id = $1;",
-		"DELETE FROM markets WHERE id = $1;", // cascades to liquidity_pools and user_positions
+	// Trades and positions are only written while the market row is locked, so this check cannot race.
+	var hasActivity bool
+	activityQuery := `
+		SELECT EXISTS (SELECT 1 FROM trades WHERE market_id = $1)
+			OR EXISTS (SELECT 1 FROM user_positions WHERE market_id = $1)
+			OR EXISTS (SELECT 1 FROM ledger_entries WHERE market_id = $1);
+	`
+	if err := tx.QueryRow(ctx, activityQuery, marketID).Scan(&hasActivity); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to check market activity"})
+		return
 	}
-	for _, q := range commands {
-		if _, execErr := tx.Exec(ctx, q, marketID); execErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": fmt.Sprintf("Failed to delete market dependencies: %v", execErr)})
-			return
-		}
+	if hasActivity {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":   "market_has_activity",
+			"message": "Market has trading history and cannot be deleted. Void it instead to refund open positions.",
+		})
+		return
+	}
+
+	// Cascades to liquidity_pools
+	if _, err := tx.Exec(ctx, "DELETE FROM markets WHERE id = $1;", marketID); err != nil {
+		log.Printf("[ERROR] Failed to delete market %s: %v", marketID.String(), err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to delete market"})
+		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1058,6 +1075,235 @@ func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
 		"status":    "deleted",
 		"market_id": marketID.String(),
 		"title":     title,
-		"message":   "Market and dependent trading records successfully deleted",
+		"message":   "Market successfully deleted",
 	})
+}
+
+// VoidMarketResponse defines the refund receipt returned when a market is voided.
+type VoidMarketResponse struct {
+	Status            string `json:"status"`
+	MarketID          string `json:"market_id"`
+	TotalRefundUSDC   string `json:"total_refund_usdc"`
+	PositionsRefunded int    `json:"positions_refunded"`
+	VoidedAt          string `json:"voided_at"`
+}
+
+// HandleVoidMarket cancels a market, refunds every open position at cost basis from pool collateral,
+// and records the refunds in the ledger. A voided market is terminal: it cannot be traded, edited or resolved.
+//
+// POST /api/v1/admin/markets/:id/void
+func (h *AdminHandler) HandleVoidMarket(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	marketIDParam := strings.TrimSpace(c.Param("id"))
+	marketID, err := uuid.Parse(marketIDParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market_id", "message": "Market ID must be a valid UUID"})
+		return
+	}
+
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if idempotencyKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "idempotency_key_required",
+			"message": "Idempotency-Key header is required for voiding a market",
+		})
+		return
+	}
+
+	actorID, exists := middleware.GetUserID(c)
+	if !exists || actorID == uuid.Nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Admin authentication required"})
+		return
+	}
+
+	unlock := h.locks.acquire("market:" + marketID.String())
+	defer unlock()
+
+	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "void", idempotencyKey)
+	if err == nil && found {
+		c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
+		c.Data(http.StatusOK, "application/json", cachedResp)
+		return
+	}
+
+	responseObj, err := ExecuteSerializableWithRetry(ctx, 25, func() (*VoidMarketResponse, error) {
+		return h.executeVoidTx(ctx, marketID, actorID, idempotencyKey)
+	})
+	if err != nil {
+		var appErr *AppError
+		if errors.As(err, &appErr) {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
+		if IsSerializationOrDeadlock(err) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":   "concurrency_conflict",
+				"message": "Void transaction experienced concurrency conflicts after multiple retries. Please retry.",
+			})
+			return
+		}
+		log.Printf("[ERROR] Failed to void market %s: %v", marketID.String(), err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to void market"})
+		return
+	}
+
+	if h.marketCache != nil {
+		h.marketCache.Invalidate(marketID.String())
+		h.marketCache.InvalidateAll()
+	}
+
+	c.JSON(http.StatusOK, responseObj)
+}
+
+func (h *AdminHandler) executeVoidTx(ctx context.Context, marketID, actorID uuid.UUID, idempotencyKey string) (*VoidMarketResponse, error) {
+	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// 1. Lock market (same hierarchy as resolution: market -> pool -> positions -> users)
+	var currentStatus string
+	err = tx.QueryRow(ctx, "SELECT status FROM markets WHERE id = $1 FOR UPDATE;", marketID).Scan(&currentStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, &AppError{StatusCode: http.StatusNotFound, ErrorCode: "market_not_found", Message: "Market does not exist"}
+		}
+		return nil, err
+	}
+	switch currentStatus {
+	case "resolved", "settled":
+		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_already_resolved", Message: "Resolved markets cannot be voided"}
+	case "voided":
+		return nil, &AppError{StatusCode: http.StatusConflict, ErrorCode: "market_already_voided", Message: "Market is already voided"}
+	}
+
+	// 2. Lock pool collateral
+	var collateralReserve decimal.Decimal
+	err = tx.QueryRow(ctx, "SELECT collateral_reserve FROM liquidity_pools WHERE market_id = $1 FOR UPDATE;", marketID).Scan(&collateralReserve)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Lock open positions, ordered by user so lock acquisition is deterministic
+	rows, err := tx.Query(ctx, `
+		SELECT id, user_id, outcome, shares_owned, total_invested_usdc
+		FROM user_positions
+		WHERE market_id = $1 AND shares_owned > 0
+		ORDER BY user_id, outcome
+		FOR UPDATE;
+	`, marketID)
+	if err != nil {
+		return nil, err
+	}
+	type refundRecord struct {
+		posID   uuid.UUID
+		userID  uuid.UUID
+		outcome string
+		shares  decimal.Decimal
+		refund  decimal.Decimal
+	}
+	var refunds []refundRecord
+	for rows.Next() {
+		var r refundRecord
+		if err := rows.Scan(&r.posID, &r.userID, &r.outcome, &r.shares, &r.refund); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		r.refund = r.refund.Truncate(8)
+		refunds = append(refunds, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	totalRefund := decimal.Zero
+	for _, r := range refunds {
+		totalRefund = totalRefund.Add(r.refund)
+	}
+
+	// Solvency assertion: refunds are paid from the collateral that backs the issued shares
+	if totalRefund.GreaterThan(collateralReserve) {
+		log.Printf("[CRITICAL VOID SOLVENCY FAILURE] MarketID=%s totalRefund=%s exceeds collateralReserve=%s",
+			marketID.String(), totalRefund.StringFixed(8), collateralReserve.StringFixed(8))
+		return nil, &AppError{
+			StatusCode: http.StatusConflict,
+			ErrorCode:  "collateral_insolvency",
+			Message:    fmt.Sprintf("Total cost-basis refund (%s USDC) exceeds collateral reserve (%s USDC)", totalRefund.StringFixed(4), collateralReserve.StringFixed(4)),
+		}
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE markets SET status = 'voided' WHERE id = $1;", marketID); err != nil {
+		return nil, err
+	}
+
+	refundTxID := uuid.New()
+	for _, r := range refunds {
+		if _, err := tx.Exec(ctx, `
+			UPDATE users
+			SET cash_balance = cash_balance + $1, last_active = NOW()
+			WHERE id = $2;
+		`, r.refund, r.userID); err != nil {
+			return nil, err
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE user_positions
+			SET shares_owned = 0, updated_at = NOW()
+			WHERE id = $1;
+		`, r.posID); err != nil {
+			return nil, err
+		}
+
+		posAccount := "position_" + strings.ToLower(r.outcome)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO ledger_entries (transaction_id, user_id, market_id, account, asset, delta, entry_type)
+			VALUES
+				($1, $2, $3, 'user_cash', 'USDC', $4, 'refund'),
+				($1, $2, $3, 'pool_collateral', 'USDC', $5, 'refund'),
+				($1, $2, $3, $6, $7, $8, 'refund'),
+				($1, $2, $3, 'pool_shares', $7, $9, 'refund');
+		`, refundTxID, r.userID, marketID, r.refund, r.refund.Neg(), posAccount, r.outcome, r.shares.Neg(), r.shares); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE liquidity_pools
+		SET collateral_reserve = $1, updated_at = NOW()
+		WHERE market_id = $2;
+	`, collateralReserve.Sub(totalRefund), marketID); err != nil {
+		return nil, err
+	}
+
+	responseObj := VoidMarketResponse{
+		Status:            "voided",
+		MarketID:          marketID.String(),
+		TotalRefundUSDC:   totalRefund.StringFixed(8),
+		PositionsRefunded: len(refunds),
+		VoidedAt:          time.Now().UTC().Format(time.RFC3339),
+	}
+
+	respJSON, err := json.Marshal(responseObj)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
+		VALUES ($1, 'void', $2, $3);
+	`, actorID, idempotencyKey, respJSON); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	log.Printf("[ADMIN ACTION] Voided market %s: refunded %s USDC across %d positions (ActorID=%s)",
+		marketID.String(), totalRefund.StringFixed(8), len(refunds), actorID.String())
+
+	return &responseObj, nil
 }

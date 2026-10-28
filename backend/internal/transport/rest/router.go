@@ -381,13 +381,17 @@ bayesmarket_up 1
 			tradeHandler.HandleCashOut,
 		)
 
-		// 5. Admin Market Management, Creation, Edit, Delete & Resolution (Protected)
+		// 5. Admin Market Management, Creation, Edit, Delete, Void & Resolution (Protected)
 		admin := v1.Group("/admin")
 		admin.Use(actionLimiter.LimitByIP())
 		{
 			admin.GET("/verify",
 				middleware.RequireAdminAuth(jwtSecret, pool),
 				adminHandler.HandleVerifyAdmin,
+			)
+			admin.GET("/markets",
+				middleware.RequireAdminAuth(jwtSecret, pool),
+				marketHandler.HandleAdminListMarkets,
 			)
 			admin.POST("/markets",
 				middleware.RequireAdminAuth(jwtSecret, pool),
@@ -400,6 +404,10 @@ bayesmarket_up 1
 			admin.DELETE("/markets/:id",
 				middleware.RequireAdminAuth(jwtSecret, pool),
 				adminHandler.HandleDeleteMarket,
+			)
+			admin.POST("/markets/:id/void",
+				middleware.RequireAdminAuth(jwtSecret, pool),
+				adminHandler.HandleVoidMarket,
 			)
 			admin.POST("/markets/:id/resolve",
 				middleware.RequireAdminAuth(jwtSecret, pool),

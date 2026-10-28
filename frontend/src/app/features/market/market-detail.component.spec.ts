@@ -130,6 +130,23 @@ describe('MarketDetailComponent', () => {
         expect(component['noPct']()).toBe(32);
     });
 
+    it('should show the server-reported winner for a market resolved NO', () => {
+        component.market.set({ ...mockMarket, status: 'resolved', winning_outcome: 'NO' });
+        fixture.detectChanges();
+
+        const title = fixture.nativeElement.querySelector('.banner-title')?.textContent ?? '';
+        expect(title).toContain('NO Won');
+        expect(title).not.toContain('YES');
+    });
+
+    it('should not guess a winner when the resolved market has no winning outcome', () => {
+        component.market.set({ ...mockMarket, status: 'resolved', winning_outcome: null });
+        fixture.detectChanges();
+
+        const title = (fixture.nativeElement.querySelector('.banner-title')?.textContent ?? '').trim();
+        expect(title).toBe('Market Resolved');
+    });
+
     it('should open confirmation dialog when review is requested from terminal', () => {
         const mockIntent: OrderIntent = {
             marketId: mockMarket.id,

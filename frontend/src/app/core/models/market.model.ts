@@ -14,8 +14,8 @@ export interface Market {
     image_url?: string;
     resolution_source: string;
     resolution_date: string;
-    status: 'active' | 'closed' | 'resolved';
-    winning_outcome?: 'YES' | 'NO' | string;
+    status: MarketStatus;
+    winning_outcome?: 'YES' | 'NO' | null;
     probability_yes: string;
     probability_no: string;
     probability_yes_pct: string;
@@ -147,14 +147,28 @@ export interface EditMarketRequest {
     resolution_source?: string;
     resolution_date?: string;
     image_url?: string;
-    status?: 'active' | 'closed' | 'resolved' | 'suspended';
+    status?: EditableMarketStatus;
 }
+
+/** Lifecycle statuses the backend stores on a market. */
+export type MarketStatus = 'active' | 'suspended' | 'locked' | 'resolved' | 'voided';
+
+/** Statuses an admin can set through PUT /admin/markets/:id. */
+export type EditableMarketStatus = 'active' | 'suspended' | 'locked';
 
 export interface DeleteMarketResponse {
     status: string;
     market_id: string;
     title?: string;
     message: string;
+}
+
+export interface VoidMarketResponse {
+    status: 'voided';
+    market_id: string;
+    total_refund_usdc: string;
+    positions_refunded: number;
+    voided_at: string;
 }
 
 export interface UserProfile {

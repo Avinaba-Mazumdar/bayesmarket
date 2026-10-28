@@ -556,7 +556,7 @@ CREATE TABLE markets (
     image_url VARCHAR(512),
     resolution_source TEXT NOT NULL,           -- Criteria / URL defining resolution
     resolution_date TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'active', -- 'draft', 'active', 'suspended', 'locked', 'resolved', 'settled'
+    status VARCHAR(32) NOT NULL DEFAULT 'active', -- 'draft', 'active', 'suspended', 'locked', 'resolved', 'settled', 'voided'
     winning_outcome VARCHAR(8),                -- 'YES', 'NO', NULL
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -877,6 +877,7 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 - **Headers**: `Authorization: Bearer <admin-token>` and `Idempotency-Key: <opaque-client-key>`.
 - **Payload**: `{ "winning_outcome": "YES", "oracle_proof": "immutable source reference" }`.
 - **Response `200 OK`**: Locks the market, records the resolution proof, and atomically distributes $1.00 per winning share with immutable ledger entries.
+- **Void endpoint**: `POST /api/v1/admin/markets/:id/void` with the same headers and no payload. Locks market → pool → open positions, asserts that the total refund does not exceed `collateral_reserve`, credits each holder the position's `total_invested_usdc` (cost basis), zeroes the position, debits pool collateral, and writes `refund` ledger entries (`user_cash`, `pool_collateral`, `position_<outcome>`, `pool_shares`). The market moves to the terminal `voided` status; it can no longer be traded, edited or resolved, and voiding a resolved market returns `409`.
 
 ---
 
@@ -1078,9 +1079,10 @@ BayesMarket contains **zero pre-seeded or hardcoded demo markets**. All predicti
 
 1. **Strict Admin Designation**: Setting an admin can only be done directly from Neon DB (`UPDATE users SET is_admin = true WHERE email = '...';`). No API endpoint exists to escalate privileges.
 2. **Dynamic Market Creation**: Administrators configure title, description, category, resolution criteria, expiration timestamp, initial collateral, and initial odds via `POST /api/v1/admin/markets`.
-3. **Market Editing**: Administrators can modify market metadata and operational status via `PUT /api/v1/admin/markets/:id`. Invariant reserves and collateral remain protected from arbitrary tampering.
-4. **Market Deletion**: Administrators can permanently delete invalid or test prediction markets along with dependent order and ledger records via `DELETE /api/v1/admin/markets/:id`.
-5. **Authoritative Resolution**: Settle contracts and distribute winning share payouts via `POST /api/v1/admin/markets/:id/resolve`.
+3. **Market Listing**: The admin console lists markets in every status (`active`, `suspended`, `locked`, `resolved`, `voided`) via `GET /api/v1/admin/markets?status=&category=&limit=&offset=`, so halted markets stay reachable for reactivation, resolution or voiding. The public `GET /api/v1/markets` keeps returning only `active` markets.
+4. **Market Editing**: Administrators can modify market metadata and operational status (`active`, `suspended`, `locked`) via `PUT /api/v1/admin/markets/:id`. Invariant reserves and collateral remain protected from arbitrary tampering.
+5. **Market Voiding & Deletion**: Administrators cancel a market that has trading history via `POST /api/v1/admin/markets/:id/void`, which refunds every open position at cost basis and keeps all trade and ledger history. `DELETE /api/v1/admin/markets/:id` only removes markets with no trades, positions or ledger entries; otherwise it returns `409 market_has_activity`. Ledger rows are never deleted.
+6. **Authoritative Resolution**: Settle contracts and distribute winning share payouts via `POST /api/v1/admin/markets/:id/resolve`.
 
 ---
 
