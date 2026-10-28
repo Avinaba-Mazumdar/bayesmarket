@@ -18,6 +18,12 @@ func StartRetention(ctx context.Context, pool *pgxpool.Pool) {
 		return
 	}
 	go func() {
+		// The first pass waits a minute so it does not compete with the first requests after a cold start.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Minute):
+		}
 		runRetention(ctx, pool)
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()

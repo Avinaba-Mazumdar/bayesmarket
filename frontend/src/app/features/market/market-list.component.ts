@@ -88,6 +88,9 @@ export type CategoryFilter = string;
 
             <!-- Active Markets Catalog Grid -->
             <section class="catalog-grid-section" aria-label="Active prediction markets">
+                @if (showingSnapshot()) {
+                    <p class="snapshot-note" role="status">Showing the last prices this browser saw. Live prices will replace them shortly.</p>
+                }
                 @if (isLoading()) {
                     <div class="loading-state" role="status">
                         <div class="spinner" aria-hidden="true"></div>
@@ -357,6 +360,13 @@ export type CategoryFilter = string;
                 color: var(--muted);
             }
 
+            .snapshot-note {
+                margin: 0 0 16px;
+                font-family: var(--font-ui);
+                font-size: 13px;
+                color: var(--muted);
+            }
+
             .empty-icon {
                 color: var(--muted);
                 margin-bottom: 4px;
@@ -419,6 +429,8 @@ export class MarketListComponent implements OnInit {
     /** Filter chips: 'All' plus the server's category list, loaded on init. */
     protected readonly categories = signal<{ id: CategoryFilter; label: string }[]>([{ id: 'all', label: 'All Markets' }]);
     protected readonly loadError = signal<boolean>(false);
+    /** True while the grid shows the stored snapshot rather than a fresh response. */
+    protected readonly showingSnapshot = signal<boolean>(false);
 
     protected readonly totalVolume = computed(() => {
         const total = this.markets().reduce((acc, m) => addDecimal(acc, m.reserves?.total_volume_usdc || '0') ?? acc, '0');
@@ -474,21 +486,54 @@ export class MarketListComponent implements OnInit {
     }
 
     private fetchMarkets(): void {
-        this.isLoading.set(true);
         this.loadError.set(false);
+        // Show the last list this browser saw while a sleeping backend wakes, then replace it.
+        const snapshot = this.markets().length === 0 ? readMarketSnapshot() : null;
+        if (snapshot) {
+            this.markets.set(snapshot);
+            this.showingSnapshot.set(true);
+            this.isLoading.set(false);
+        } else {
+            this.isLoading.set(true);
+        }
         this.apiService
             .getMarkets()
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe({
                 next: (data) => {
                     this.markets.set(data || []);
+                    this.showingSnapshot.set(false);
                     this.isLoading.set(false);
+                    writeMarketSnapshot(data || []);
                 },
                 error: (err) => {
                     console.error('Failed to load markets:', err);
                     this.isLoading.set(false);
-                    this.loadError.set(true);
+                    // A snapshot stays on screen with its notice; without one, show the error.
+                    if (!this.showingSnapshot()) {
+                        this.loadError.set(true);
+                    }
                 }
             });
+    }
+}
+
+const MARKET_SNAPSHOT_KEY = 'bayesmarket_markets_snapshot';
+
+function readMarketSnapshot(): Market[] | null {
+    try {
+        const raw = localStorage.getItem(MARKET_SNAPSHOT_KEY);
+        const parsed: unknown = raw ? JSON.parse(raw) : null;
+        return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Market[]) : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeMarketSnapshot(markets: Market[]): void {
+    try {
+        localStorage.setItem(MARKET_SNAPSHOT_KEY, JSON.stringify(markets));
+    } catch {
+        // Storage can be full or blocked; the snapshot is only a convenience.
     }
 }

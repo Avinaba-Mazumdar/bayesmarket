@@ -99,6 +99,12 @@ func checkCORSOrigin(origin string, allowedOrigins []string, isDev bool) (allowe
 
 // SetupRouter constructs and configures the Gin HTTP engine with all REST routes, WebSocket endpoints, and middleware.
 func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engine {
+	return SetupRouterWithReadiness(pool, cfg, hub, nil)
+}
+
+// SetupRouterWithReadiness is SetupRouter with a gate that answers 503 until the database is ready.
+// A nil readiness never gates.
+func SetupRouterWithReadiness(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub, readiness *Readiness) *gin.Engine {
 
 	isDevOrLocal := true
 	corsOrigin := "*"
@@ -170,6 +176,9 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engin
 		c.Next()
 	})
 
+	// After CORS, so a browser can read the 503 and its Retry-After while the server warms up
+	router.Use(readinessMiddleware(readiness))
+
 	// Rate Limiters
 	publicReadLimiter := middleware.NewPublicReadLimiter()
 	actionLimiter := middleware.NewActionLimiter()
@@ -205,6 +214,17 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engin
 	// orchestrators. The database is pinged at most once every two seconds, whatever the request rate.
 	health := newHealthProbe(pool, 2*time.Second)
 	healthHandler := func(c *gin.Context) {
+		if !readiness.Ready() {
+			// The process is up and connecting. 200 keeps the platform from restarting it mid-connect;
+			// a database that never answers ends the process from main instead.
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "starting",
+				"service":   "bayesmarket-backend",
+				"database":  "connecting",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+			})
+			return
+		}
 		dbStatus := health.database()
 
 		httpStatus := http.StatusOK

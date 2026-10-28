@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { QUIET_WAKE } from '../interceptors/cold-start.interceptor';
 import {
     AuthResponse,
     BuyQuoteResponse,
@@ -99,6 +100,14 @@ export class ApiService {
     getCurrentUser(token: string): Observable<UserProfile> {
         const headers = this.buildHeaders(token);
         return this.http.get<UserProfile>(`${this.baseUrl}/auth/me`, { headers });
+    }
+
+    /**
+     * Wakes a sleeping backend without showing the waking banner. The categories list needs no database,
+     * so on a warm server it costs almost nothing.
+     */
+    wakeServer(): Observable<unknown> {
+        return this.http.get(`${this.baseUrl}/categories`, { context: new HttpContext().set(QUIET_WAKE, true) });
     }
 
     /**
