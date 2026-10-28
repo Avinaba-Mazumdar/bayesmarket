@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://bayesmarket.avinaba.com"><b>🌐 Launch Live Application (bayesmarket.avinaba.com)</b></a> &nbsp;•&nbsp;
-  <a href="https://bayesmarket-oss.onrender.com/healthz"><b>⚡ Live Backend Health (Render)</b></a>
+  <a href="https://bayesmarket.onrender.com/healthz"><b>⚡ Live Backend Health (Render)</b></a>
 </p>
 
 BayesMarket is a modern, open-source prediction market platform inspired by Polymarket. Users trade binary outcome shares (**YES** and **NO**) on real-world events.
@@ -193,6 +193,22 @@ pnpm dev
 ```
 
 The web application will be accessible at `http://localhost:4200`.
+
+### 4. Seed the Initial Markets (optional)
+
+`markets-seed.txt` holds 16 markets. The script creates them through the admin API. Admin status is granted only in the database, so the setup has three steps:
+
+```bash
+# 1. Get a guest session and the SQL that makes it an admin
+npm run seed:markets -- --guest
+
+# 2. Run the printed UPDATE as the database owner (not the bayes_app role)
+
+# 3. Seed with the token the previous step printed
+npm run seed:markets -- --token <access-token>
+```
+
+Existing titles are skipped, so the command is safe to re-run. Add `--dry-run` to list the markets without creating them. The starting collateral (default 10,000 USDC) and YES probability (default 0.5) apply to every market; override them with `--collateral` and `--probability`.
 
 ---
 
