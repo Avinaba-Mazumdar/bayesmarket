@@ -24,10 +24,8 @@ const migrationLockKey int64 = 0x42415945534D4B54 // "BAYESMKT"
 // It holds a session-level advisory lock for the whole run, so instances booting at the same time
 // apply each migration exactly once: the second instance waits, then finds everything applied.
 //
-// History notes (applied in production; do not renumber or edit):
-//   - Version 000004 does not exist. Versions are applied in sorted order, so the gap is harmless.
-//   - 000005.down recreates the retired is_superadmin column; rolling back past 000005 restores the
-//     pre-000005 schema, which the current code no longer uses.
+// The schema is a single migration, 000001_core_schema.up.sql. It is applied to an empty database. A
+// manual run of the same file records version 1 too, so the runner does not apply it again.
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	// The advisory lock belongs to a session, so every statement below runs on this one connection.
 	conn, err := pool.Acquire(ctx)
@@ -109,7 +107,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("failed to execute migration %s: %w", fileName, err)
 		}
 
-		insertSQL := "INSERT INTO schema_migrations (version, name, applied_at) VALUES ($1, $2, $3)"
+		insertSQL := "INSERT INTO schema_migrations (version, name, applied_at) VALUES ($1, $2, $3) ON CONFLICT (version) DO NOTHING"
 		if _, err := tx.Exec(ctx, insertSQL, version, fileName, time.Now().UTC()); err != nil {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("failed to record migration %s: %w", fileName, err)

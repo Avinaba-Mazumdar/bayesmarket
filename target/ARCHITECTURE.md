@@ -285,8 +285,7 @@ bayesmarket/
 │   │   ├── database/            # PERSISTENCE LAYER
 │   │   │   ├── db.go            # Pgx Connection Pool & Health Check
 │   │   │   ├── migrations/      # Sequential SQL Migrations
-│   │   │   │   ├── 000001_init_schema.up.sql
-│   │   │   │   └── 000001_init_schema.down.sql
+│   │   │   │   └── 000001_core_schema.up.sql   # the complete schema, one migration
 │   │   │   ├── queries.go       # SQL Query Execution & Row Scanners
 │   │   │   └── retention.go     # Hourly IP redaction and expired-token cleanup
 │   │   ├── middleware/          # CROSS-CUTTING CONCERNS
