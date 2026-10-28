@@ -149,51 +149,43 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 		createdAt    time.Time
 	)
 
-	if h.pool == nil {
-		userID = uuid.New()
-		isGuest = true
-		authProvider = "guest"
-		cashBalance = initialBalance
-		createdAt = time.Now().UTC()
-	} else {
-		// Enforce daily cap on guest account creations per IP to prevent sybil wallet abuse
-		dailyCap := 5
-		if h.isDevOrLocal {
-			dailyCap = 100
-		}
+	// Enforce daily cap on guest account creations per IP to prevent sybil wallet abuse
+	dailyCap := 5
+	if h.isDevOrLocal {
+		dailyCap = 100
+	}
 
-		// Atomic conditional insert eliminates TOCTOU races under concurrent requests
-		query := `
-			INSERT INTO users (is_guest, cash_balance, auth_provider, ip_address)
-			SELECT true, $1, 'guest', $2::varchar
-			WHERE (
-				SELECT COUNT(*) FROM users
-				WHERE is_guest = true AND ip_address = $2::varchar AND created_at > NOW() - INTERVAL '24 hours'
-			) < $3
-			RETURNING id, is_guest, auth_provider, cash_balance, created_at;
-		`
-		err := insertSeededUser(ctx, h.pool, func(tx pgx.Tx) pgx.Row {
-			return tx.QueryRow(ctx, query, initialBalance, clientIP, dailyCap)
-		}, initialBalance, &userID, &isGuest, &authProvider, &cashBalance, &createdAt)
-		if err != nil {
-			log.Printf("[HandleGuestAuth] Database insert error: %v (clientIP: %s)\n", err, clientIP)
-			if errors.Is(err, pgx.ErrNoRows) {
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":   "guest_limit_exceeded",
-					"message": "Maximum guest accounts created for this IP address today. Please sign in or try again later.",
-				})
-				return
-			}
-			resp := gin.H{
-				"error":   "database_error",
-				"message": "Failed to provision guest user session",
-			}
-			if h.isDevOrLocal {
-				resp["detail"] = err.Error()
-			}
-			c.JSON(http.StatusInternalServerError, resp)
+	// Atomic conditional insert eliminates TOCTOU races under concurrent requests
+	query := `
+		INSERT INTO users (is_guest, cash_balance, auth_provider, ip_address)
+		SELECT true, $1, 'guest', $2::varchar
+		WHERE (
+			SELECT COUNT(*) FROM users
+			WHERE is_guest = true AND ip_address = $2::varchar AND created_at > NOW() - INTERVAL '24 hours'
+		) < $3
+		RETURNING id, is_guest, auth_provider, cash_balance, created_at;
+	`
+	err := insertSeededUser(ctx, h.pool, func(tx pgx.Tx) pgx.Row {
+		return tx.QueryRow(ctx, query, initialBalance, clientIP, dailyCap)
+	}, initialBalance, &userID, &isGuest, &authProvider, &cashBalance, &createdAt)
+	if err != nil {
+		log.Printf("[HandleGuestAuth] Database insert error: %v (clientIP: %s)\n", err, clientIP)
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":   "guest_limit_exceeded",
+				"message": "Maximum guest accounts created for this IP address today. Please sign in or try again later.",
+			})
 			return
 		}
+		resp := gin.H{
+			"error":   "database_error",
+			"message": "Failed to provision guest user session",
+		}
+		if h.isDevOrLocal {
+			resp["detail"] = err.Error()
+		}
+		c.JSON(http.StatusInternalServerError, resp)
+		return
 	}
 
 	tokenString, err := h.generateJWT(userID.String(), isGuest, false, "", "", "", authProvider)
@@ -601,21 +593,6 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 		createdAt    time.Time
 	)
 
-	if h.pool == nil {
-		nameStr := "Guest Trader"
-		c.JSON(http.StatusOK, UserResponse{
-			ID:           userID.String(),
-			Name:         &nameStr,
-			AuthProvider: "guest",
-			IsGuest:      true,
-			IsAdmin:      false,
-			IsSuperadmin: false,
-			CashBalance:  "1000.00000000",
-			CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-		})
-		return
-	}
-
 	query := `
 		SELECT id, is_guest, auth_provider, email, name, avatar_url, cash_balance, created_at, is_admin
 		FROM users
@@ -856,22 +833,6 @@ func (h *AuthHandler) upsertGoogleUser(
 		existingName        *string
 		existingAvatar      *string
 	)
-
-	if h.pool == nil {
-		mockID := uuid.New().String()
-		return &UserResponse{
-			ID:           mockID,
-			Email:        &email,
-			Name:         &name,
-			AvatarURL:    &avatarURL,
-			IsGuest:      false,
-			IsAdmin:      false,
-			IsSuperadmin: false,
-			AuthProvider: "google",
-			CashBalance:  "1000.00000000",
-			CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-		}, nil
-	}
 
 	queryFind := `
 		SELECT id, is_guest, auth_provider, email, name, avatar_url, cash_balance, created_at, is_admin

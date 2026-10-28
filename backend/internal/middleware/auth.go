@@ -284,35 +284,27 @@ func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFun
 			return
 		}
 
-		isAdmin := claims.IsAdmin || claims.IsSuperadmin
-
-		// Always verify directly against Neon DB if pool is available (guarantees real-time revocation and DB-only authority)
-		if pool != nil {
-			var dbIsAdmin bool
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
-			defer cancel()
-			err := pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", parsedID).Scan(&dbIsAdmin)
-			if err != nil || !dbIsAdmin {
-				if !disabled {
-					limiter.Allow()
-				}
-				log.Printf("[SECURITY] User %s attempted admin access without is_admin privilege from IP=%s path=%s", parsedID, clientIP, c.Request.URL.Path)
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error":   "forbidden",
-					"message": "Admin privileges required (is_admin=true). Admin status can only be granted directly in Neon DB.",
-				})
-				return
-			}
-			isAdmin = dbIsAdmin
+		// Admin authority comes only from the database (real-time revocation); the token's admin
+		// claim is never trusted. Without a database the request fails closed.
+		if pool == nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error":   "admin_unavailable",
+				"message": "Admin verification is unavailable",
+			})
+			return
 		}
-
-		if !isAdmin {
+		var dbIsAdmin bool
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		err = pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", parsedID).Scan(&dbIsAdmin)
+		if err != nil || !dbIsAdmin {
 			if !disabled {
 				limiter.Allow()
 			}
+			log.Printf("[SECURITY] User %s attempted admin access without is_admin privilege from IP=%s path=%s", parsedID, clientIP, c.Request.URL.Path)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error":   "forbidden",
-				"message": "Admin privileges required (is_admin=true)",
+				"message": "Admin privileges required (is_admin=true). Admin status can only be granted directly in the database.",
 			})
 			return
 		}

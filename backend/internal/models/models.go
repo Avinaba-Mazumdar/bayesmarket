@@ -70,7 +70,6 @@ type LiquidityPool struct {
 	CollateralReserve decimal.Decimal `json:"collateral_reserve" db:"collateral_reserve"`
 	KInvariant        decimal.Decimal `json:"k_invariant" db:"k_invariant"`
 	TotalVolumeUSDC   decimal.Decimal `json:"total_volume_usdc" db:"total_volume_usdc"`
-	LockVersion       int             `json:"lock_version" db:"lock_version"`
 	UpdatedAt         time.Time       `json:"updated_at" db:"updated_at"`
 }
 

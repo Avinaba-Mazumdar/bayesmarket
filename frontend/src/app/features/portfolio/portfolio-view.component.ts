@@ -123,7 +123,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                                         <th scope="col" class="th-num">Shares</th>
                                         <th scope="col" class="th-num">Avg Entry</th>
                                         <th scope="col" class="th-num">Current Price</th>
-                                        <th scope="col" class="th-num">Current Value</th>
+                                        <th scope="col" class="th-num" title="What selling the whole position now would pay, after price impact">
+                                            Liquidation Value
+                                        </th>
                                         <th scope="col" class="th-num">Unrealized P&L</th>
                                         <th scope="col" class="th-action">Liquidation</th>
                                     </tr>

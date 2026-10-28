@@ -62,13 +62,13 @@ Traders and developers can interact with the platform immediately via an **insta
 
 ### 2.4 Persistence & Infrastructure
 
-| Layer                   | Provider / Tool             | Configuration         | Rationale                                                                                                            |
-| :---------------------- | :-------------------------- | :-------------------- | :------------------------------------------------------------------------------------------------------------------- |
-| **Database**            | **Neon PostgreSQL**         | Version `18.x`        | Latest major release with enhanced concurrent B-tree index scans and `FOR UPDATE` locking. Scales to zero when idle. |
-| **Database Migrations** | `golang-migrate/migrate/v4` | `v4.18.0`             | Version-controlled idempotent SQL migrations (`.up.sql` / `.down.sql`).                                              |
-| **Packaging & Runtime** | **Native Static Binary**    | `CGO_ENABLED=0` build | Minimal memory footprint with sub-millisecond invocation and zero external container dependencies.                   |
-| **Backend Hosting**     | **Fly.io** / **Render**     | Shared CPU, 256MB RAM | Sub-15ms cold start for Go binaries, generous free tier.                                                             |
-| **Frontend Hosting**    | **Cloudflare Pages**        | Global Edge CDN       | Sub-50ms TTFB globally, automated Git CI/CD, free SSL and DDoS mitigation.                                           |
+| Layer                   | Provider / Tool                                     | Configuration             | Rationale                                                                                                                                                                                                                 |
+| :---------------------- | :-------------------------------------------------- | :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Database**            | **Neon PostgreSQL**                                 | Version `18.x`            | Latest major release with enhanced concurrent B-tree index scans and `FOR UPDATE` locking. Scales to zero when idle.                                                                                                      |
+| **Database Migrations** | Embedded runner (`internal/database/migrations.go`) | `schema_migrations` table | Numbered `.up.sql` / `.down.sql` files embedded in the binary, each applied once in its own transaction. A session-level `pg_advisory_lock` serializes runs, so instances booting together never apply a migration twice. |
+| **Packaging & Runtime** | **Native Static Binary**                            | `CGO_ENABLED=0` build     | Minimal memory footprint with sub-millisecond invocation and zero external container dependencies.                                                                                                                        |
+| **Backend Hosting**     | **Fly.io** / **Render**                             | Shared CPU, 256MB RAM     | Sub-15ms cold start for Go binaries, generous free tier.                                                                                                                                                                  |
+| **Frontend Hosting**    | **Cloudflare Pages**                                | Global Edge CDN           | Sub-50ms TTFB globally, automated Git CI/CD, free SSL and DDoS mitigation.                                                                                                                                                |
 
 ---
 
@@ -463,7 +463,6 @@ erDiagram
         numeric collateral_reserve
         numeric k_invariant
         numeric total_volume_usdc
-        int lock_version
         timestamp updated_at
     }
 
@@ -567,10 +566,9 @@ CREATE TABLE liquidity_pools (
     reserve_yes NUMERIC(28, 8) NOT NULL,       -- R_yes virtual inventory
     reserve_no NUMERIC(28, 8) NOT NULL,        -- R_no virtual inventory
     collateral_reserve NUMERIC(28, 8) NOT NULL, -- USDC backing issued complete sets
-    k_invariant NUMERIC(56, 16) NOT NULL,      -- Invariant k = R_yes * R_no
+    k_invariant NUMERIC(56, 16) NOT NULL,      -- R_yes * R_no, rewritten on every reserve change
     total_volume_usdc NUMERIC(28, 8) NOT NULL DEFAULT 0.00000000,
-    lock_version INT NOT NULL DEFAULT 0,       -- Optimistic concurrency versioning
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_atTIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_positive_reserves CHECK (reserve_yes > 0 AND reserve_no > 0),
     CONSTRAINT chk_nonnegative_collateral CHECK (collateral_reserve >= 0)
 );
@@ -647,6 +645,10 @@ CREATE INDEX idx_ledger_entries_transaction ON ledger_entries(transaction_id);
 CREATE INDEX idx_faucet_ip_time ON faucet_claims(ip_address, claimed_at DESC);
 ```
 
+#### Enumerated Column Constraints
+
+Migration 000006 adds `CHECK` constraints for `markets.status` (`draft`, `active`, `suspended`, `locked`, `resolved`, `settled`, `voided`), `markets.winning_outcome` (`YES`, `NO` or NULL), `user_positions.outcome`, `trades.trade_type` (`BUY`, `SELL`), `trades.outcome` and `ledger_entries.asset` (`USDC`, `YES`, `NO`). They are created `NOT VALID`: every new or updated row is checked, and historical rows can be validated with `ALTER TABLE ... VALIDATE CONSTRAINT` once checked.
+
 #### Ledger Accounts (double entry)
 
 Every posting nets to zero per asset within its `transaction_id`, so the running sum of an account always equals the snapshot it mirrors and every balance can be rebuilt from `ledger_entries`:
@@ -699,15 +701,15 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 
 #### Financial Error Taxonomy
 
-| Error Code                   | HTTP Status             | Description                                                                                         |
-| :--------------------------- | :---------------------- | :-------------------------------------------------------------------------------------------------- |
-| `ERR_INSUFFICIENT_FUNDS`     | `400 Bad Request`       | User balance is less than required trade amount.                                                    |
-| `ERR_SLIPPAGE_EXCEEDED`      | `400 Bad Request`       | Pool moved since the quote so the fill is below `min_shares_out` (BUY) or `min_payout_usdc` (SELL). |
-| `ERR_MINIMUM_TRADE_SIZE`     | `400 Bad Request`       | Trade amount is below the minimum threshold ($0.000001 USDC).                                       |
-| `ERR_POOL_RESERVE_EXHAUSTED` | `400 Bad Request`       | Trade would drain reserves below safety threshold ($100.00 USDC).                                   |
-| `ERR_MARKET_NOT_TRADABLE`    | `409 Conflict`          | Market is locked, suspended, or already resolved.                                                   |
-| `ERR_RATE_LIMIT_EXCEEDED`    | `429 Too Many Requests` | Token-bucket limit exceeded. Includes `Retry-After` header.                                         |
-| `ERR_CLAIM_COOLDOWN`         | `429 Too Many Requests` | Claim submitted before 5-minute cooldown expired.                                                   |
+| Error Code                   | HTTP Status             | Description                                                                                                                                                        |
+| :--------------------------- | :---------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ERR_INSUFFICIENT_FUNDS`     | `400 Bad Request`       | User balance is less than required trade amount.                                                                                                                   |
+| `ERR_SLIPPAGE_EXCEEDED`      | `400 Bad Request`       | Pool moved since the quote so the fill is below `min_shares_out` (BUY) or `min_payout_usdc` (SELL).                                                                |
+| `ERR_MINIMUM_TRADE_SIZE`     | `400 Bad Request`       | Trade amount is below the minimum threshold ($0.000001 USDC).                                                                                                      |
+| `ERR_POOL_RESERVE_EXHAUSTED` | `400 Bad Request`       | Trade would drain reserves below safety threshold ($100.00 USDC).                                                                                                  |
+| `ERR_MARKET_NOT_TRADABLE`    | `409 Conflict`          | Market is locked, suspended, or already resolved.                                                                                                                  |
+| `ERR_RATE_LIMIT_EXCEEDED`    | `429 Too Many Requests` | Token-bucket limit exceeded. Includes `Retry-After` header.                                                                                                        |
+| `ERR_CLAIM_COOLDOWN`         | `429 Too Many Requests` | Claim refused: `claim_cooldown` (24 h per account), `claim_ip_limit_exceeded` (daily cap per IP) or `claim_ip_rate_limited` (30 s per IP). Includes `Retry-After`. |
 
 ---
 
@@ -887,14 +889,18 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
                 "shares_owned": "138.67403315",
                 "avg_buy_price": "0.72111554",
                 "current_price": "0.72000000",
-                "current_value": "99.84530387",
-                "unrealized_pnl": "-0.15469613",
-                "unrealized_pnl_pct": "-0.15469613"
+                "current_value_usdc": "98.62745098",
+                "mark_value_usdc": "99.84530387",
+                "valuation_method": "liquidation",
+                "unrealized_pnl_usdc": "-1.37254902",
+                "unrealized_pnl_pct": "-1.37"
             }
         ]
     }
 }
 ```
+
+- **Valuation**: `current_value_usdc` is the liquidation value, the SELL quote for the whole position against the current pool, so it includes the price impact the holder would pay. Unrealized P&L and the portfolio total use it. `mark_value_usdc` (spot × shares) is reported for reference. If the pool cannot price a full sale, `valuation_method` is `mark` and the mark value is used.
 
 #### 8. Cash Out and Admin Market Resolution
 
@@ -1097,12 +1103,12 @@ _(Cascading foreign keys automatically purge associated positions and claim logs
 
 ### 12.1 Environment Variables Configuration
 
-| Variable       | Service | Description                                                   | Example Value                                                     |
-| :------------- | :------ | :------------------------------------------------------------ | :---------------------------------------------------------------- |
-| `DATABASE_URL` | Backend | PostgreSQL connection string with SSL mode enabled            | `postgres://user:pass@ep-cool-db.neon.tech/bayes?sslmode=require` |
-| `SERVER_PORT`  | Backend | HTTP / WebSocket server listen port                           | `8080`                                                            |
-| `CORS_ORIGIN`  | Backend | Permitted frontend origin                                     | `http://localhost:4200`                                           |
-| `JWT_SECRET`   | Backend | Cryptographic HMAC-SHA256 secret salt for guest token signing | Generated secret; never committed                                 |
+| Variable       | Service | Description                                                                                                                                              | Example Value                                                     |
+| :------------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- |
+| `DATABASE_URL` | Backend | PostgreSQL connection string with SSL mode enabled. Required: the server exits at startup if it is unset or unreachable; there is no database-less mode. | `postgres://user:pass@ep-cool-db.neon.tech/bayes?sslmode=require` |
+| `SERVER_PORT`  | Backend | HTTP / WebSocket server listen port                                                                                                                      | `8080`                                                            |
+| `CORS_ORIGIN`  | Backend | Permitted frontend origin                                                                                                                                | `http://localhost:4200`                                           |
+| `JWT_SECRET`   | Backend | Cryptographic HMAC-SHA256 secret salt for guest token signing                                                                                            | Generated secret; never committed                                 |
 
 ---
 
@@ -1111,7 +1117,11 @@ _(Cascading foreign keys automatically purge associated positions and claim logs
 BayesMarket contains **zero pre-seeded or hardcoded demo markets**. All prediction markets are dynamically provisioned, modified, and settled or deleted by authorized system administrators via the Web UI:
 
 1. **Strict Admin Designation**: Setting an admin can only be done directly from Neon DB (`UPDATE users SET is_admin = true WHERE email = '...';`). No API endpoint exists to escalate privileges.
-2. **Dynamic Market Creation**: Administrators configure title, description, category, resolution criteria, expiration timestamp, initial collateral, and initial odds via `POST /api/v1/admin/markets`.
+2. **Dynamic Market Creation**: Administrators configure title, description, category, resolution criteria, expiration timestamp, initial collateral, and initial odds via `POST /api/v1/admin/markets`. Input rules (400 on violation):
+    - Lengths in characters: title ≤ 255, category ≤ 64, image_url ≤ 512 (the column sizes), description ≤ 10,000, resolution_source ≤ 2,000.
+    - `initial_probability_yes` / `initial_probability_no` are fractions in [0.01, 0.99] with at most 8 decimals (`"0.37"`); percentages are rejected, and if both are given they must sum to exactly 1.
+    - `initial_collateral_usdc` is between 100 and 1,000,000 USDC with at most 8 decimals.
+    - `resolution_date` must be in the future, on create and on edit. An expired market can only be reactivated together with a new future date.
 3. **Market Listing**: The admin console lists markets in every status (`active`, `suspended`, `locked`, `resolved`, `voided`) via `GET /api/v1/admin/markets?status=&category=&limit=&offset=`, so halted markets stay reachable for reactivation, resolution or voiding. The public `GET /api/v1/markets` keeps returning only `active` markets.
 4. **Market Editing**: Administrators can modify market metadata and operational status (`active`, `suspended`, `locked`) via `PUT /api/v1/admin/markets/:id`. Invariant reserves and collateral remain protected from arbitrary tampering.
 5. **Market Voiding & Deletion**: Administrators cancel a market that has trading history via `POST /api/v1/admin/markets/:id/void`, which refunds every open position at cost basis and keeps all trade and ledger history. `DELETE /api/v1/admin/markets/:id` only removes markets with no trades, positions or ledger entries; otherwise it returns `409 market_has_activity`. Ledger rows are never deleted.

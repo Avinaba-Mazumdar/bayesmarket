@@ -11,7 +11,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/bayesmarket/bayesmarket/internal/amm"
 	"github.com/bayesmarket/bayesmarket/internal/middleware"
 	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
@@ -435,6 +437,70 @@ func slugifyTitle(title string) string {
 	return slug
 }
 
+// Market text limits. Title, category and image_url mirror the VARCHAR columns so oversized input
+// is a 400 instead of a database error; description and resolution_source (TEXT) are capped to
+// keep payloads reasonable.
+const (
+	maxMarketTitleLen       = 255
+	maxMarketDescriptionLen = 10000
+	maxMarketCategoryLen    = 64
+	maxMarketSourceLen      = 2000
+	maxMarketImageURLLen    = 512
+)
+
+// Market creation bounds. Probabilities are fractions in [0.01, 0.99] with at most 8 decimal
+// places; collateral is a positive USDC amount with at most 8 decimal places.
+var (
+	minMarketProbability = decimal.RequireFromString("0.01")
+	maxMarketProbability = decimal.RequireFromString("0.99")
+	minMarketCollateral  = decimal.NewFromInt(100)
+	maxMarketCollateral  = MaxTradeAmountUSDC
+)
+
+// validateMarketText checks field lengths in characters. Empty values pass; callers decide which
+// fields are required.
+func validateMarketText(title, description, category, source, imageURL string) *AppError {
+	fields := []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"title", title, maxMarketTitleLen},
+		{"description", description, maxMarketDescriptionLen},
+		{"category", category, maxMarketCategoryLen},
+		{"resolution_source", source, maxMarketSourceLen},
+		{"image_url", imageURL, maxMarketImageURLLen},
+	}
+	for _, f := range fields {
+		if utf8.RuneCountInString(f.value) > f.max {
+			return &AppError{
+				StatusCode: http.StatusBadRequest,
+				ErrorCode:  "invalid_" + f.name,
+				Message:    fmt.Sprintf("%s must be at most %d characters", f.name, f.max),
+			}
+		}
+	}
+	return nil
+}
+
+// parseMarketProbability parses a probability given as a fraction (e.g. "0.37"). Percentages are
+// not accepted: "1.5" would otherwise be ambiguous between 1.5% and an invalid fraction.
+func parseMarketProbability(raw, field string) (decimal.Decimal, *AppError) {
+	invalid := &AppError{
+		StatusCode: http.StatusBadRequest,
+		ErrorCode:  "invalid_probability",
+		Message:    fmt.Sprintf("%s must be a fraction between 0.01 and 0.99 with at most 8 decimal places (e.g. \"0.37\")", field),
+	}
+	p, err := decimal.NewFromString(strings.TrimSpace(raw))
+	if err != nil || !p.Equal(p.Truncate(amm.StoragePrecision)) {
+		return decimal.Zero, invalid
+	}
+	if p.LessThan(minMarketProbability) || p.GreaterThan(maxMarketProbability) {
+		return decimal.Zero, invalid
+	}
+	return p, nil
+}
+
 func parseResolutionDate(raw string) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	formats := []string{
@@ -474,11 +540,16 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	req.Description = strings.TrimSpace(req.Description)
 	req.Category = strings.ToLower(strings.TrimSpace(req.Category))
 	req.ResolutionSource = strings.TrimSpace(req.ResolutionSource)
+	req.ImageURL = strings.TrimSpace(req.ImageURL)
 	if req.Title == "" || req.Description == "" || req.Category == "" || req.ResolutionSource == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
 			"message": "Title, description, category, and resolution_source cannot be empty",
 		})
+		return
+	}
+	if appErr := validateMarketText(req.Title, req.Description, req.Category, req.ResolutionSource, req.ImageURL); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 		return
 	}
 
@@ -500,78 +571,49 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 
 	// 1. Initial Collateral (default 10,000 USDC)
 	collateral := decimal.NewFromInt(10000)
-	if req.InitialCollateralUSDC != "" {
-		cDec, err := decimal.NewFromString(strings.TrimSpace(req.InitialCollateralUSDC))
-		if err != nil || cDec.LessThan(decimal.NewFromInt(100)) {
+	if strings.TrimSpace(req.InitialCollateralUSDC) != "" {
+		cDec, valErr := ParseBoundedPositiveDecimal(req.InitialCollateralUSDC, "initial_collateral_usdc", maxMarketCollateral)
+		if valErr != nil || cDec.LessThan(minMarketCollateral) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "invalid_collateral",
-				"message": "Initial pool collateral must be at least 100 USDC",
+				"message": fmt.Sprintf("Initial pool collateral must be between %s and %s USDC with at most 8 decimal places", minMarketCollateral.String(), maxMarketCollateral.String()),
 			})
 			return
 		}
 		collateral = cDec
 	}
 
-	// 2. Initial Probability for YES (default 0.50 / 50%)
-	probYes := decimal.NewFromFloat(0.50)
-	if req.InitialProbabilityYes != "" {
-		pDec, err := decimal.NewFromString(strings.TrimSpace(req.InitialProbabilityYes))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_probability",
-				"message": "Initial probability must be a decimal (0.01 to 0.99) or percentage (1 to 99)",
-			})
+	// 2. Initial Probability for YES as a fraction (default 0.5)
+	probYes := decimal.RequireFromString("0.5")
+	if strings.TrimSpace(req.InitialProbabilityYes) != "" {
+		pYes, appErr := parseMarketProbability(req.InitialProbabilityYes, "initial_probability_yes")
+		if appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 			return
 		}
-		if pDec.GreaterThan(decimal.NewFromInt(1)) {
-			pDec = pDec.Div(decimal.NewFromInt(100))
-		}
-		if pDec.LessThan(decimal.NewFromFloat(0.01)) || pDec.GreaterThan(decimal.NewFromFloat(0.99)) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_probability",
-				"message": "Initial probability must be between 1% (0.01) and 99% (0.99)",
-			})
-			return
-		}
-		probYes = pDec
+		probYes = pYes
 	}
 
 	probNo := decimal.NewFromInt(1).Sub(probYes)
-	if req.InitialProbabilityNo != "" {
-		pNoDec, err := decimal.NewFromString(strings.TrimSpace(req.InitialProbabilityNo))
-		if err != nil {
+	if strings.TrimSpace(req.InitialProbabilityNo) != "" {
+		pNo, appErr := parseMarketProbability(req.InitialProbabilityNo, "initial_probability_no")
+		if appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
+		if !probYes.Add(pNo).Equal(decimal.NewFromInt(1)) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "invalid_probability",
-				"message": "Initial probability NO must be a decimal (0.01 to 0.99) or percentage (1 to 99)",
+				"message": "initial_probability_yes and initial_probability_no must sum to exactly 1",
 			})
 			return
 		}
-		if pNoDec.GreaterThan(decimal.NewFromInt(1)) {
-			pNoDec = pNoDec.Div(decimal.NewFromInt(100))
-		}
-		if pNoDec.LessThan(decimal.NewFromFloat(0.01)) || pNoDec.GreaterThan(decimal.NewFromFloat(0.99)) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_probability",
-				"message": "Initial probability NO must be between 1% (0.01) and 99% (0.99)",
-			})
-			return
-		}
-		// Enforce |P_YES + P_NO - 1| < 0.000001
-		diff := probYes.Add(pNoDec).Sub(decimal.NewFromInt(1)).Abs()
-		if diff.GreaterThan(decimal.RequireFromString("0.000001")) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_probability",
-				"message": "Sum of P_YES and P_NO must equal 1.0 within declared precision",
-			})
-			return
-		}
-		probNo = pNoDec
+		probNo = pNo
 	}
 
 	// Fixed-point CPMM inventory derivation:
 	// Setting R_yes = Collateral * (1 - P_yes) and R_no = Collateral - R_yes guarantees:
 	// R_yes + R_no = Collateral exact to 8 decimal places, so P_yes = R_no / Collateral
-	collateral = collateral.Truncate(8)
 	reserveYes := collateral.Mul(probNo).Truncate(8)
 	reserveNo := collateral.Sub(reserveYes)
 	if reserveYes.LessThanOrEqual(decimal.Zero) || reserveNo.LessThanOrEqual(decimal.Zero) || reserveYes.Add(reserveNo).GreaterThan(collateral) {
@@ -585,7 +627,7 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 
 	// 3. Unique slug generation & atomic database insertion with collision retry
 	baseSlug := slugifyTitle(req.Title)
-	imageURL := strings.TrimSpace(req.ImageURL)
+	imageURL := req.ImageURL
 	if imageURL == "" {
 		imageURL = fmt.Sprintf("/assets/markets/%s.webp", req.Category)
 	}
@@ -602,8 +644,8 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		RETURNING id, created_at;
 	`
 	queryPool := `
-		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc, lock_version)
-		VALUES ($1, $2, $3, $4, $5, 0, 0);
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1, $2, $3, $4, $5, 0);
 	`
 
 	for attempt := 0; attempt < 5; attempt++ {
@@ -823,6 +865,10 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_date", "message": parseErr.Error()})
 			return
 		}
+		if parsedDate.Before(time.Now().UTC()) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_date", "message": "Resolution date must be in the future"})
+			return
+		}
 		newDate = parsedDate
 	}
 
@@ -844,6 +890,20 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_status", "message": "Status must be 'active', 'suspended', or 'locked'"})
 			return
 		}
+	}
+
+	// An expired market can only be reopened together with a new, future resolution date.
+	if newStatus == "active" && curStatus != "active" && newDate.Before(time.Now().UTC()) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid_status",
+			"message": "Cannot reactivate a market whose resolution date has passed; set a future resolution_date",
+		})
+		return
+	}
+
+	if appErr := validateMarketText(newTitle, newDesc, newCat, newSource, newImageURL); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
 	}
 
 	updateQuery := `

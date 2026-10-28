@@ -329,7 +329,7 @@ func (h *TradeHandler) executeOrderTx(
 		    reserve_no = $2, 
 		    collateral_reserve = $3, 
 		    total_volume_usdc = total_volume_usdc + $4, 
-		    lock_version = lock_version + 1, 
+		    k_invariant = $1::numeric * $2::numeric,
 		    updated_at = NOW() 
 		WHERE market_id = $5;
 	`, quote.NewReserveYes, quote.NewReserveNo, quote.NewCollateral, amount, marketUUID)
@@ -598,7 +598,7 @@ func (h *TradeHandler) executeCashOutTx(
 		    reserve_no = $2, 
 		    collateral_reserve = $3, 
 		    total_volume_usdc = total_volume_usdc + $4, 
-		    lock_version = lock_version + 1, 
+		    k_invariant = $1::numeric * $2::numeric,
 		    updated_at = NOW() 
 		WHERE market_id = $5;
 	`, quote.NewReserveYes, quote.NewReserveNo, quote.NewCollateral, quote.PayoutUSDC, marketUUID)
@@ -743,14 +743,13 @@ func lockAndVerifyUserPosition(ctx context.Context, tx pgx.Tx, userID, marketUUI
 
 func lockLiquidityPool(ctx context.Context, tx pgx.Tx, marketUUID uuid.UUID) (amm.PoolReserves, decimal.Decimal, error) {
 	var rYes, rNo, collateral, totalVolume decimal.Decimal
-	var lockVersion int
 	query := `
-		SELECT reserve_yes, reserve_no, collateral_reserve, total_volume_usdc, lock_version 
+		SELECT reserve_yes, reserve_no, collateral_reserve, total_volume_usdc
 		FROM liquidity_pools 
 		WHERE market_id = $1 
 		FOR UPDATE;
 	`
-	err := tx.QueryRow(ctx, query, marketUUID).Scan(&rYes, &rNo, &collateral, &totalVolume, &lockVersion)
+	err := tx.QueryRow(ctx, query, marketUUID).Scan(&rYes, &rNo, &collateral, &totalVolume)
 	if err != nil {
 		return amm.PoolReserves{}, decimal.Zero, err
 	}

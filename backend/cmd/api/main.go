@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
 	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -28,7 +26,7 @@ func main() {
 		log.Fatalf("[FATAL] Configuration error: %v\n", err)
 	}
 
-	if cfg != nil && !cfg.IsDevOrLocal() {
+	if !cfg.IsDevOrLocal() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -40,22 +38,17 @@ func main() {
 		port = cfg.ServerPort
 	}
 
-	// Determine migration and admin database connection URL
-	migrationURL := ""
-	if cfg != nil {
-		if cfg.MigrationDatabaseURL != "" && !strings.Contains(cfg.MigrationDatabaseURL, "ep-cool-pool-123456") {
-			migrationURL = cfg.MigrationDatabaseURL
-		} else if cfg.DatabaseURL != "" && !strings.Contains(cfg.DatabaseURL, "ep-cool-pool-123456") {
-			migrationURL = cfg.DatabaseURL
-		}
+	// The server never runs without its database: every endpoint reads or writes money.
+	if cfg.DatabaseURL == "" {
+		log.Fatal("[FATAL] DATABASE_URL is required")
+	}
+	migrationURL := cfg.MigrationDatabaseURL
+	if migrationURL == "" {
+		migrationURL = cfg.DatabaseURL
 	}
 
 	// 1. Handle dedicated CLI tasks (-migrate flag)
 	if *migrateOnly {
-		if migrationURL == "" {
-			log.Fatal("[FATAL] Cannot execute migrate: no valid MIGRATION_DATABASE_URL or DATABASE_URL configured.")
-		}
-
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
@@ -74,50 +67,34 @@ func main() {
 		return
 	}
 
-	// 2. If separate privileged MIGRATION_DATABASE_URL is provided, run migrations before booting runtime server
-	if cfg != nil && cfg.AutoMigrate && cfg.MigrationDatabaseURL != "" && !strings.Contains(cfg.MigrationDatabaseURL, "ep-cool-pool-123456") {
+	// 2. Apply migrations before serving, through the privileged URL when one is configured
+	if cfg.AutoMigrate {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-
-		migPool, err := database.NewPool(ctx, cfg.MigrationDatabaseURL)
+		migPool, err := database.NewPool(ctx, migrationURL)
 		if err != nil {
-			log.Fatalf("[FATAL] Failed to connect to MIGRATION_DATABASE_URL: %v\n", err)
+			cancel()
+			log.Fatalf("[FATAL] Failed to connect for migrations: %v\n", err)
 		}
-		log.Println("[INFO] Applying database migrations via privileged MIGRATION_DATABASE_URL...")
-		if err := database.RunMigrations(ctx, migPool); err != nil {
-			migPool.Close()
-			log.Fatalf("[FATAL] Database migration via MIGRATION_DATABASE_URL failed: %v\n", err)
-		}
+		log.Println("[INFO] Applying database migrations...")
+		err = database.RunMigrations(ctx, migPool)
 		migPool.Close()
-		log.Println("[INFO] Privileged database migrations applied successfully.")
-	}
-
-	// 3. Initialize runtime connection pool (using least-privilege DATABASE_URL)
-	var dbPool *pgxpool.Pool
-	if cfg != nil && cfg.DatabaseURL != "" && !strings.Contains(cfg.DatabaseURL, "ep-cool-pool-123456") {
-		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		defer cancel()
-
-		pool, err := database.NewPool(ctx, cfg.DatabaseURL)
+		cancel()
 		if err != nil {
-			log.Printf("[WARN] Could not connect to Neon PostgreSQL: %v\n", err)
-			log.Println("[INFO] Continuing server startup in detached mode. Configure valid DATABASE_URL in .env to enable persistence.")
-		} else {
-			dbPool = pool
-			defer dbPool.Close()
-
-			if cfg.AutoMigrate && cfg.MigrationDatabaseURL == "" {
-				log.Println("[INFO] Checking and applying database migrations via DATABASE_URL...")
-				if err := database.RunMigrations(ctx, dbPool); err != nil {
-					log.Fatalf("[FATAL] Database migration failed: %v\n", err)
-				}
-			} else if !cfg.AutoMigrate {
-				log.Println("[INFO] Auto-migrations disabled (AUTO_MIGRATE=false). Operating with runtime database user permissions.")
-			}
+			log.Fatalf("[FATAL] Database migration failed: %v\n", err)
 		}
+		log.Println("[INFO] Database migrations applied successfully.")
 	} else {
-		log.Println("[INFO] Placeholder or empty DATABASE_URL detected. Server running in disconnected sandbox mode.")
+		log.Println("[INFO] Auto-migrations disabled (AUTO_MIGRATE=false). Operating with runtime database user permissions.")
 	}
+
+	// 3. Initialize runtime connection pool (least-privilege DATABASE_URL). Failure is fatal.
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	dbPool, err := database.NewPool(dbCtx, cfg.DatabaseURL)
+	dbCancel()
+	if err != nil {
+		log.Fatalf("[FATAL] Could not connect to PostgreSQL: %v\n", err)
+	}
+	defer dbPool.Close()
 
 	// Initialize real-time WebSocket broker hub
 	wsHub := ws.NewHub()

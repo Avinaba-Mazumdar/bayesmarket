@@ -41,6 +41,34 @@ func NewClaimHandler(pool *pgxpool.Pool, isDevOrLocal ...bool) *ClaimHandler {
 // NewFaucetHandler is a legacy alias for NewClaimHandler.
 var NewFaucetHandler = NewClaimHandler
 
+// claimIdempotencyOp is the idempotency_keys.operation for claims, used for both lookup and write.
+const claimIdempotencyOp = "claim"
+
+// claimDeniedError is a rate-limit rejection decided inside the claim transaction.
+type claimDeniedError struct {
+	code              string
+	message           string
+	retryAfterSeconds int
+}
+
+func (e *claimDeniedError) Error() string { return e.code }
+
+// claimReceipt is the response body for a successful claim; it is also stored as the
+// idempotency receipt.
+type claimReceipt struct {
+	Success         bool             `json:"success"`
+	AmountClaimed   string           `json:"amount_claimed"`
+	Amount          string           `json:"amount"`
+	NewBalance      string           `json:"new_balance"`
+	CooldownSeconds int              `json:"cooldown_seconds"`
+	User            claimReceiptUser `json:"user"`
+}
+
+type claimReceiptUser struct {
+	ID          string `json:"id"`
+	CashBalance string `json:"cash_balance"`
+}
+
 // HandleClaim issues 100 virtual USDC to the user with a 24-hour cooldown.
 //
 // POST /api/v1/claim or POST /api/v1/faucet
@@ -54,41 +82,61 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 		return
 	}
 
-	clientIP := c.ClientIP()
-	cooldownDuration := 24 * time.Hour
-	claimGrant := decimal.NewFromInt(100)
-
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 
 	// Fast-path idempotency replay: return the stored receipt for a retried claim.
-	if idempotencyKey != "" && h.pool != nil {
-		var cachedResponse []byte
-		err := h.pool.QueryRow(ctx, `
-			SELECT response
-			FROM idempotency_keys
-			WHERE actor_id = $1 AND operation = 'faucet_claim' AND idempotency_key = $2;
-		`, userID, idempotencyKey).Scan(&cachedResponse)
-		if err == nil && len(cachedResponse) > 0 {
-			c.Data(http.StatusOK, "application/json", cachedResponse)
+	if idempotencyKey != "" {
+		if cached, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey); err == nil && found {
+			c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
+			c.Data(http.StatusOK, "application/json", cached)
 			return
 		}
 	}
 
-	if h.pool == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success":          true,
-			"amount_claimed":   claimGrant.StringFixed(8),
-			"amount":           claimGrant.StringFixed(0),
-			"new_balance":      "1100.00000000",
-			"cooldown_seconds": 86400,
-			"user": gin.H{
-				"id":           userID.String(),
-				"cash_balance": "1100.00000000",
-			},
-		})
+	clientIP := c.ClientIP()
+	receipt, err := ExecuteSerializableWithRetry(ctx, 10, func() (*claimReceipt, error) {
+		return h.executeClaimTx(ctx, userID, clientIP, idempotencyKey)
+	})
+	if err != nil {
+		var denied *claimDeniedError
+		if errors.As(err, &denied) {
+			c.Header("Retry-After", strconv.Itoa(denied.retryAfterSeconds))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":                      denied.code,
+				"message":                    denied.message,
+				"cooldown_remaining_seconds": denied.retryAfterSeconds,
+			})
+			return
+		}
+		var appErr *AppError
+		if errors.As(err, &appErr) {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
+		if errors.Is(err, ErrIdempotencyReplay) || IsUniqueViolation(err) {
+			if cached, found, _ := GetCachedIdempotencyResponse(ctx, h.pool, userID, claimIdempotencyOp, idempotencyKey); found {
+				c.Header("X-Cache-Lookup", "HIT-IDEMPOTENT")
+				c.Data(http.StatusOK, "application/json", cached)
+				return
+			}
+		}
+		if IsSerializationOrDeadlock(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "concurrency_conflict", "message": "Claim experienced contention after retries. Please retry."})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to process claim"})
 		return
 	}
 
+	c.JSON(http.StatusOK, receipt)
+}
+
+// executeClaimTx runs one claim attempt. All abuse checks run inside the SERIALIZABLE transaction
+// after the user row is locked, so concurrent claims for the same user or IP cannot both pass;
+// serialization failures are retried by the caller.
+func (h *ClaimHandler) executeClaimTx(ctx context.Context, userID uuid.UUID, clientIP, idempotencyKey string) (*claimReceipt, error) {
+	const cooldown = 24 * time.Hour
+	claimGrant := decimal.NewFromInt(100)
 	ipDailyCap := 10
 	ipBurstCooldown := 30 * time.Second
 	if h.isDevOrLocal {
@@ -96,177 +144,110 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 		ipBurstCooldown = 0
 	}
 
-	// 1. Check account cooldown and IP-level abuse prevention in a single consolidated query.
-	// - Account cooldown: per user_id, 24 hours.
-	// - IP abuse prevention: daily cap per IP (loopback is NOT exempt; NAT users do not collide).
+	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Lock order: claims touch only the user row
+	var lockedBalance decimal.Decimal
+	if err := tx.QueryRow(ctx, `SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE;`, userID).Scan(&lockedBalance); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, &AppError{StatusCode: http.StatusUnauthorized, ErrorCode: "unauthorized", Message: "User session is invalid or user no longer exists"}
+		}
+		return nil, err
+	}
+
+	// Account cooldown, IP daily cap and IP burst limit (no loopback exemption)
 	var (
 		lastUserClaim *time.Time
 		ipCount       int
 		lastIPClaim   *time.Time
 	)
-	queryCheck := `
-		SELECT 
-			(SELECT claimed_at FROM faucet_claims WHERE user_id = $1 ORDER BY claimed_at DESC LIMIT 1),
+	if err := tx.QueryRow(ctx, `
+		SELECT
+			(SELECT MAX(claimed_at) FROM faucet_claims WHERE user_id = $1),
 			(SELECT COUNT(*) FROM faucet_claims WHERE ip_address = $2 AND claimed_at > NOW() - INTERVAL '24 hours'),
 			(SELECT MAX(claimed_at) FROM faucet_claims WHERE ip_address = $2 AND claimed_at > NOW() - INTERVAL '24 hours');
-	`
-	if err := h.pool.QueryRow(ctx, queryCheck, userID, clientIP).Scan(&lastUserClaim, &ipCount, &lastIPClaim); err == nil {
-		// User cooldown check
-		if lastUserClaim != nil {
-			if elapsed := time.Since(*lastUserClaim); elapsed < cooldownDuration {
-				remainingSec := int((cooldownDuration - elapsed).Seconds())
-				c.Header("Retry-After", strconv.Itoa(remainingSec))
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":                      "faucet_cooldown",
-					"message":                    "Faucet cooldown active. Please wait before claiming again.",
-					"cooldown_remaining_seconds": remainingSec,
-				})
-				return
+	`, userID, clientIP).Scan(&lastUserClaim, &ipCount, &lastIPClaim); err != nil {
+		return nil, err
+	}
+	if lastUserClaim != nil {
+		if elapsed := time.Since(*lastUserClaim); elapsed < cooldown {
+			return nil, &claimDeniedError{
+				code:              "claim_cooldown",
+				message:           "Claim cooldown active. Please wait before claiming again.",
+				retryAfterSeconds: int((cooldown - elapsed).Seconds()),
 			}
 		}
-
-		// IP abuse prevention (no loopback exemption; prevents Sybil draining without NAT lockout)
-		if clientIP != "" {
-			if ipCount >= ipDailyCap {
-				c.Header("Retry-After", "3600")
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":   "faucet_ip_limit_exceeded",
-					"message": "Maximum daily faucet claims exceeded for this IP address. Please try again tomorrow.",
-				})
-				return
+	}
+	if clientIP != "" {
+		if ipCount >= ipDailyCap {
+			return nil, &claimDeniedError{
+				code:              "claim_ip_limit_exceeded",
+				message:           "Maximum daily claims exceeded for this IP address. Please try again tomorrow.",
+				retryAfterSeconds: 3600,
 			}
-			if ipBurstCooldown > 0 && lastIPClaim != nil && time.Since(*lastIPClaim) < ipBurstCooldown {
-				remainingBurst := int((ipBurstCooldown - time.Since(*lastIPClaim)).Seconds()) + 1
-				c.Header("Retry-After", strconv.Itoa(remainingBurst))
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":                      "faucet_ip_rate_limited",
-					"message":                    "Too many faucet requests from this IP. Please wait a moment before claiming again.",
-					"cooldown_remaining_seconds": remainingBurst,
-				})
-				return
+		}
+		if ipBurstCooldown > 0 && lastIPClaim != nil && time.Since(*lastIPClaim) < ipBurstCooldown {
+			return nil, &claimDeniedError{
+				code:              "claim_ip_rate_limited",
+				message:           "Too many claims from this IP. Please wait a moment before claiming again.",
+				retryAfterSeconds: int((ipBurstCooldown - time.Since(*lastIPClaim)).Seconds()) + 1,
 			}
 		}
 	}
 
-	// Execute atomic claim transaction
-	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to initiate transaction"})
-		return
-	}
-	defer tx.Rollback(ctx)
-
-	// Lock the user row first (global lock order: user row first) so concurrent
-	// claims for the same account serialize before any cooldown evaluation.
-	var lockedBalance decimal.Decimal
-	lockUserQuery := `SELECT cash_balance FROM users WHERE id = $1 FOR UPDATE;`
-	if err := tx.QueryRow(ctx, lockUserQuery, userID).Scan(&lockedBalance); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "User session is invalid or user no longer exists"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to lock user balance"})
-		return
-	}
-
-	// Re-check account cooldown and IP daily cap inside the transaction
-	var (
-		lastUserClaimInTx *time.Time
-		ipCountInTx       int
-	)
-	queryCheckInTx := `
-		SELECT 
-			(SELECT claimed_at FROM faucet_claims WHERE user_id = $1 ORDER BY claimed_at DESC LIMIT 1),
-			(SELECT COUNT(*) FROM faucet_claims WHERE ip_address = $2 AND claimed_at > NOW() - INTERVAL '24 hours');
-	`
-	if err := tx.QueryRow(ctx, queryCheckInTx, userID, clientIP).Scan(&lastUserClaimInTx, &ipCountInTx); err == nil {
-		if lastUserClaimInTx != nil {
-			if elapsed := time.Since(*lastUserClaimInTx); elapsed < cooldownDuration {
-				remainingSec := int((cooldownDuration - elapsed).Seconds())
-				c.Header("Retry-After", strconv.Itoa(remainingSec))
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":                      "faucet_cooldown",
-					"message":                    "Faucet cooldown active. Please wait before claiming again.",
-					"cooldown_remaining_seconds": remainingSec,
-				})
-				return
-			}
-		}
-		if clientIP != "" && ipCountInTx >= ipDailyCap {
-			c.Header("Retry-After", "3600")
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":   "faucet_ip_limit_exceeded",
-				"message": "Maximum daily faucet claims exceeded for this IP address. Please try again tomorrow.",
-			})
-			return
-		}
-	}
-
-	// Update user balance
 	var updatedBalance decimal.Decimal
-	updateQuery := `
-		UPDATE users 
+	if err := tx.QueryRow(ctx, `
+		UPDATE users
 		SET cash_balance = cash_balance + $1, last_active = NOW()
 		WHERE id = $2
 		RETURNING cash_balance;
-	`
-	err = tx.QueryRow(ctx, updateQuery, claimGrant, userID).Scan(&updatedBalance)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to update user cash balance"})
-		return
+	`, claimGrant, userID).Scan(&updatedBalance); err != nil {
+		return nil, err
 	}
 
-	// Record faucet claim
-	insertClaim := `
-		INSERT INTO faucet_claims (user_id, ip_address, amount)
-		VALUES ($1, $2, $3);
-	`
-	_, err = tx.Exec(ctx, insertClaim, userID, clientIP, claimGrant)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to record claim audit log"})
-		return
+	if _, err := tx.Exec(ctx, `INSERT INTO faucet_claims (user_id, ip_address, amount) VALUES ($1, $2, $3);`, userID, clientIP, claimGrant); err != nil {
+		return nil, err
 	}
 
 	// Double-entry ledger: treasury -> user cash
 	ledgerSQL, ledgerArgs, err := buildLedgerInsert(uuid.New(), entryClaim, treasuryGrantEntries(userID, claimGrant))
-	if err == nil {
-		_, err = tx.Exec(ctx, ledgerSQL, ledgerArgs...)
-	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to record ledger entry"})
-		return
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, ledgerSQL, ledgerArgs...); err != nil {
+		return nil, err
 	}
 
-	// Build the authoritative response, then persist it as the idempotency receipt.
-	resp := gin.H{
-		"success":          true,
-		"amount_claimed":   claimGrant.StringFixed(8),
-		"amount":           claimGrant.StringFixed(0),
-		"new_balance":      updatedBalance.StringFixed(8),
-		"cooldown_seconds": 86400,
-		"user": gin.H{
-			"id":           userID.String(),
-			"cash_balance": updatedBalance.StringFixed(8),
-		},
+	receipt := &claimReceipt{
+		Success:         true,
+		AmountClaimed:   claimGrant.StringFixed(8),
+		Amount:          claimGrant.StringFixed(0),
+		NewBalance:      updatedBalance.StringFixed(8),
+		CooldownSeconds: int(cooldown.Seconds()),
+		User:            claimReceiptUser{ID: userID.String(), CashBalance: updatedBalance.StringFixed(8)},
 	}
 
 	if idempotencyKey != "" {
-		if respBytes, err := json.Marshal(resp); err == nil {
-			insertIdempotency := `
-				INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response, created_at)
-				VALUES ($1, 'claim', $2, $3, NOW())
-				ON CONFLICT (actor_id, operation, idempotency_key) DO NOTHING;
-			`
-			_, _ = tx.Exec(ctx, insertIdempotency, userID, idempotencyKey, respBytes)
+		respBytes, err := json.Marshal(receipt)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO idempotency_keys (actor_id, operation, idempotency_key, response)
+			VALUES ($1, $2, $3, $4);
+		`, userID, claimIdempotencyOp, idempotencyKey, respBytes); err != nil {
+			return nil, err
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to commit claim transaction"})
-		return
+		return nil, err
 	}
-
-	c.JSON(http.StatusOK, resp)
+	return receipt, nil
 }
 
 // HandleClaimFaucet is a legacy alias for HandleClaim.

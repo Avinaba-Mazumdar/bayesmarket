@@ -17,8 +17,8 @@ import (
 
 // TestClaim_NATMultiUserAndAbusePrevention verifies:
 // 1. Two distinct users sharing the same NAT IP address can both claim without a 24-hour collision.
-// 2. The same user attempting to claim again is rejected with 429 faucet_cooldown.
-// 3. Excessive claims from the same IP (including loopback) are capped and rejected with faucet_ip_limit_exceeded.
+// 2. The same user attempting to claim again is rejected with 429 claim_cooldown.
+// 3. Excessive claims from the same IP (including loopback) are capped and rejected with claim_ip_limit_exceeded.
 func TestClaim_NATMultiUserAndAbusePrevention(t *testing.T) {
 	pool, _, router := getTestEnv(t)
 	defer pool.Close()
@@ -66,14 +66,14 @@ func TestClaim_NATMultiUserAndAbusePrevention(t *testing.T) {
 	wB := claimFunds(tokenUserB, natIP)
 	assert.Equal(t, http.StatusOK, wB.Code, "User B should succeed from same NAT IP without 24h lockout: %s", wB.Body.String())
 
-	// 3. User A attempts to claim again immediately -> Must fail with account-level 429 faucet_cooldown
+	// 3. User A attempts to claim again immediately -> Must fail with account-level 429 claim_cooldown
 	wA2 := claimFunds(tokenUserA, natIP)
 	assert.Equal(t, http.StatusTooManyRequests, wA2.Code)
 	var errA2 map[string]interface{}
 	_ = json.Unmarshal(wA2.Body.Bytes(), &errA2)
-	assert.Equal(t, "faucet_cooldown", errA2["error"])
+	assert.Equal(t, "claim_cooldown", errA2["error"])
 
-	// 4. IP Daily Cap: Verify that when an IP reaches daily cap, it is blocked with faucet_ip_limit_exceeded
+	// 4. IP Daily Cap: Verify that when an IP reaches daily cap, it is blocked with claim_ip_limit_exceeded
 	testIP := "203.0.113." + fmt.Sprintf("%d", (time.Now().UnixNano()%200)+1)
 	// Seed claims in database to reach the cap for testIP
 	dummyUID := uuid.New()
@@ -98,5 +98,51 @@ func TestClaim_NATMultiUserAndAbusePrevention(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, wC.Code)
 	var errC map[string]interface{}
 	_ = json.Unmarshal(wC.Body.Bytes(), &errC)
-	assert.Equal(t, "faucet_ip_limit_exceeded", errC["error"])
+	assert.Equal(t, "claim_ip_limit_exceeded", errC["error"])
+}
+
+// TestClaim_IdempotentReplay verifies a retried claim with the same Idempotency-Key returns the
+// original receipt and credits the account once. Lookup and write previously used different
+// operation names, so replays always missed and hit the cooldown instead (L14 / S4a).
+func TestClaim_IdempotentReplay(t *testing.T) {
+	pool, _, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	ip := "203.0.113." + fmt.Sprintf("%d", (time.Now().UnixNano()%200)+1)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/guest", nil)
+	req.RemoteAddr = ip + ":1000"
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var auth rest.GuestAuthResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &auth))
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM idempotency_keys WHERE actor_id = $1", auth.User.ID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM faucet_claims WHERE user_id = $1", auth.User.ID)
+	}()
+
+	key := uuid.New().String()
+	claim := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/claim", nil)
+		req.Header.Set("Authorization", "Bearer "+auth.Token)
+		req.Header.Set("Idempotency-Key", key)
+		req.RemoteAddr = ip + ":2000"
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	first := claim()
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	replay := claim()
+	assert.Equal(t, http.StatusOK, replay.Code, "replay should return the stored receipt, got: %s", replay.Body.String())
+	assert.Equal(t, "HIT-IDEMPOTENT", replay.Header().Get("X-Cache-Lookup"))
+	assert.JSONEq(t, first.Body.String(), replay.Body.String())
+
+	var balance string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT cash_balance::text FROM users WHERE id = $1", auth.User.ID).Scan(&balance))
+	assert.Equal(t, "1100.00000000", balance, "claim must be credited exactly once")
 }

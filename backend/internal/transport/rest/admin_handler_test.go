@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -660,5 +661,83 @@ func TestResolvedMarketReportsWinningOutcome(t *testing.T) {
 	}
 	if v, _ := getOutcome("/api/v1/admin/markets?status=resolved", adminToken); v != "NO" {
 		t.Errorf("Admin list: expected winning_outcome NO, got %v", v)
+	}
+}
+
+// TestAdminMarketValidation covers create/edit input rules (L13): oversized text, percentage or
+// out-of-range probabilities, unbounded or over-precise collateral, past dates, and reactivating an
+// expired market are rejected with 400 instead of reaching the database.
+func TestAdminMarketValidation(t *testing.T) {
+	pool, cfg, router := getTestEnv(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	adminToken := getSuperadminToken(t, pool, cfg)
+	send := func(method, url string, payload map[string]string) (int, map[string]interface{}) {
+		body, _ := json.Marshal(payload)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(method, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		router.ServeHTTP(w, req)
+		var out map[string]interface{}
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return w.Code, out
+	}
+	valid := func() map[string]string {
+		return map[string]string{
+			"title": fmt.Sprintf("Validation market %d", time.Now().UnixNano()), "description": "d", "category": "macro",
+			"resolution_source": "https://example.com", "resolution_date": time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339),
+		}
+	}
+
+	rejections := map[string]func(map[string]string){
+		"title too long":         func(p map[string]string) { p["title"] = strings.Repeat("t", 256) },
+		"category too long":      func(p map[string]string) { p["category"] = strings.Repeat("c", 65) },
+		"percent probability":    func(p map[string]string) { p["initial_probability_yes"] = "50" },
+		"ambiguous probability":  func(p map[string]string) { p["initial_probability_yes"] = "1.5" },
+		"collateral too large":   func(p map[string]string) { p["initial_collateral_usdc"] = "1000000000000000000000000000000" },
+		"collateral too precise": func(p map[string]string) { p["initial_collateral_usdc"] = "1000.123456789" },
+		"collateral too small":   func(p map[string]string) { p["initial_collateral_usdc"] = "99.99" },
+		"past date":              func(p map[string]string) { p["resolution_date"] = "2020-01-01T00:00:00Z" },
+	}
+	for name, mutate := range rejections {
+		p := valid()
+		mutate(p)
+		if code, body := send(http.MethodPost, "/api/v1/admin/markets", p); code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d %v", name, code, body)
+		}
+	}
+
+	code, created := send(http.MethodPost, "/api/v1/admin/markets", valid())
+	if code != http.StatusCreated {
+		t.Fatalf("valid market rejected: %d %v", code, created)
+	}
+	marketID := created["id"].(string)
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM ledger_entries WHERE market_id = $1", marketID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM markets WHERE id = $1", marketID)
+	}()
+	url := "/api/v1/admin/markets/" + marketID
+
+	if code, _ := send(http.MethodPut, url, map[string]string{"resolution_date": "2020-01-01T00:00:00Z"}); code != http.StatusBadRequest {
+		t.Errorf("edit to a past resolution date: expected 400, got %d", code)
+	}
+	if code, _ := send(http.MethodPut, url, map[string]string{"title": strings.Repeat("t", 256)}); code != http.StatusBadRequest {
+		t.Errorf("edit to an oversized title: expected 400, got %d", code)
+	}
+
+	// Simulate expiry while suspended, then try to reopen without a new date
+	if _, err := pool.Exec(ctx, "UPDATE markets SET status = 'suspended', resolution_date = NOW() - INTERVAL '1 hour' WHERE id = $1", marketID); err != nil {
+		t.Fatalf("expire market: %v", err)
+	}
+	if code, _ := send(http.MethodPut, url, map[string]string{"status": "active"}); code != http.StatusBadRequest {
+		t.Errorf("reactivating an expired market: expected 400, got %d", code)
+	}
+	future := time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)
+	if code, body := send(http.MethodPut, url, map[string]string{"status": "active", "resolution_date": future}); code != http.StatusOK {
+		t.Errorf("reactivating with a new future date: expected 200, got %d %v", code, body)
 	}
 }

@@ -124,3 +124,32 @@ func TestSeedMarkets_Verification(t *testing.T) {
 		t.Errorf("Expected collateral=20000, got %s", collateral.String())
 	}
 }
+
+// TestRunMigrations_ConcurrentRunsAreSerialized starts two migration runs at once, as two
+// instances booting together would. The advisory lock makes the second wait, so both succeed and
+// no migration is applied twice (L15).
+func TestRunMigrations_ConcurrentRunsAreSerialized(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { errs <- database.RunMigrations(ctx, pool) }()
+	}
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent migration run failed: %v", err)
+		}
+	}
+
+	var duplicates int
+	if err := pool.QueryRow(ctx, "SELECT COUNT(*) - COUNT(DISTINCT version) FROM schema_migrations").Scan(&duplicates); err != nil {
+		t.Fatal(err)
+	}
+	if duplicates != 0 {
+		t.Errorf("expected each migration recorded once, found %d duplicates", duplicates)
+	}
+}

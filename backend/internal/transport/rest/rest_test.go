@@ -150,8 +150,8 @@ func ensureTestMarket(t *testing.T, pool *pgxpool.Pool, slug, title string) stri
 	}
 
 	_, err = pool.Exec(ctx, `
-		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc, lock_version)
-		VALUES ($1::uuid, 10000, 10000, 20000, 100000000, 0, 0)
+		INSERT INTO liquidity_pools (market_id, reserve_yes, reserve_no, collateral_reserve, k_invariant, total_volume_usdc)
+		VALUES ($1::uuid, 10000, 10000, 20000, 100000000, 0)
 		ON CONFLICT (market_id) DO NOTHING;
 	`, id)
 	if err != nil {

@@ -24,7 +24,19 @@ func NewPortfolioHandler(pool *pgxpool.Pool) *PortfolioHandler {
 	return &PortfolioHandler{pool: pool}
 }
 
-// PositionResponse details an open position mark-to-market valuation.
+// Position valuation methods reported in PositionResponse.ValuationMethod.
+const (
+	// valuationLiquidation: what selling the whole position into the pool now would pay.
+	valuationLiquidation = "liquidation"
+	// valuationMark: spot price x shares, used only when the pool cannot price a full sale.
+	valuationMark = "mark"
+)
+
+// PositionResponse details an open position's valuation.
+//
+// CurrentValueUSDC is the liquidation value (the SELL quote for the whole position), so it
+// includes the price impact a large holder would actually pay. MarkValueUSDC is spot x shares
+// for reference. Unrealized P&L is computed from CurrentValueUSDC.
 type PositionResponse struct {
 	ID                string `json:"id"`
 	MarketID          string `json:"market_id"`
@@ -37,6 +49,8 @@ type PositionResponse struct {
 	TotalInvestedUSDC string `json:"total_invested_usdc"`
 	CurrentPrice      string `json:"current_price"`
 	CurrentValueUSDC  string `json:"current_value_usdc"`
+	MarkValueUSDC     string `json:"mark_value_usdc"`
+	ValuationMethod   string `json:"valuation_method"`
 	UnrealizedPnLUSDC string `json:"unrealized_pnl_usdc"`
 	UnrealizedPnLPct  string `json:"unrealized_pnl_pct"`
 }
@@ -133,7 +147,8 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 			currentPrice = pNo
 		}
 
-		currentValue := shares.Mul(currentPrice).Truncate(8)
+		markValue := shares.Mul(currentPrice).Truncate(amm.StoragePrecision)
+		currentValue, valuationMethod := liquidationValue(shares, outcome, poolReserves, markValue)
 		unrealizedPnL := currentValue.Sub(investedUSDC)
 		unrealizedPnLPct := decimal.Zero
 		if investedUSDC.IsPositive() {
@@ -156,6 +171,8 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 			TotalInvestedUSDC: investedUSDC.StringFixed(8),
 			CurrentPrice:      currentPrice.StringFixed(8),
 			CurrentValueUSDC:  currentValue.StringFixed(8),
+			MarkValueUSDC:     markValue.StringFixed(8),
+			ValuationMethod:   valuationMethod,
 			UnrealizedPnLUSDC: unrealizedPnL.StringFixed(8),
 			UnrealizedPnLPct:  unrealizedPnLPct.StringFixed(2),
 		})
@@ -181,4 +198,15 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 		TotalUnrealizedPnLPct:  totalPnLPct.StringFixed(2),
 		Positions:              positions,
 	})
+}
+
+// liquidationValue prices selling the whole position into the pool now. Each position is valued
+// independently against the current pool, as the cash-out dialog would quote it. If the pool
+// cannot price the sale, the mark value is returned and labelled as such.
+func liquidationValue(shares decimal.Decimal, outcome string, pool amm.PoolReserves, markValue decimal.Decimal) (decimal.Decimal, string) {
+	quote, err := amm.CalculateCompleteSetSell(shares, amm.Outcome(outcome), pool)
+	if err != nil {
+		return markValue, valuationMark
+	}
+	return quote.PayoutUSDC, valuationLiquidation
 }

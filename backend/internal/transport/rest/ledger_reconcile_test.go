@@ -149,6 +149,15 @@ func assertReconciled(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ste
 			step, collateral, ledgerCollateral, rYes, ledgerYes, rNo, ledgerNo)
 	}
 
+	// k_invariant is maintained on every reserve change (L12)
+	var kStale bool
+	if err := pool.QueryRow(ctx, "SELECT k_invariant <> reserve_yes * reserve_no FROM liquidity_pools WHERE market_id = $1", marketID).Scan(&kStale); err != nil {
+		t.Fatalf("%s: k_invariant query: %v", step, err)
+	}
+	if kStale {
+		t.Errorf("%s: k_invariant does not equal reserve_yes * reserve_no", step)
+	}
+
 	// 3. Each user's cash and positions == ledger
 	for _, uid := range userIDs {
 		var cash, ledgerCash decimal.Decimal

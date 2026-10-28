@@ -95,7 +95,11 @@ export interface UserPosition {
     avg_buy_price: string;
     total_invested_usdc?: string;
     current_price: string;
+    /** Liquidation value: what selling the whole position now would pay (includes price impact). */
     current_value_usdc?: string;
+    /** Spot price x shares, for reference. */
+    mark_value_usdc?: string;
+    valuation_method?: 'liquidation' | 'mark';
     market_value?: string;
     unrealized_pnl_usdc?: string;
     unrealized_pnl?: string;

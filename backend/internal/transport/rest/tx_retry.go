@@ -31,6 +31,13 @@ func IsSerializationOrDeadlock(err error) bool {
 	return false
 }
 
+// IsUniqueViolation reports whether err is a PostgreSQL unique_violation (23505), e.g. a
+// concurrent request that already stored the same idempotency key.
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
 // ExecuteSerializableWithRetry runs a transactional closure with automatic exponential-backoff retries
 // for PostgreSQL transient concurrency conflicts. Business errors and idempotency conflicts terminate immediately.
 func ExecuteSerializableWithRetry[T any](
