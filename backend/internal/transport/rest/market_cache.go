@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
 	"github.com/google/uuid"
 )
 

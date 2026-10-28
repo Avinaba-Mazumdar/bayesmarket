@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/database"
-	"github.com/bayesmarket/bayesmarket/internal/testutil"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/database"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/testutil"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

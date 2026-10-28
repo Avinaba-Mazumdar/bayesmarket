@@ -1,43 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, WritableSignal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal, WritableSignal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import {
-    LucideCheck,
-    LucideShieldCheck,
-    LucidePlus,
-    LucideArrowRight,
-    LucideInfo,
-    LucideArrowUp,
-    LucideArrowDown,
-    LucideCircleCheck,
-    LucidePencil,
-    LucideTrash,
-    LucideSlidersVertical,
-    LucideX
-} from '@lucide/angular';
+import { LucideShieldCheck, LucidePlus, LucideCircleCheck, LucidePencil, LucideTrash, LucideSlidersVertical } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
-import {
-    Market,
-    CreateMarketRequest,
-    CreateMarketResponse,
-    EditableMarketStatus,
-    EditMarketRequest,
-    ResolveMarketResponse
-} from '../../core/models/market.model';
+import { Market, EditableMarketStatus, EditMarketRequest } from '../../core/models/market.model';
 import { DialogComponent } from '../../shared/components/dialog/dialog.component';
+import { AdminCreateMarketComponent } from './admin-create-market.component';
+import { AdminResolveMarketComponent } from './admin-resolve-market.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { BadgeComponent, BadgeVariant } from '../../shared/components/badge/badge.component';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { LabelComponent } from '../../shared/components/label/label.component';
 import { SelectComponent, SelectOption } from '../../shared/components/select/select.component';
 import { TextareaComponent } from '../../shared/components/textarea/textarea.component';
-import { SwitchComponent } from '../../shared/components/switch/switch.component';
 import { BrandIconComponent } from '../../shared/components/brand-icon/brand-icon.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
-import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeDecimal, shiftDecimal } from '../../core/utils/decimal';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -55,14 +35,10 @@ import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeD
         LabelComponent,
         SelectComponent,
         TextareaComponent,
-        SwitchComponent,
-        LucideCheck,
+        AdminCreateMarketComponent,
+        AdminResolveMarketComponent,
         LucideShieldCheck,
         LucidePlus,
-        LucideArrowRight,
-        LucideInfo,
-        LucideArrowUp,
-        LucideArrowDown,
         LucideCircleCheck,
         LucidePencil,
         LucideTrash,
@@ -197,7 +173,7 @@ import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeD
                                             <td class="tabular-nums mono-sub">
                                                 {{ m.resolution_date | date: 'mediumDate' }}
                                             </td>
-                                            <td class="tabular-nums mono-sub">&#36;{{ m.reserves?.total_volume_usdc || '0' }}</td>
+                                            <td class="tabular-nums mono-sub">&#36;{{ m.reserves.total_volume_usdc || '0' }}</td>
                                             <td class="tabular-nums prob-cell">
                                                 <span class="prob-yes">▲ {{ m.probability_yes_pct }}</span>
                                                 <span class="prob-sep">/</span>
@@ -238,354 +214,12 @@ import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeD
 
             <!-- Tab 1: Create Market View -->
             @if (activeTab() === 'create') {
-                <div class="tab-pane create-market-grid">
-                    <!-- Left Form Column -->
-                    <div class="form-card">
-                        <h2 class="card-title">Market Parameters</h2>
-                        <p class="card-desc">Define the event question, resolution criteria, and initial liquidity parameters.</p>
-
-                        <form class="market-form" (submit)="onSubmitCreateMarket($event)">
-                            <!-- Title -->
-                            <div class="form-group">
-                                <app-label htmlFor="m-title" size="default">Market Question / Title *</app-label>
-                                <app-input
-                                    id="m-title"
-                                    size="default"
-                                    [value]="title()"
-                                    (valueChange)="onValueChange(title, $event)"
-                                    placeholder="e.g. Will Ethereum break all-time high before Dec 31, 2026?"
-                                    ariaLabel="Market Title"
-                                />
-                            </div>
-
-                            <!-- Category & Resolution Date -->
-                            <div class="form-row-2">
-                                <div class="form-group">
-                                    <app-label htmlFor="m-category" size="default">Category *</app-label>
-                                    <app-select
-                                        id="m-category"
-                                        [options]="categoryOptions()"
-                                        [value]="category()"
-                                        (valueChange)="category.set($event)"
-                                        placeholder="Select Category"
-                                        ariaLabel="Market Category"
-                                    />
-                                </div>
-
-                                <div class="form-group">
-                                    <app-label htmlFor="m-date" size="default">Resolution Date (your local time) *</app-label>
-                                    <app-input
-                                        id="m-date"
-                                        type="datetime-local"
-                                        size="default"
-                                        variant="mono"
-                                        [value]="resolutionDateInput()"
-                                        (valueChange)="onValueChange(resolutionDateInput, $event)"
-                                        ariaLabel="Resolution Date"
-                                    />
-                                </div>
-                            </div>
-
-                            <!-- Description -->
-                            <div class="form-group">
-                                <app-label htmlFor="m-desc" size="default">Detailed Resolution Criteria & Rules *</app-label>
-                                <app-textarea
-                                    id="m-desc"
-                                    [rows]="4"
-                                    [value]="description()"
-                                    (valueChange)="description.set($event)"
-                                    placeholder="State the objective condition for YES versus NO outcome..."
-                                    ariaLabel="Market Description"
-                                />
-                            </div>
-
-                            <!-- Resolution Source -->
-                            <div class="form-group">
-                                <app-label htmlFor="m-source" size="default">Authoritative Resolution Source *</app-label>
-                                <app-input
-                                    id="m-source"
-                                    size="default"
-                                    [value]="resolutionSource()"
-                                    (valueChange)="onValueChange(resolutionSource, $event)"
-                                    placeholder="e.g. Official NASA telemetry, SEC filing, or Coinbase index..."
-                                    ariaLabel="Resolution Source"
-                                />
-                            </div>
-
-                            <!-- Image URL -->
-                            <div class="form-group">
-                                <app-label htmlFor="m-image" size="default">Image URL (Optional)</app-label>
-                                <app-input
-                                    id="m-image"
-                                    size="default"
-                                    [value]="imageUrl()"
-                                    (valueChange)="onValueChange(imageUrl, $event)"
-                                    placeholder="Optional https:// link to a banner image"
-                                    ariaLabel="Market Image URL"
-                                />
-                            </div>
-
-                            <!-- Collateral & Probability -->
-                            <div class="form-row-2">
-                                <div class="form-group">
-                                    <app-label htmlFor="m-collateral" size="default">Initial Pool Collateral (USDC)</app-label>
-                                    <app-input
-                                        id="m-collateral"
-                                        type="number"
-                                        variant="mono"
-                                        size="default"
-                                        [value]="collateralInput()"
-                                        (valueChange)="onValueChange(collateralInput, $event)"
-                                        placeholder="10000"
-                                        ariaLabel="Initial Collateral"
-                                    />
-                                </div>
-
-                                <div class="form-group">
-                                    <app-label htmlFor="m-prob" size="default">Starting Implied Probability (YES %)</app-label>
-                                    <app-input
-                                        id="m-prob"
-                                        type="number"
-                                        variant="mono"
-                                        size="default"
-                                        [value]="probabilityInput()"
-                                        (valueChange)="onValueChange(probabilityInput, $event)"
-                                        placeholder="50"
-                                        ariaLabel="Starting Probability"
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="form-actions">
-                                <app-button
-                                    type="submit"
-                                    variant="primary"
-                                    size="lg"
-                                    [fullWidth]="true"
-                                    [loading]="isSubmitting()"
-                                    (btnClick)="onSubmitCreateMarket($event)"
-                                    ariaLabel="Submit new market creation"
-                                >
-                                    Create Market & Initialize CPMM Pool
-                                </app-button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Right Column: Live CPMM Invariant Preview -->
-                    <div class="preview-column">
-                        <div class="preview-card">
-                            <h3 class="preview-title">CPMM Bonding Preview</h3>
-                            <p class="preview-subtitle">Derived fixed-point pool reserves ($k = R_&#123;YES&#125; imes R_&#123;NO&#125;$)</p>
-
-                            <div class="prob-visual-track" role="progressbar" aria-label="Implied initial probability split">
-                                <div class="track-yes" [style.width.%]="numericProbability()"></div>
-                                <div class="track-no" [style.width.%]="100 - numericProbability()"></div>
-                            </div>
-
-                            <div class="prob-split-labels">
-                                <span class="label-yes tabular-nums">▲ YES: {{ numericProbability() }}¢ ({{ numericProbability() }}%)</span>
-                                <span class="label-no tabular-nums">▼ NO: {{ 100 - numericProbability() }}¢ ({{ 100 - numericProbability() }}%)</span>
-                            </div>
-
-                            <div class="preview-stats-grid">
-                                <div class="stat-box">
-                                    <span class="stat-k">Collateral Reserve</span>
-                                    <span class="stat-v tabular-nums">&#36;{{ formattedCollateral() }} USDC</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="stat-k">Virtual YES Reserve (R_yes)</span>
-                                    <span class="stat-v tabular-nums">{{ formattedReserveYes() }}</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="stat-k">Virtual NO Reserve (R_no)</span>
-                                    <span class="stat-v tabular-nums">{{ formattedReserveNo() }}</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="stat-k">Constant Product (k)</span>
-                                    <span class="stat-v tabular-nums">{{ formattedInvariantK() }}</span>
-                                </div>
-                            </div>
-
-                            <div class="info-alert">
-                                <svg lucideInfo class="info-icon" [size]="16" aria-hidden="true"></svg>
-                                <span>
-                                    Every issued share remains 100% redeemable for 1.00 USDC collateral. Spot prices clear exactly to the configured
-                                    probability.
-                                </span>
-                            </div>
-                        </div>
-
-                        @if (createdMarket(); as cm) {
-                            <div class="success-banner" role="status">
-                                <div class="success-header">
-                                    <svg lucideCircleCheck class="success-icon" [size]="20" aria-hidden="true"></svg>
-                                    <span class="success-title">Market Successfully Created!</span>
-                                </div>
-                                <p class="success-text">"{{ cm.title }}" is now live on the trading engine.</p>
-                                <div class="success-actions">
-                                    <a [routerLink]="'/markets/' + cm.slug" class="view-market-link">
-                                        <span>View Market Page</span>
-                                        <svg lucideArrowRight [size]="14" aria-hidden="true"></svg>
-                                    </a>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
+                <app-admin-create-market [categories]="categoryOptions()" (created)="loadMarkets()" />
             }
-
             <!-- Tab 2: Resolve Market View -->
             @if (activeTab() === 'resolve') {
-                <div class="tab-pane resolve-market-pane">
-                    <div class="form-card resolve-card">
-                        <h2 class="card-title">Settle & Distribute Collateral</h2>
-                        <p class="card-desc">
-                            Select a mature prediction market, designate the authoritative verified outcome, and trigger payout settlement.
-                        </p>
-
-                        <div class="market-form">
-                            <div class="form-group">
-                                <app-label htmlFor="resolve-market-select">Select Market (active, suspended or locked) *</app-label>
-                                <app-select
-                                    id="resolve-market-select"
-                                    [options]="marketOptions()"
-                                    [value]="selectedMarketId()"
-                                    (valueChange)="selectedMarketId.set($event)"
-                                    placeholder="Choose market to resolve..."
-                                    ariaLabel="Market to resolve"
-                                />
-                            </div>
-
-                            <!-- Winning Outcome Toggle -->
-                            <div class="form-group">
-                                <app-label>Authoritative Winning Outcome *</app-label>
-                                <div
-                                    class="outcome-select-row"
-                                    role="radiogroup"
-                                    aria-label="Winning outcome"
-                                    (keydown)="rovingKeydown($event, '[role=radio]')"
-                                >
-                                    <app-button
-                                        variant="yes"
-                                        size="lg"
-                                        [selected]="winningOutcome() === 'YES'"
-                                        buttonRole="radio"
-                                        ariaLabel="Resolve to outcome YES"
-                                        (btnClick)="winningOutcome.set('YES')"
-                                    >
-                                        <svg lucideArrowUp class="outcome-glyph" [size]="16" aria-hidden="true"></svg>
-                                        <span>OUTCOME YES (1.00 USDC)</span>
-                                    </app-button>
-
-                                    <app-button
-                                        variant="no"
-                                        size="lg"
-                                        [selected]="winningOutcome() === 'NO'"
-                                        buttonRole="radio"
-                                        ariaLabel="Resolve to outcome NO"
-                                        (btnClick)="winningOutcome.set('NO')"
-                                    >
-                                        <svg lucideArrowDown class="outcome-glyph" [size]="16" aria-hidden="true"></svg>
-                                        <span>OUTCOME NO (1.00 USDC)</span>
-                                    </app-button>
-                                </div>
-                            </div>
-
-                            <!-- Oracle Proof -->
-                            <div class="form-group">
-                                <app-label htmlFor="oracle-proof-input">Oracle Proof Verification & Evidence URL *</app-label>
-                                <app-textarea
-                                    id="oracle-proof-input"
-                                    [rows]="3"
-                                    [value]="oracleProof()"
-                                    (valueChange)="oracleProof.set($event)"
-                                    placeholder="Record the official proof reference or verification URL (e.g. FOMC meeting announcement link)..."
-                                    ariaLabel="Oracle proof input"
-                                />
-                            </div>
-
-                            @if (selectedMarketBeforeDeadline(); as deadline) {
-                                <div class="form-group resolve-early-group" role="group" aria-labelledby="resolve-early-label">
-                                    <div class="resolve-early-row">
-                                        <app-switch
-                                            id="resolve-early-switch"
-                                            [checked]="resolveEarly()"
-                                            (checkedChange)="resolveEarly.set($event)"
-                                            ariaLabel="Resolve before the resolution date"
-                                        />
-                                        <app-label id="resolve-early-label" htmlFor="resolve-early-switch">Resolve before the resolution date</app-label>
-                                    </div>
-                                    <p class="field-hint">
-                                        This market's resolution date is {{ deadline | date: 'medium' }}. Only resolve early if the outcome is already decided
-                                        and the proof above shows it.
-                                    </p>
-                                </div>
-                            }
-
-                            <div class="form-actions">
-                                <app-button
-                                    variant="primary"
-                                    size="lg"
-                                    [fullWidth]="true"
-                                    [loading]="isResolving()"
-                                    [disabled]="!selectedMarketId() || !oracleProof() || (!!selectedMarketBeforeDeadline() && !resolveEarly())"
-                                    (btnClick)="onSubmitResolveMarket()"
-                                    ariaLabel="Execute market resolution and payouts"
-                                >
-                                    Execute Resolution & Credit Winners
-                                </app-button>
-                            </div>
-                        </div>
-
-                        @if (resolutionSummary(); as res) {
-                            <div class="resolution-summary-box" role="status">
-                                <div class="res-summary-title">
-                                    <svg lucideCheck class="res-check-icon" [size]="18" aria-hidden="true"></svg>
-                                    <span>Settlement Completed</span>
-                                </div>
-                                <div class="res-stats-grid">
-                                    <div class="res-stat">
-                                        <span class="stat-k">Winning Outcome:</span>
-                                        <span class="stat-v tabular-nums">{{ res.winning_outcome }}</span>
-                                    </div>
-                                    <div class="res-stat">
-                                        <span class="stat-k">Traders Credited:</span>
-                                        <span class="stat-v tabular-nums">{{ res.winners_credited }}</span>
-                                    </div>
-                                    <div class="res-stat">
-                                        <span class="stat-k">Total Payout:</span>
-                                        <span class="stat-v tabular-nums">&#36;{{ res.total_payout_usdc }} USDC</span>
-                                    </div>
-                                </div>
-                                @if (res.settlement_digest || res.proof_hash) {
-                                    <div class="res-audit-section">
-                                        @if (res.settlement_digest) {
-                                            <div class="res-audit-row">
-                                                <span class="stat-k">Settlement Digest:</span>
-                                                <code class="audit-digest-val">{{ res.settlement_digest }}</code>
-                                            </div>
-                                        }
-                                        @if (res.proof_hash) {
-                                            <div class="res-audit-row">
-                                                <span class="stat-k">Proof Hash:</span>
-                                                <code class="audit-digest-val">{{ res.proof_hash }}</code>
-                                            </div>
-                                        }
-                                        @if (res.oracle_proof) {
-                                            <div class="res-audit-row">
-                                                <span class="stat-k">Oracle Proof:</span>
-                                                <code class="audit-digest-val">{{ res.oracle_proof }}</code>
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
+                <app-admin-resolve-market [markets]="allMarkets()" (resolved)="loadMarkets()" />
             }
-
             <!-- Edit Market Modal Dialog -->
             <app-dialog
                 [open]="!!editingMarket()"
@@ -659,16 +293,6 @@ import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeD
                             />
                         </div>
 
-                        <div class="form-group">
-                            <app-label htmlFor="edit-image">Image URL</app-label>
-                            <app-input
-                                id="edit-image"
-                                [value]="editImageUrl()"
-                                (valueChange)="onValueChange(editImageUrl, $event)"
-                                ariaLabel="Edit Image URL"
-                            />
-                        </div>
-
                         <div class="dialog-actions">
                             <app-button variant="outline" size="default" type="button" (btnClick)="closeEditModal()" ariaLabel="Cancel editing">
                                 Cancel
@@ -686,43 +310,6 @@ import { compareDecimal, diffDecimal, formatDecimal, multiplyDecimal, normalizeD
                         </div>
                     </form>
                 }
-            </app-dialog>
-
-            <!-- Resolution Confirmation: final, and pays out every winning position (SC 3.3.6) -->
-            <app-dialog
-                [open]="resolveConfirmOpen()"
-                (closed)="resolveConfirmOpen.set(false)"
-                title="Confirm Market Resolution"
-                description="Resolution is final. It pays out every winning position and cannot be undone."
-                size="sm"
-                dialogRole="alertdialog"
-                ariaLabel="Confirm market resolution"
-            >
-                <div class="delete-body">
-                    <p class="delete-warning-text">
-                        Resolve <strong>{{ selectedMarketTitle() }}</strong> to <strong>{{ winningOutcome() }}</strong>?
-                    </p>
-                    <div class="danger-box">
-                        <p class="danger-text">
-                            Every {{ winningOutcome() }} share is redeemed at $1.00 USDC. Every other share expires at $0.00.
-                        </p>
-                    </div>
-                    <div class="dialog-actions">
-                        <app-button variant="outline" size="default" type="button" (btnClick)="resolveConfirmOpen.set(false)" ariaLabel="Cancel resolution">
-                            Cancel
-                        </app-button>
-                        <app-button
-                            variant="destructive"
-                            size="default"
-                            type="button"
-                            [loading]="isResolving()"
-                            (btnClick)="confirmResolveMarket()"
-                            ariaLabel="Confirm final resolution"
-                        >
-                            Resolve Market
-                        </app-button>
-                    </div>
-                </div>
             </app-dialog>
 
             <!-- Delete Confirmation Modal -->
@@ -1396,8 +983,6 @@ export class AdminDashboardComponent implements OnInit {
     private readonly toastService = inject(ToastService);
     readonly authStore = inject(AuthStore);
 
-    readonly isSubmitting = signal<boolean>(false);
-    readonly isResolving = signal<boolean>(false);
     readonly isEditingSubmitting = signal<boolean>(false);
     readonly isDeletingSubmitting = signal<boolean>(false);
     readonly isVoidingSubmitting = signal<boolean>(false);
@@ -1405,36 +990,8 @@ export class AdminDashboardComponent implements OnInit {
 
     readonly activeTab = signal<'manage' | 'create' | 'resolve'>('manage');
 
-    // Create Market Form fields
-    readonly title = signal<string>('');
-    readonly category = signal<string>('ai');
-    readonly description = signal<string>('');
-    readonly resolutionSource = signal<string>('');
-    readonly resolutionDateInput = signal<string>('');
-    readonly imageUrl = signal<string>('');
-    readonly collateralInput = signal<string>('10000');
-    readonly probabilityInput = signal<string>('50');
-
-    readonly createdMarket = signal<CreateMarketResponse | null>(null);
-
     // Every market in every status, from the admin list endpoint
     readonly allMarkets = signal<Market[]>([]);
-
-    // Resolve Market Form fields
-    readonly selectedMarketId = signal<string>('');
-    readonly winningOutcome = signal<'YES' | 'NO'>('YES');
-    readonly oracleProof = signal<string>('');
-    readonly resolveConfirmOpen = signal<boolean>(false);
-    readonly selectedMarketTitle = computed(() => this.allMarkets().find((m) => m.id === this.selectedMarketId())?.title ?? '');
-    readonly resolveEarly = signal<boolean>(false);
-
-    /** Resolution date of the selected market when it has not passed yet, otherwise null. */
-    readonly selectedMarketBeforeDeadline = computed<string | null>(() => {
-        const market = this.allMarkets().find((m) => m.id === this.selectedMarketId());
-        if (!market) return null;
-        return new Date(market.resolution_date).getTime() > Date.now() ? market.resolution_date : null;
-    });
-    readonly resolutionSummary = signal<ResolveMarketResponse | null>(null);
 
     // Edit Market Modal fields
     readonly editingMarket = signal<Market | null>(null);
@@ -1444,7 +1001,6 @@ export class AdminDashboardComponent implements OnInit {
     readonly editResolutionDateInput = signal<string>('');
     readonly editDescription = signal<string>('');
     readonly editResolutionSource = signal<string>('');
-    readonly editImageUrl = signal<string>('');
 
     // Delete Market Modal fields
     readonly deletingMarket = signal<Market | null>(null);
@@ -1479,42 +1035,6 @@ export class AdminDashboardComponent implements OnInit {
         { value: 'locked', label: 'Locked (Awaiting Resolution)' }
     ];
 
-    readonly marketOptions = computed<SelectOption[]>(() => {
-        return this.allMarkets()
-            .filter((m) => !this.isTerminal(m))
-            .map((m) => ({
-                value: m.id,
-                label: m.title
-            }));
-    });
-
-    readonly probabilityPct = computed(() => {
-        const parsed = normalizeDecimal(this.probabilityInput().trim(), 2);
-        if (parsed === null || compareDecimal(parsed, '1') === -1) return '1';
-        if (compareDecimal(parsed, '99') === 1) return '99';
-        return parsed;
-    });
-
-    readonly numericProbability = computed(() => Number(this.probabilityPct()));
-
-    readonly probabilityYes = computed(() => shiftDecimal(this.probabilityPct(), -2, 8) ?? '0.01');
-
-    readonly collateralAmount = computed(() => {
-        const parsed = normalizeDecimal(this.collateralInput().trim(), 8);
-        return parsed === null || compareDecimal(parsed, '0') !== 1 ? '10000' : parsed;
-    });
-
-    readonly formattedCollateral = computed(() => formatDecimal(this.collateralAmount(), 2, true) ?? '0.00');
-
-    readonly formattedReserveYes = computed(() => {
-        const pNo = diffDecimal('1', this.probabilityYes(), 8) ?? '0';
-        return multiplyDecimal(this.collateralAmount(), pNo, 2) ?? '0.00';
-    });
-
-    readonly formattedReserveNo = computed(() => multiplyDecimal(this.collateralAmount(), this.probabilityYes(), 2) ?? '0.00');
-
-    readonly formattedInvariantK = computed(() => multiplyDecimal(this.formattedReserveYes(), this.formattedReserveNo(), 0, true) ?? '0');
-
     getStatusBadgeVariant(status: string): BadgeVariant {
         switch (status) {
             case 'active':
@@ -1541,7 +1061,6 @@ export class AdminDashboardComponent implements OnInit {
     }
 
     ngOnInit(): void {
-        this.initDefaultDate();
         this.apiService.getMarketCategories().subscribe({
             next: (list) => this.categoryOptions.set(list.map((c) => ({ value: c.id, label: c.label }))),
             error: () => this.toastService.warning('Categories unavailable', 'Could not load the market category list.')
@@ -1550,15 +1069,6 @@ export class AdminDashboardComponent implements OnInit {
         if (this.authStore.isAdmin()) {
             this.loadMarkets();
         }
-    }
-
-    private initDefaultDate(): void {
-        const future = new Date();
-        future.setMonth(future.getMonth() + 3);
-        const y = future.getFullYear();
-        const m = String(future.getMonth() + 1).padStart(2, '0');
-        const d = String(future.getDate()).padStart(2, '0');
-        this.resolutionDateInput.set(`${y}-${m}-${d}T23:59`);
     }
 
     private formatForDateTimeLocal(isoDateStr?: string): string {
@@ -1582,50 +1092,6 @@ export class AdminDashboardComponent implements OnInit {
         });
     }
 
-    // --- Market Creation ---
-    onSubmitCreateMarket(e: Event): void {
-        e.preventDefault();
-
-        const title = this.title().trim();
-        const desc = this.description().trim();
-        const source = this.resolutionSource().trim();
-        const rawDate = this.resolutionDateInput().trim();
-
-        if (!title || !desc || !source || !rawDate) {
-            this.toastService.warning('Validation Error', 'Please complete all required fields');
-            return;
-        }
-
-        const payload: CreateMarketRequest = {
-            title,
-            description: desc,
-            category: this.category(),
-            resolution_source: source,
-            resolution_date: new Date(rawDate).toISOString(),
-            image_url: this.imageUrl().trim(),
-            initial_collateral_usdc: this.collateralAmount(),
-            initial_probability_yes: this.probabilityYes()
-        };
-
-        this.isSubmitting.set(true);
-        this.apiService.createMarket(payload, this.getEffectiveToken()).subscribe({
-            next: (res) => {
-                this.isSubmitting.set(false);
-                this.createdMarket.set(res);
-                this.toastService.success('Market Created', `"${res.title}" successfully provisioned!`);
-                this.title.set('');
-                this.description.set('');
-                this.resolutionSource.set('');
-                this.loadMarkets();
-            },
-            error: (err) => {
-                this.isSubmitting.set(false);
-                const msg = err?.error?.message || 'Failed to create market';
-                this.toastService.error('Creation Error', msg);
-            }
-        });
-    }
-
     // --- Market Editing ---
     openEditModal(m: Market): void {
         this.editingMarket.set(m);
@@ -1635,7 +1101,6 @@ export class AdminDashboardComponent implements OnInit {
         this.editResolutionDateInput.set(this.formatForDateTimeLocal(m.resolution_date));
         this.editDescription.set(m.description || '');
         this.editResolutionSource.set(m.resolution_source || '');
-        this.editImageUrl.set(m.image_url || '');
     }
 
     closeEditModal(): void {
@@ -1663,7 +1128,6 @@ export class AdminDashboardComponent implements OnInit {
             category: this.editCategory(),
             resolution_source: source,
             resolution_date: new Date(rawDate).toISOString(),
-            image_url: this.editImageUrl().trim(),
             status: this.editStatus()
         };
 
@@ -1699,7 +1163,7 @@ export class AdminDashboardComponent implements OnInit {
 
         this.isDeletingSubmitting.set(true);
         this.apiService.deleteMarket(m.id, this.getEffectiveToken()).subscribe({
-            next: (res) => {
+            next: () => {
                 this.isDeletingSubmitting.set(false);
                 this.closeDeleteModal();
                 this.toastService.success('Market Deleted', `"${m.title}" was permanently removed.`);
@@ -1732,46 +1196,6 @@ export class AdminDashboardComponent implements OnInit {
                 this.isVoidingSubmitting.set(false);
                 const msg = err?.error?.message || 'Failed to void market';
                 this.toastService.error('Void Error', msg);
-            }
-        });
-    }
-
-    // --- Market Resolution ---
-    /** Opens the confirmation step. Nothing is sent until the reader confirms, because resolution moves money. */
-    onSubmitResolveMarket(): void {
-        if (!this.selectedMarketId() || !this.oracleProof().trim()) {
-            this.toastService.warning('Validation Error', 'Select a market and provide oracle proof');
-            return;
-        }
-        this.resolveConfirmOpen.set(true);
-    }
-
-    confirmResolveMarket(): void {
-        this.resolveConfirmOpen.set(false);
-        const marketId = this.selectedMarketId();
-        const proof = this.oracleProof().trim();
-        const outcome = this.winningOutcome();
-
-        if (!marketId || !proof) {
-            this.toastService.warning('Validation Error', 'Select a market and provide oracle proof');
-            return;
-        }
-
-        this.isResolving.set(true);
-        const idempotencyKey = `resolve-${marketId}-${Date.now()}`;
-        const request = { winning_outcome: outcome, oracle_proof: proof, resolve_early: !!this.selectedMarketBeforeDeadline() && this.resolveEarly() };
-        this.apiService.resolveMarket(marketId, request, this.getEffectiveToken(), idempotencyKey).subscribe({
-            next: (res) => {
-                this.isResolving.set(false);
-                this.resolveEarly.set(false);
-                this.resolutionSummary.set(res);
-                this.toastService.success('Market Resolved', `Outcome ${res.winning_outcome} settled. Credited ${res.winners_credited} traders.`);
-                this.loadMarkets();
-            },
-            error: (err) => {
-                this.isResolving.set(false);
-                const msg = err?.error?.message || 'Failed to resolve market';
-                this.toastService.error('Resolution Error', msg);
             }
         });
     }

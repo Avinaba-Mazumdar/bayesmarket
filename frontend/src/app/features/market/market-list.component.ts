@@ -53,12 +53,7 @@ export type CategoryFilter = string;
             <!-- Filter Controls & Search Bar -->
             <section class="catalog-controls" aria-label="Market filters and search">
                 <!-- Category Filter Chips -->
-                <div
-                    class="category-tabs"
-                    role="tablist"
-                    aria-label="Filter markets by category"
-                    (keydown)="rovingKeydown($event, '[role=tab]')"
-                >
+                <div class="category-tabs" role="tablist" aria-label="Filter markets by category" (keydown)="rovingKeydown($event, '[role=tab]')">
                     @for (cat of categories(); track cat.id) {
                         <app-button
                             variant="chip"

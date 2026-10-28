@@ -8,7 +8,7 @@ import { Market } from '../../core/models/market.model';
 describe('MarketListComponent', () => {
     let fixture: ComponentFixture<MarketListComponent>;
     let component: MarketListComponent;
-    let apiServiceSpy: { getMarkets: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: { getMarkets: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any };
 
     const mockMarkets: Market[] = [
         {

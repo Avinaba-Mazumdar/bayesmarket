@@ -105,7 +105,12 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                                     account first to keep them.
                                 </p>
                                 <div class="signout-confirm-actions">
-                                    <app-button variant="outline" size="default" (btnClick)="confirmGuestSignOut.set(false)" ariaLabel="Keep this guest session">
+                                    <app-button
+                                        variant="outline"
+                                        size="default"
+                                        (btnClick)="confirmGuestSignOut.set(false)"
+                                        ariaLabel="Keep this guest session"
+                                    >
                                         Keep session
                                     </app-button>
                                     <app-button variant="destructive" size="default" (btnClick)="onSignOut()" ariaLabel="Sign out and end the guest account">

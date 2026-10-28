@@ -242,12 +242,12 @@ A NO purchase is symmetric: add $d$ to both inventories, set $R_{\text{YES}}' = 
 
 #### 5. Settlement & Resolution Payout & Trust Model
 
-- **Paper Trading Trust Model**: BayesMarket is an open-source paper-trading and educational simulation platform. Market resolutions are admin-mediated via authorized credentials (`ADMIN_TOKEN`). Unlike decentralized oracles (e.g., UMA or Chainlink), the administrator or automated ingest pipeline is trusted to authoritatively declare market outcomes based on real-world evidence.
+- **Paper Trading Trust Model**: BayesMarket is an open-source paper-trading and educational simulation platform. Market resolution and void require an access token whose user has `is_admin = true` in the database. The access token does not carry an admin flag. There is no shared `ADMIN_TOKEN`. Unlike decentralized oracles (e.g., UMA or Chainlink), that admin user is trusted to declare the outcome from the evidence in `oracle_proof`.
 - **Cryptographic Proof Hashing & Audit Digest**:
     - Every resolution requires verifiable `oracle_proof` documentation (e.g., official bureau reports, market index settlement prices, regulatory filings).
     - The server computes a SHA-256 hash of the proof (`proof_hash = SHA256(oracle_proof)`).
     - An atomic settlement payload digest is generated: `settlement_digest = SHA256(market_id : winning_outcome : total_payout : proof_hash : resolved_at)`.
-    - Resolutions emit structured audit logs (`[AUTHORITATIVE RESOLUTION AUDIT]`) and attribute actions deterministically to the System Administrator identity (`00000000-0000-0000-0000-000000000001`), ensuring all settlements are auditable in immutable double-entry ledger entries.
+    - Resolutions emit structured audit logs (`[AUTHORITATIVE RESOLUTION AUDIT]`) that include the acting admin's user id (`ActorID`). Settlements are recorded in immutable double-entry ledger entries. There is no reserved system-administrator uuid.
     - An in-memory resolution cache enforces proof integrity, rejecting any subsequent calls with conflicting outcomes or divergent proof hashes.
 - **Collateral & Share Redemption**:
     - Each winning share is unconditionally redeemable for **$1.00 USDC** from the market collateral reserve.
@@ -265,7 +265,7 @@ bayesmarket/
 │   ├── ARCHITECTURE.md           # Primary System Architecture Specification
 │   ├── DESIGN.md                 # UI/UX Design System & WCAG 2.2 AAA Specification
 │   └── TODOs.md                  # 9-Phase Implementation Task Board & Verification Gates
-├── .env.example                  # Environment Configuration Template (Neon Database)
+├── .env.example                  # Environment template (local Postgres; hosted URLs need APP_ENV=production)
 ├── .prettierrc                  # Workspace Formatting Configuration
 ├── Makefile                     # Developer Commands (make test, make dev, make seed)
 ├── turbo.json                   # Turborepo Pipeline Configuration
@@ -288,7 +288,7 @@ bayesmarket/
 │   │   │   │   ├── 000001_init_schema.up.sql
 │   │   │   │   └── 000001_init_schema.down.sql
 │   │   │   ├── queries.go       # SQL Query Execution & Row Scanners
-│   │   │   └── seed.go          # Realistic Pre-seeded Markets & Liquidity
+│   │   │   └── retention.go     # Hourly IP redaction and expired-token cleanup
 │   │   ├── middleware/          # CROSS-CUTTING CONCERNS
 │   │   │   ├── auth.go          # JWT & Guest Session Extractor
 │   │   │   ├── ratelimit.go     # In-Memory Token-Bucket Rate Limiter
@@ -303,8 +303,7 @@ bayesmarket/
 │   │       │   └── admin_handler.go     # Market Resolution & Settlement
 │   │       └── ws/
 │   │           ├── hub.go               # WebSocket Hub & Topic Multiplexer
-│   │           ├── client.go            # Goroutine Read/Write Pumps
-│   │           └── simulator.go         # Background Ticker (Simulated Market Activity)
+│   │           └── client.go            # Goroutine Read/Write Pumps (no simulated ticker)
 │   ├── go.mod
 │   └── go.sum
 │
@@ -971,10 +970,9 @@ Broadcast on every confirmed trade to populate real-time ticker feeds and Tradin
 }
 ```
 
-#### 3. Simulated Market Ticker Worker (`internal/transport/ws/simulator.go`)
+#### 3. No simulated ticker
 
-- In development/sandbox environments, a background worker simulates market activity by generating micro-trades every **5–15 seconds** from simulated liquidity accounts.
-- Guarantees live chart movements, real-time candlestick rendering, and active WebSocket testing without manual trade submission.
+Charts move when a real trade is stored. There is no `simulator.go` and no background worker that invents trades. Trades recorded before price history was enabled have a null `yes_probability_after` and are omitted from the series rather than backfilled.
 
 ---
 

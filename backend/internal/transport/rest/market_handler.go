@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/models"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -46,7 +46,6 @@ type MarketSummaryResponse struct {
 	Title             string           `json:"title"`
 	Description       string           `json:"description"`
 	Category          string           `json:"category"`
-	ImageURL          *string          `json:"image_url,omitempty"`
 	ResolutionSource  string           `json:"resolution_source"`
 	ResolutionDate    string           `json:"resolution_date"`
 	Status            string           `json:"status"`
@@ -120,10 +119,7 @@ func (h *MarketHandler) HandleGetMarkets(c *gin.Context) {
 	}
 	rows, err := h.listMarkets(ctx, category, string(models.MarketStatusActive), queryLimit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "database_error",
-			"message": "Failed to query prediction markets",
-		})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query prediction markets")
 		return
 	}
 
@@ -197,10 +193,7 @@ func (h *MarketHandler) HandleAdminListMarkets(c *gin.Context) {
 
 	rows, err := h.listMarkets(ctx, category, status, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "database_error",
-			"message": "Failed to query prediction markets",
-		})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query prediction markets")
 		return
 	}
 
@@ -220,7 +213,7 @@ type marketListRow struct {
 
 // marketSelectSQL is the column list shared by every query that returns a marketListRow.
 const marketSelectSQL = `
-		SELECT m.id, m.slug, m.title, m.description, m.category, m.image_url,
+		SELECT m.id, m.slug, m.title, m.description, m.category,
 		       m.resolution_source, m.resolution_date, m.status, m.winning_outcome, m.created_at,
 		       p.reserve_yes, p.reserve_no, p.collateral_reserve, p.total_volume_usdc
 		FROM markets m
@@ -237,13 +230,13 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 	var (
 		id                                           uuid.UUID
 		slug, title, desc, cat, resSource, mktStatus string
-		imgURL, winningOutcome                       *string
+		winningOutcome                               *string
 		resDate, createdAt                           time.Time
 		rYes, rNo, collateral, volume                decimal.Decimal
 	)
 
 	if err := row.Scan(
-		&id, &slug, &title, &desc, &cat, &imgURL,
+		&id, &slug, &title, &desc, &cat,
 		&resSource, &resDate, &mktStatus, &winningOutcome, &createdAt,
 		&rYes, &rNo, &collateral, &volume,
 	); err != nil {
@@ -266,7 +259,6 @@ func scanMarketRow(row marketRowScanner) (marketListRow, error) {
 			Title:             title,
 			Description:       desc,
 			Category:          cat,
-			ImageURL:          imgURL,
 			ResolutionSource:  resSource,
 			ResolutionDate:    resDate.Format(time.RFC3339),
 			Status:            mktStatus,
@@ -316,7 +308,7 @@ func (h *MarketHandler) listMarkets(ctx context.Context, category, status string
 func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 	param := strings.TrimSpace(c.Param("id"))
 	if param == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "Market identifier is required"})
+		respondError(c, http.StatusBadRequest, "invalid_request", "Market identifier is required")
 		return
 	}
 
@@ -337,10 +329,10 @@ func (h *MarketHandler) HandleGetMarketByID(c *gin.Context) {
 	row, err := scanMarketRow(h.pool.QueryRow(ctx, query, keyArg))
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Prediction market not found"})
+			respondError(c, http.StatusNotFound, "not_found", "Prediction market not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query market")
 		return
 	}
 
@@ -359,19 +351,13 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	var req QuoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_payload",
-			"message": "Malformed JSON quote request payload",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_payload", "Malformed JSON quote request payload")
 		return
 	}
 
 	outcome := amm.Outcome(strings.ToUpper(strings.TrimSpace(req.Outcome)))
 	if outcome != amm.OutcomeYES && outcome != amm.OutcomeNO {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_outcome",
-			"message": "Outcome must be 'YES' or 'NO'",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_outcome", "Outcome must be 'YES' or 'NO'")
 		return
 	}
 
@@ -380,10 +366,7 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 		action = "BUY"
 	}
 	if action != "BUY" && action != "SELL" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_action",
-			"message": "Action must be 'BUY' or 'SELL'",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_action", "Action must be 'BUY' or 'SELL'")
 		return
 	}
 
@@ -399,7 +382,7 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 			// Tradability is re-checked on every hit: an entry may describe a market that is not
 			// active (e.g. cached by a detail read) or whose resolution date has since passed.
 			if appErr := checkTradable(state.Status, state.ResolutionDate); appErr != nil {
-				c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+				respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 				return
 			}
 			marketUUID = state.MarketUUID
@@ -425,15 +408,15 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 		err := h.pool.QueryRow(ctx, query, keyArg).Scan(&marketUUID, &marketStatus, &resDate, &rYes, &rNo, &collateral)
 		if err != nil {
 			if err == pgx.ErrNoRows {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Market not found"})
+				respondError(c, http.StatusNotFound, "not_found", "Market not found")
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to fetch market reserves"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to fetch market reserves")
 			return
 		}
 
 		if appErr := checkTradable(marketStatus, resDate); appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 
@@ -451,14 +434,14 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 	if action == "BUY" {
 		deposit, valErr := ParsePositiveDecimal(req.AmountUSDC, "amount_usdc")
 		if valErr != nil {
-			c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+			respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 			return
 		}
 
 		quote, err := amm.CalculateCompleteSetBuy(deposit, outcome, poolReserves)
 		if err != nil {
 			log.Printf("[AMM Buy Quote] calculation error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "amm_error", "message": "Invalid trade parameters for buy quote"})
+			respondError(c, http.StatusBadRequest, "amm_error", "Invalid trade parameters for buy quote")
 			return
 		}
 
@@ -479,14 +462,14 @@ func (h *MarketHandler) HandleMarketQuote(c *gin.Context) {
 	} else {
 		shares, valErr := ParsePositiveDecimal(req.Shares, "shares")
 		if valErr != nil {
-			c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+			respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 			return
 		}
 
 		quote, err := amm.CalculateCompleteSetSell(shares, outcome, poolReserves)
 		if err != nil {
 			log.Printf("[AMM Sell Quote] calculation error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "amm_error", "message": "Invalid trade parameters for sell quote"})
+			respondError(c, http.StatusBadRequest, "amm_error", "Invalid trade parameters for sell quote")
 			return
 		}
 

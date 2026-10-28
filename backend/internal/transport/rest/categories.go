@@ -2,8 +2,6 @@ package rest
 
 import (
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,21 +47,4 @@ func validateMarketCategory(category string) *AppError {
 		ErrorCode:  "invalid_category",
 		Message:    "category must be one of: ai, crypto, macro, science",
 	}
-}
-
-// validateMarketImageURL accepts an empty value or an absolute https link. Relative paths are
-// refused: they pointed at image files that were never deployed.
-func validateMarketImageURL(raw string) *AppError {
-	if raw == "" {
-		return nil
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || strings.ContainsAny(raw, " \t\r\n") {
-		return &AppError{
-			StatusCode: http.StatusBadRequest,
-			ErrorCode:  "invalid_image_url",
-			Message:    "image_url must be an absolute https:// link",
-		}
-	}
-	return nil
 }

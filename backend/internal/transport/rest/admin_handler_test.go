@@ -315,21 +315,11 @@ func TestAdminMarketCRUDWorkflow(t *testing.T) {
 		t.Errorf("Expected status 'suspended', got %v", editedMarket["status"])
 	}
 
-	// 3. Delete Market
-	wDel := httptest.NewRecorder()
-	reqDel, _ := http.NewRequest(http.MethodDelete, "/api/v1/admin/markets/"+marketID, nil)
-	reqDel.Header.Set("Authorization", "Bearer "+superadminToken)
-	router.ServeHTTP(wDel, reqDel)
-
-	if wDel.Code != http.StatusOK {
-		t.Fatalf("Expected 200 OK from DELETE /api/v1/admin/markets/:id, got %d: %s", wDel.Code, wDel.Body.String())
-	}
-
-	// Verify market is deleted from database
-	var count int
-	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM markets WHERE id = $1", marketID).Scan(&count)
-	if count != 0 {
-		t.Errorf("Expected market to be deleted from DB, found count %d", count)
+	// Hard delete is no longer routed: the market must still exist.
+	var remaining int
+	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM markets WHERE id = $1", marketID).Scan(&remaining)
+	if remaining != 1 {
+		t.Errorf("Expected market to remain, found count %d", remaining)
 	}
 }
 
@@ -404,9 +394,9 @@ func TestAdminVoidMarketRefundsPositions(t *testing.T) {
 	}
 	marketURL := "/api/v1/admin/markets/" + testMarketID.String()
 
-	// 1. Hard delete must be refused for a market with trading history
-	if w := doReq(http.MethodDelete, marketURL, "", ""); w.Code != http.StatusConflict {
-		t.Fatalf("Expected 409 deleting a traded market, got %d: %s", w.Code, w.Body.String())
+	// Hard delete is not routed: DELETE must not succeed for any market.
+	if w := doReq(http.MethodDelete, marketURL, "", ""); w.Code == http.StatusOK || w.Code == http.StatusNoContent {
+		t.Fatalf("Expected DELETE to be unavailable, got %d: %s", w.Code, w.Body.String())
 	}
 
 	// 2. Void requires an idempotency key

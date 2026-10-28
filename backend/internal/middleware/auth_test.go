@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -17,9 +17,9 @@ import (
 func TestRequireAdminAuth_DoesNotTrustTokenClaimWithoutDatabase(t *testing.T) {
 	const secret = "test-secret-at-least-thirty-two-characters"
 	claims := middleware.AuthClaims{
-		UserID:  uuid.New().String(),
-		IsAdmin: true,
+		UserID: uuid.New().String(),
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    middleware.AccessTokenIssuer,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},
 	}

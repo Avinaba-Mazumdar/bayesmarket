@@ -70,13 +70,13 @@ colors:
     focus-ring: 'rgba(55, 48, 163, 0.35)'
     dialog-overlay: 'rgba(15, 23, 42, 0.55)'
 shadows:
-    sm: '0 1px 2px rgba(0, 0, 0, 0.40)'
-    md: '0 4px 12px rgba(0, 0, 0, 0.50)'
-    lg: '0 12px 28px -4px rgba(0, 0, 0, 0.65)'
-    terminal: '0 8px 32px rgba(0, 0, 0, 0.70)'
-    glow-primary: '0 0 20px rgba(166, 3, 76, 0.40)'
-    glow-yes: '0 0 16px rgba(16, 185, 129, 0.35)'
-    glow-no: '0 0 16px rgba(251, 113, 133, 0.35)'
+    sm: '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05)'
+    md: '0 4px 6px -1px rgba(15, 23, 42, 0.09), 0 2px 4px -2px rgba(15, 23, 42, 0.05)'
+    lg: '0 10px 15px -3px rgba(15, 23, 42, 0.09), 0 4px 6px -4px rgba(15, 23, 42, 0.05)'
+    terminal: '0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05)'
+    glow-primary: '0 0 20px rgba(67, 56, 202, 0.18)'
+    glow-yes: '0 0 16px rgba(6, 95, 70, 0.18)'
+    glow-no: '0 0 16px rgba(159, 18, 57, 0.18)'
 
 typography:
     display-xl:
@@ -258,7 +258,7 @@ components:
         minWidth: 44px
     button-claim:
         backgroundColor: '{colors.primary-subtle}'
-        textColor: '#fbcfe8'
+        textColor: '#4338ca'
         borderColor: '{colors.primary-border}'
         typography: '{typography.button-sm}'
         rounded: '{rounded.pill}'
@@ -388,7 +388,7 @@ components:
         minWidth: 260px
 ---
 
-> **Superseded palette.** Earlier revisions of this file specified an obsidian (`#07090e`) and Deep Amaranth (`#a6034c`) palette. That palette is no longer used. The `colors` values in this frontmatter are the light-theme values from `frontend/src/styles/tokens.css`. Where the prose below describes the older palette, treat it as historical and follow the code.
+> **Superseded palette.** Earlier revisions of this file specified an obsidian (`#07090e`) and Deep Amaranth (`#a6034c`) palette. That palette is no longer used. The `colors` and `shadows` values in this frontmatter are the light-theme values from `frontend/src/styles/tokens.css`. Any later sentence that quotes `#07090e`, `#a6034c`, `#e84089`, `#10b981` as the default YES color, or `#fb7185` as the default NO color is historical. Implement `tokens.css`. The dark theme is opt-in via `data-theme="dark"` and is defined only in that file.
 
 # BayesMarket Design System & Interface Specification
 
@@ -400,16 +400,15 @@ Unlike retail betting platforms or casual mobile apps, BayesMarket operates as a
 
 ### 1.1 Foundational Brand Architecture
 
-The visual architecture is anchored by:
+The visual architecture is anchored by the light theme in `frontend/src/styles/tokens.css`:
 
-1. **Obsidian Void Canvas (`{colors.canvas}` — `#07090e`)**: An ultra-dark, low-fatigue trading floor designed for continuous multi-hour monitoring, 60fps canvas chart updates, and maximum optical pop for probability tickers.
-2. **Signature Deep Amaranth (`{colors.primary}` — `#a6034c`)**: An authoritative, high-energy ruby-magenta brand anchor. It sets BayesMarket apart from generic blue/green fintech apps, communicating quantitative boldness, precision, and structural rigor across primary execution CTAs, brand emblems, and key indicators. White text on `#a6034c` delivers an exact **7.67:1** contrast ratio, surpassing WCAG 2.2 Level AAA requirements.
+1. **Canvas (`{colors.canvas}` — `#f8f9fc`)**: A light trading floor. Cards are `#ffffff`. Text uses slate ink `#0f172a` (the token file states 18.75:1 on white).
+2. **Primary (`{colors.primary}` — `#4338ca`)**: Indigo for execution CTAs and brand marks. The token file states white on `#4338ca` is 8.33:1.
 3. **Dual-Coded Binary Outcome Spectrum**:
-    - **YES Shares (`{colors.outcome-yes-text}` — `#34d399` / Base `#10b981`)**: Radiant Mint/Emerald Green representing affirmative consensus and long probability positions.
-    - **NO Shares (`{colors.outcome-no-text}` — `#fda4af` / Base `#fb7185`)**: High-luminance Coral/Rose representing negative consensus and short probability positions.
-4. **Dual Typography Pairing**:
-    - **Display & Interface Typography**: Set in **Scoutie Sans**, a contemporary geometric sans-serif delivering athletic posture, open counters, and instant legibility across market titles, order tabs, and navigation headers.
-    - **Quantitative Monospace Sub-System**: Set in **JetBrains Mono** across all price feeds, probabilities, pool reserves, USDC denominations, order slips, and slippage calculations to eliminate layout jitter and guarantee vertical tabular scanning.
+    - **YES (`{colors.outcome-yes}` — `#065f46`)**: Deep green. The token file states white on this solid is 7.78:1.
+    - **NO (`{colors.outcome-no}` — `#9f1239`)**: Deep rose. The token file states white on this solid is 8.08:1.
+
+Focus uses `#3730a3` (`--focus-outline`), not the retired `#e84089` ring. Interactive borders use `#64748b` (`--border-strong`). 4. **Dual Typography Pairing**: - **Display & Interface Typography**: Set in **Scoutie Sans**, a contemporary geometric sans-serif delivering athletic posture, open counters, and instant legibility across market titles, order tabs, and navigation headers. - **Quantitative Monospace Sub-System**: Set in **JetBrains Mono** across all price feeds, probabilities, pool reserves, USDC denominations, order slips, and slippage calculations to eliminate layout jitter and guarantee vertical tabular scanning.
 
 ### 1.2 WCAG 2.2 Level AAA Acceptance Requirements
 
@@ -420,7 +419,7 @@ BayesMarket is designed to satisfy the highest international benchmark for digit
     - **SC 1.4.6 (Contrast Enhanced - AAA)**: Minimum **7.0:1** contrast for normal text; minimum **4.5:1** for large text across every surface elevation.
     - **SC 1.4.8 (Visual Presentation - AAA)**: Line lengths strictly capped at $\le 68\text{ch}$ ($\le 80$ characters), line-height $\ge 1.55$, paragraph bottom margin $\ge 2.25\text{em}$, no justified text, full 200% zoom reflow without horizontal scrolling, and support for OS forced-colors high-contrast mode.
     - **SC 1.4.9 (Images of Text - No Exception - AAA)**: Zero rasterized images of text; all figures, odds, and metrics use native DOM or SVG vector typography.
-    - **SC 1.4.11 (Non-text Contrast - Level AA/AAA Baseline)**: Minimum **3.0:1** contrast for all interactive borders (`#606e85` — 3.86:1), toggle switches, and graphical boundaries.
+    - **SC 1.4.11 (Non-text Contrast - Level AA/AAA Baseline)**: Minimum **3.0:1** contrast for all interactive borders (`#64748b` — 4.52:1 on canvas, 4.76:1 on card), toggle switches, and graphical boundaries.
 - **Operable**:
     - **SC 2.1.3 (Keyboard - No Exception - AAA)**: 100% of functionality is keyboard operable without pointer dependency or specific keystroke timings.
     - **SC 2.2.3 & 2.2.6 (No Timing & Timeouts - AAA)**: No arbitrary timeout countdowns on order drafting; user session state is preserved across $> 20$ hours.
@@ -431,7 +430,7 @@ BayesMarket is designed to satisfy the highest international benchmark for digit
     - **SC 2.4.9 (Link Purpose - Link Only - AAA)**: All link text explicitly conveys destination and intent from the anchor string alone.
     - **SC 2.4.10 (Section Headings - AAA)**: Strict semantic `h1` through `h4` hierarchy without skipped levels.
     - **SC 2.4.12 (Focus Not Obscured - Enhanced - AAA)**: Zero percent obscuration via viewport scroll offsets (`scroll-padding-top: 76px; scroll-padding-bottom: 96px`) and modal inert traps.
-    - **SC 2.4.13 (Focus Appearance - AAA)**: 2px solid perimeter outline in `#e84089` (5.24:1 contrast) with 2px offset and secondary outer ring, enclosing the entire interactive perimeter.
+    - **SC 2.4.13 (Focus Appearance - AAA)**: 2px solid perimeter outline in `#3730a3` (9.44:1 contrast on the canvas) with 2px offset and secondary outer ring, enclosing the entire interactive perimeter.
     - **SC 2.5.5 (Target Size - Enhanced - AAA)**: Universal minimum **44×44 CSS pixels** for every button, chip, tab, and input, separated by at least **8px** of touch envelope clearance.
     - **SC 2.5.6 (Concurrent Input Mechanisms - AAA)**: Seamless interchange between touch, mouse, keyboard, and stylus.
 - **Understandable**:
@@ -453,51 +452,51 @@ BayesMarket is designed to satisfy the highest international benchmark for digit
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          COLOR PALETTE SPECTRUM                             │
 ├───────────────────┬───────────────────┬──────────────────┬──────────────────┤
-│ BRAND SIGNATURE   │ OUTCOME YES       │ OUTCOME NO       │ OBSIDIAN CANVAS  │
-│ Deep Amaranth     │ Radiant Mint      │ Bright Rose      │ Void Black       │
-│ #a6034c           │ #34d399           │ #fda4af          │ #07090e          │
+│ BRAND SIGNATURE   │ OUTCOME YES       │ OUTCOME NO       │ LIGHT CANVAS     │
+│ Indigo            │ Deep Green        │ Deep Rose        │ Trading Floor    │
+│ #4338ca           │ #065f46           │ #9f1239          │ #f8f9fc          │
 └───────────────────┴───────────────────┴──────────────────┴──────────────────┘
 ```
 
 ### 2.1 Brand & Interactive Tones
 
-- **Primary Brand** (`{colors.primary}` — `#a6034c`): Deep Amaranth. The foundational brand color. Used for primary commit CTAs (`"Execute Trade"`, `"Confirm Swap"`), active navigation indicators, and primary highlight badges. `#ffffff` text on `#a6034c` achieves **7.67:1** contrast (**Exceeds 7.0:1 AAA**).
-- **Primary Active** (`{colors.primary-active}` — `#85023d`): Pressed state for primary buttons with tactile mechanical scale depression. `#ffffff` on `#85023d` achieves **10.13:1** contrast (**Exceeds 7.0:1 AAA**).
-- **Primary Hover** (`{colors.primary-hover}` — `#ab034e`): Calibrated high-luminance hover shade. `#ffffff` on `#ab034e` achieves **7.36:1** contrast (**Strictly Exceeds 7.0:1 AAA**; standard lighter pinks fail this test).
-- **Primary Subtle** (`{colors.primary-subtle}` — `rgba(166, 3, 76, 0.15)`): Tonal glow background for active tabs, selected token pills, and guest claim controls.
-- **Primary Border / Focus Ring** (`{colors.primary-border}` / `{colors.focus-outline}` — `#e84089`): High-definition perimeter outline for active cards and focused order inputs (**5.24:1** contrast against canvas `#07090e`, **4.76:1** against card `#111622` — **Exceeds 3.0:1 Focus/Non-Text AAA**).
-- **Primary Glow** (`{colors.primary-glow}` — `rgba(166, 3, 76, 0.35)`): Ambient radial bloom surrounding execution triggers.
+- **Primary Brand** (`{colors.primary}` — `#4338ca`): Indigo. The foundational brand color. Used for primary commit CTAs (`"Execute Trade"`, `"Confirm Swap"`), active navigation indicators, and primary highlight badges. `#ffffff` text on `#4338ca` achieves **7.90:1** contrast (**Exceeds 7.0:1 AAA**).
+- **Primary Active** (`{colors.primary-active}` — `#312e81`): Pressed state for primary buttons with tactile mechanical scale depression. `#ffffff` on `#312e81` achieves **11.42:1** contrast (**Exceeds 7.0:1 AAA**).
+- **Primary Hover** (`{colors.primary-hover}` — `#3730a3`): Calibrated hover shade. `#ffffff` on `#3730a3` achieves **9.93:1** contrast (**Exceeds 7.0:1 AAA**).
+- **Primary Subtle** (`{colors.primary-subtle}` — `rgba(67, 56, 202, 0.08)`): Tonal background for active tabs, selected token pills, and guest claim controls. `{colors.primary}` text on this tint (about `#f0effb` on white) achieves **6.94:1** (**Passes AA; below AAA 7.0:1**).
+- **Primary Border / Focus Ring** (`{colors.primary-border}` / `{colors.focus-outline}` — `#4338ca` / `#3730a3`): High-definition perimeter outline for active cards and focused order inputs. `#4338ca` is **7.51:1** against canvas `#f8f9fc` and **7.90:1** against card `#ffffff`. The focus outline `#3730a3` is **9.44:1** on canvas (**Exceeds 3.0:1 Focus/Non-Text AAA**).
+- **Primary Glow** (`{colors.primary-glow}` — `rgba(67, 56, 202, 0.25)`): Ambient radial bloom surrounding execution triggers.
 
 ### 2.2 Binary Outcome Color Semantics (Dual-Coded AAA)
 
 In a Constant Product Market Maker ($P_{\text{YES}} + P_{\text{NO}} = 1.00$), binary outcomes are dual-coded with geometric glyphs (`▲ YES` vs `▼ NO`) and calibrated light tints:
 
-- **YES Outcome** (`{colors.outcome-yes}` — `#10b981` / Text: `{colors.outcome-yes-text}` — `#34d399`):
-    - Text Color: `#34d399` ($L \approx 0.495$). Contrast against `{colors.canvas}` is **10.36:1** (**Exceeds 7.0:1 AAA**). Contrast against card `{colors.surface-card}` is **9.40:1** (**Exceeds 7.0:1 AAA**). Contrast against elevated card `{colors.surface-card-elevated}` is **8.71:1** (**Exceeds 7.0:1 AAA**).
-    - Background Capsule: `{colors.outcome-yes-subtle}` (`#06281b`). Contrast between `#34d399` and `#06281b` is **8.17:1** (**Exceeds 7.0:1 AAA**).
-    - Active Solid Button State: `#07090e` dark text on `#10b981` solid base achieves **7.85:1** (**Exceeds 7.0:1 AAA**).
-    - Border: `{colors.outcome-yes-border}` (`#10b981`).
-- **NO Outcome** (`{colors.outcome-no}` — `#fb7185` / Text: `{colors.outcome-no-text}` — `#fda4af`):
-    - Text Color: `#fda4af` ($L \approx 0.504$). Contrast against `{colors.canvas}` is **10.53:1** (**Exceeds 7.0:1 AAA**). Contrast against card `{colors.surface-card}` is **9.56:1** (**Exceeds 7.0:1 AAA**). Contrast against elevated card `{colors.surface-card-elevated}` is **8.86:1** (**Exceeds 7.0:1 AAA**).
-    - Background Capsule: `{colors.outcome-no-subtle}` (`#330814`). Contrast between `#fda4af` and `#330814` is **9.39:1** (**Exceeds 7.0:1 AAA**).
-    - Active Solid Button State: `#07090e` dark text on `#fb7185` solid base achieves **7.40:1** (**Exceeds 7.0:1 AAA**).
-    - Border: `{colors.outcome-no-border}` (`#fb7185`).
+- **YES Outcome** (`{colors.outcome-yes}` — `#065f46` / Text: `{colors.outcome-yes-text}` — `#065f46`):
+    - Text Color: `#065f46`. Contrast against `{colors.canvas}` is **7.30:1** (**Exceeds 7.0:1 AAA**). Contrast against card `{colors.surface-card}` is **7.68:1** (**Exceeds 7.0:1 AAA**).
+    - Background Capsule: `{colors.outcome-yes-subtle}` (`rgba(6, 95, 70, 0.09)`, about `#e9f1ee` on white). `#065f46` text on this capsule is **6.69:1** (**Passes AA 4.5:1; below AAA 7.0:1**).
+    - Active Solid Button State: `#ffffff` text on `#065f46` solid base achieves **7.68:1** (**Exceeds 7.0:1 AAA**).
+    - Border: `{colors.outcome-yes-border}` (`rgba(6, 95, 70, 0.35)`).
+- **NO Outcome** (`{colors.outcome-no}` — `#9f1239` / Text: `{colors.outcome-no-text}` — `#9f1239`):
+    - Text Color: `#9f1239`. Contrast against `{colors.canvas}` is **7.61:1** (**Exceeds 7.0:1 AAA**). Contrast against card `{colors.surface-card}` is **8.02:1** (**Exceeds 7.0:1 AAA**).
+    - Background Capsule: `{colors.outcome-no-subtle}` (`rgba(159, 18, 57, 0.09)`, about `#f6eaed` on white). `#9f1239` text on this capsule is **6.84:1** (**Passes AA 4.5:1; below AAA 7.0:1**).
+    - Active Solid Button State: `#ffffff` text on `#9f1239` solid base achieves **8.02:1** (**Exceeds 7.0:1 AAA**).
+    - Border: `{colors.outcome-no-border}` (`rgba(159, 18, 57, 0.35)`).
 
 ### 2.3 Trading Floor Surfaces & Depth Hierarchy
 
-- **Canvas Floor** (`{colors.canvas}` — `#07090e`): Ground-level void obsidian ($L \approx 0.00263$). Absorbs reflection and hosts the entire SPA layout.
-- **Canvas Subtle** (`{colors.canvas-subtle}` — `#0c1017`): Deep slate background ($L \approx 0.00495$) for input fields, inactive tabs, and table header rows.
-- **Surface Card** (`{colors.surface-card}` — `#111622`): Elevated modular cards ($L \approx 0.00720$) for market listings, open positions, and telemetry widgets with 1px `{colors.hairline}` border.
-- **Surface Card Elevated** (`{colors.surface-card-elevated}` — `#171f30`): Hover state for market cards, modal dialogs, and dropdown menus ($L \approx 0.01258$).
-- **Surface Terminal** (`{colors.surface-terminal}` — `#0e131d`): Dedicated high-contrast cockpit surface ($L \approx 0.00588$) hosting the TradingView canvas and execution order book.
-- **Surface Glass** (`{colors.surface-glass}` — `rgba(17, 22, 34, 0.88)`): Translucent header and mobile dock with `backdrop-filter: blur(16px)`.
+- **Canvas Floor** (`{colors.canvas}` — `#f8f9fc`): Light trading floor ($L \approx 0.947$). Hosts the entire SPA layout.
+- **Canvas Subtle** (`{colors.canvas-subtle}` — `#f1f5f9`): Slate tint for input fields, inactive tabs, and table header rows.
+- **Surface Card** (`{colors.surface-card}` — `#ffffff`): Modular cards for market listings, open positions, and telemetry widgets, with a 1px `{colors.hairline}` (`#cbd5e1`) border.
+- **Surface Card Elevated** (`{colors.surface-card-elevated}` — `#ffffff`): Hover state for market cards, modal dialogs, and dropdown menus, separated from the page by shadow.
+- **Surface Terminal** (`{colors.surface-terminal}` — `#f8fafc`): Dedicated cockpit surface hosting the TradingView canvas and execution order book.
+- **Surface Glass** (`{colors.surface-glass}` — `rgba(255, 255, 255, 0.92)`): Translucent header and mobile dock with `backdrop-filter: blur(16px)`.
 
 ### 2.4 Text, Ink & Non-Text Hierarchy (AAA Verified Across All Elevations)
 
 - **Ink Primary** (`{colors.ink}` — `#f8fafc`): Crisp Slate-50 white text for market titles, active prices, and execution amounts. Delivers a **19.03:1** contrast ratio against canvas and **17.28:1** against card surfaces (**Strictly Exceeds 7.0:1 AAA**).
 - **Ink Secondary** (`{colors.ink-secondary}` — `#cbd5e1`): Slate-300 for category labels, resolution dates, table headers, and pool volume metrics (**13.41:1** on canvas, **12.18:1** on card — **Strictly Exceeds 7.0:1 AAA**).
 - **Body / Muted Copy** (`{colors.body}` / `{colors.muted}` — `#a2b4c9`): Specially calibrated Slate-350 for market resolution criteria and helper notes. Delivers **9.40:1** on canvas, **8.53:1** on card, and **7.77:1** on elevated cards/modals (`#171f30`) (**Strictly Exceeds 7.0:1 AAA everywhere**; generic `#94a3b8` dropped below 7:1 on elevated cards).
-- **Border Strong** (`{colors.border-strong}` — `#606e85`): High-definition perimeter boundary for inputs, chips, and segmented toggle switches. Achieves **3.86:1** against canvas, **3.50:1** against card, and **3.25:1** against elevated cards (**Strictly Exceeds 3.0:1 SC 1.4.11 Non-text Contrast**; legacy `#475569` failed at 2.63:1).
+- **Border Strong** (`{colors.border-strong}` — `#64748b`): High-definition perimeter boundary for inputs, chips, and segmented toggle switches. Achieves **4.52:1** against canvas and **4.76:1** against card (**Exceeds 3.0:1 SC 1.4.11 Non-text Contrast**).
 - **Hairline** (`{colors.hairline}` — `#1e2638`): Structural visual dividers between table rows.
 
 ---
@@ -569,7 +568,7 @@ All spatial margins, padding envelopes, and component dimensions derive from an 
 
 ```
 Level 0: Canvas Floor          Level 1: Cards & Panels        Level 2: Modals & Terminals
-[ #07090e Void Base ]   ───►   [ #111622 with Hairline ]  ───►  [ Frosted Glass + Radial Glow ]
+[ #f8f9fc Canvas ]   ───►   [ #ffffff with Hairline ]  ───►  [ Frosted Glass + Radial Glow ]
 ```
 
 | Level                    | Background                       | Border                              | Shadow Treatment                          | Application Context                                   |
@@ -612,27 +611,27 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 
 **`button-primary`** — Main execution CTA (`"Buy YES"`, `"Execute Trade"`, `"Confirm Swap"`).
 
-- Default: Background `{colors.primary}` (`#a6034c`), Text `{colors.on-primary}` (`#ffffff`), Type `{typography.button}`, Corner `{rounded.lg}`, Padding `14px 20px`, Height `48px` (min 48×44px).
-- Hover: Background `{colors.primary-hover}` (`#ab034e`), Box-shadow `{shadows.glow-primary}`.
-- Active: Background `{colors.primary-active}` (`#85023d`), Transform `scale(0.98)`.
-- Contrast Verification: `#ffffff` on `#a6034c` = **7.67:1** (**Passes AAA 7.0:1**). `#ffffff` on `#ab034e` hover = **7.36:1** (**Passes AAA 7.0:1**).
+- Default: Background `{colors.primary}` (`#4338ca`), Text `{colors.on-primary}` (`#ffffff`), Type `{typography.button}`, Corner `{rounded.lg}`, Padding `14px 20px`, Height `48px` (min 48×44px).
+- Hover: Background `{colors.primary-hover}` (`#3730a3`), Box-shadow `{shadows.glow-primary}`.
+- Active: Background `{colors.primary-active}` (`#312e81`), Transform `scale(0.98)`.
+- Contrast Verification: `#ffffff` on `#4338ca` = **7.90:1** (**Passes AAA 7.0:1**). `#ffffff` on `#3730a3` hover = **9.93:1** (**Passes AAA 7.0:1**).
 
 **`button-yes`** — Direct affirmative binary outcome selector.
 
-- Default: Background `{colors.outcome-yes-subtle}` (`#06281b`), Text `{colors.outcome-yes-text}` (`#34d399`), Border 1px `{colors.outcome-yes-border}` (`#10b981`), Corner `{rounded.md}`, Type `{typography.button}`, Height `44px`, Min-Width `44px`.
-- Active / Selected: Background `{colors.outcome-yes}` (`#10b981`), Text `#07090e`, Box-shadow `{shadows.glow-yes}`, Transform `scale(0.98)`.
-- Contrast Verification: `#34d399` on `#06281b` = **8.17:1** (**Passes AAA 7.0:1**). Selected text `#07090e` on `#10b981` = **7.85:1** (**Passes AAA 7.0:1**).
+- Default: Background `{colors.outcome-yes-subtle}` (`rgba(6, 95, 70, 0.09)`), Text `{colors.outcome-yes-text}` (`#065f46`), Border 1px `{colors.outcome-yes-border}` (`rgba(6, 95, 70, 0.35)`), Corner `{rounded.md}`, Type `{typography.button}`, Height `44px`, Min-Width `44px`.
+- Active / Selected: Background `{colors.outcome-yes}` (`#065f46`), Text `#ffffff`, Box-shadow `{shadows.glow-yes}`, Transform `scale(0.98)`.
+- Contrast Verification: `#065f46` on its capsule = **6.69:1** (**Passes AA; below AAA 7.0:1**). Selected text `#ffffff` on `#065f46` = **7.68:1** (**Passes AAA 7.0:1**).
 
 **`button-no`** — Direct negative binary outcome selector.
 
-- Default: Background `{colors.outcome-no-subtle}` (`#330814`), Text `{colors.outcome-no-text}` (`#fda4af`), Border 1px `{colors.outcome-no-border}` (`#fb7185`), Corner `{rounded.md}`, Type `{typography.button}`, Height `44px`, Min-Width `44px`.
-- Active / Selected: Background `{colors.outcome-no}` (`#fb7185`), Text `#07090e`, Box-shadow `{shadows.glow-no}`, Transform `scale(0.98)`.
-- Contrast Verification: `#fda4af` on `#330814` = **9.39:1** (**Passes AAA 7.0:1**). Selected text `#07090e` on `#fb7185` = **7.40:1** (**Passes AAA 7.0:1**).
+- Default: Background `{colors.outcome-no-subtle}` (`rgba(159, 18, 57, 0.09)`), Text `{colors.outcome-no-text}` (`#9f1239`), Border 1px `{colors.outcome-no-border}` (`rgba(159, 18, 57, 0.35)`), Corner `{rounded.md}`, Type `{typography.button}`, Height `44px`, Min-Width `44px`.
+- Active / Selected: Background `{colors.outcome-no}` (`#9f1239`), Text `#ffffff`, Box-shadow `{shadows.glow-no}`, Transform `scale(0.98)`.
+- Contrast Verification: `#9f1239` on its capsule = **6.84:1** (**Passes AA; below AAA 7.0:1**). Selected text `#ffffff` on `#9f1239` = **8.02:1** (**Passes AAA 7.0:1**).
 
 **`button-claim`** — Ephemeral guest sandbox balance refill trigger.
 
-- Container: Background `{colors.primary-subtle}` (`rgba(166, 3, 76, 0.15)` on card = `#271328`), Border 1px `{colors.primary-border}` (`#e84089`), Text `#fbcfe8` (Light Orchid), Corner `{rounded.pill}`, Padding `10px 18px`, Min-Height `44px`, Min-Width `44px`.
-- Contrast: `#fbcfe8` on `#271328` = **12.35:1** (**Passes AAA 7.0:1**). Border `#e84089` against card = **4.76:1** (**Passes 3.0:1 Non-text AAA**).
+- Container: Background `{colors.primary-subtle}` (`rgba(67, 56, 202, 0.08)` on card = `#f0effb`), Border 1px `{colors.primary-border}` (`#4338ca`), Text `{colors.primary}` (`#4338ca`), Corner `{rounded.pill}`, Padding `10px 18px`, Min-Height `44px`, Min-Width `44px`.
+- Contrast: `#4338ca` on `#f0effb` = **6.94:1** (**Passes AA; below AAA 7.0:1**). Border `#4338ca` against card = **7.90:1** (**Passes AAA**).
 - Cooldown State: Opacity `0.65`, Cursor `not-allowed`.
 
 ---
@@ -642,7 +641,7 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 **`top-header-dock`** — Sticky top navigation shell (`64px` height).
 
 - Background: `{colors.surface-glass}` with `backdrop-filter: blur(16px)` and 1px bottom border `{colors.hairline}`.
-- Left Cluster: BayesMarket monogram in Deep Amaranth (`#a6034c`) + wordmark in `{typography.title-lg}` Scoutie Sans. Category navigation tabs (`AI`, `Crypto`, `Tech`, `Macro`) with `min-height: 44px` touch hitboxes and `aria-current="page"`.
+- Left Cluster: BayesMarket monogram in Indigo (`#4338ca`) + wordmark in `{typography.title-lg}` Scoutie Sans. Category navigation tabs (`AI`, `Crypto`, `Tech`, `Macro`) with `min-height: 44px` touch hitboxes and `aria-current="page"`.
 - Right Cluster: Ephemeral Guest Balance indicator (`"$1,000.00 USDC"` in `{typography.mono-sm}`), `[+ Claim]` button (44px height), and live WebSocket telemetry connection pulse (🟢 connected with explicit aria-label).
 
 ---
@@ -710,7 +709,7 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 
 ### Do
 
-- **Do use Deep Amaranth (`#a6034c`) as the authoritative primary brand anchor.** Pair it strictly with `#ffffff` text to guarantee 7.67:1 contrast (exceeding WCAG 2.2 AAA 7.0:1).
+- **Do use Indigo (`#4338ca`) as the primary brand anchor.** Pair it with `#ffffff` text, which gives 7.90:1 contrast (above the WCAG 2.2 AAA 7.0:1 threshold).
 - **Do pair every probability metric with dual-coded text and visual percentage bars.** Always include geometric direction markers (`▲ YES` / `▼ NO`) so colorblind users never depend on color alone.
 - **Do enforce a strict 44×44px minimum touch target on all clickable elements** to fulfill WCAG 2.2 SC 2.5.5 Level AAA.
 - **Do enforce `scroll-padding-top: 76px; scroll-padding-bottom: 96px;`** so focused inputs are never obscured by sticky headers or drawers (SC 2.4.12 Level AAA).
@@ -759,7 +758,7 @@ BayesMarket is engineered to deliver institutional-grade trading ergonomics from
 ├─────────────────────────┤           ├──────────────────────────────────────────┤ • Slippage  │
 │ DOCKED ORDER TERMINAL   │           │ RECENT TRADES FEED                       │   [1.25%]   │
 │ • [▲ BUY YES] [▼ BUY NO]│           │ • 150 YES @ 0.72  • 40 NO @ 0.28         │ • [TRADE]   │
-│ • [$100] [Max]          │           │ • 500 YES @ 0.71  • 100 YES @ 0.72       │   (#a6034c) │
+│ • [$100] [Max]          │           │ • 500 YES @ 0.71  • 100 YES @ 0.72       │   (#4338ca) │
 │ • [EXECUTE (48px H)]    │           └──────────────────────────────────────────┴─────────────┘
 └─────────────────────────┘
 ```
@@ -783,31 +782,31 @@ $$L = 0.2126 R + 0.7152 G + 0.0722 B, \quad \text{Contrast} = \frac{L_{\text{lig
 
 Under **WCAG 2.2 Level AAA**, all normal text requires **7.0:1 minimum**. Large text ($\ge 24\text{px}$ regular or $\ge 18.5\text{px}$ bold) requires **4.5:1 minimum**. Graphical components require **3.0:1 minimum** (SC 1.4.11).
 
-| UI Element Pair                   | Foreground Color                        | Background Surface                           | Contrast Ratio | WCAG 2.2 Level AAA Status             |
-| :-------------------------------- | :-------------------------------------- | :------------------------------------------- | :------------- | :------------------------------------ |
-| **Primary Ink on Canvas**         | `{colors.ink}` (`#f8fafc`)              | `{colors.canvas}` (`#07090e`)                | **19.03 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Primary Ink on Card**           | `{colors.ink}` (`#f8fafc`)              | `{colors.surface-card}` (`#111622`)          | **17.28 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Secondary Ink on Canvas**       | `{colors.ink-secondary}` (`#cbd5e1`)    | `{colors.canvas}` (`#07090e`)                | **13.41 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Secondary Ink on Card**         | `{colors.ink-secondary}` (`#cbd5e1`)    | `{colors.surface-card}` (`#111622`)          | **12.18 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Body & Muted on Canvas**        | `{colors.body}` (`#a2b4c9`)             | `{colors.canvas}` (`#07090e`)                | **9.40 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Body & Muted on Card**          | `{colors.body}` (`#a2b4c9`)             | `{colors.surface-card}` (`#111622`)          | **8.53 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Body & Muted on Elevated Card** | `{colors.body}` (`#a2b4c9`)             | `{colors.surface-card-elevated}` (`#171f30`) | **7.77 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Primary Button Text**           | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary}` (`#a6034c`)               | **7.67 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Primary Button Hover Text**     | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary-hover}` (`#ab034e`)         | **7.36 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Primary Button Active Text**    | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary-active}` (`#85023d`)        | **10.13 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **YES Label in Capsule**          | `{colors.outcome-yes-text}` (`#34d399`) | `{colors.outcome-yes-subtle}` (`#06281b`)    | **8.17 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **YES Label on Canvas**           | `{colors.outcome-yes-text}` (`#34d399`) | `{colors.canvas}` (`#07090e`)                | **10.36 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **YES Active Solid Button Text**  | `{colors.on-outcome}` (`#07090e`)       | `{colors.outcome-yes}` (`#10b981`)           | **7.85 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **NO Label in Capsule**           | `{colors.outcome-no-text}` (`#fda4af`)  | `{colors.outcome-no-subtle}` (`#330814`)     | **9.39 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **NO Label on Canvas**            | `{colors.outcome-no-text}` (`#fda4af`)  | `{colors.canvas}` (`#07090e`)                | **10.53 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **NO Active Solid Button Text**   | `{colors.on-outcome}` (`#07090e`)       | `{colors.outcome-no}` (`#fb7185`)            | **7.40 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Claim Button Text**             | Light Orchid (`#fbcfe8`)                | Subtle Amaranth (`#271328`)                  | **12.35 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Warning Callout Text**          | `{colors.status-warning}` (`#fcd34d`)   | `{colors.status-warning-bg}` (`#2a1a02`)     | **11.68 : 1**  | **PASS AAA** (Exceeds 7.0:1)          |
-| **Resolved Market Text**          | `{colors.status-resolved}` (`#d8b4fe`)  | `{colors.status-resolved-bg}` (`#250e38`)    | **9.91 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Info / Category Text**          | `{colors.status-info}` (`#7dd3fc`)      | `{colors.status-info-bg}` (`#082536`)        | **9.48 : 1**   | **PASS AAA** (Exceeds 7.0:1)          |
-| **Interactive Border Boundary**   | `{colors.border-strong}` (`#606e85`)    | `{colors.canvas}` (`#07090e`)                | **3.86 : 1**   | **PASS AAA Non-Text** (Exceeds 3.0:1) |
-| **Interactive Border on Card**    | `{colors.border-strong}` (`#606e85`)    | `{colors.surface-card}` (`#111622`)          | **3.50 : 1**   | **PASS AAA Non-Text** (Exceeds 3.0:1) |
-| **Focus Perimeter Outline**       | `{colors.primary-border}` (`#e84089`)   | `{colors.canvas}` (`#07090e`)                | **5.24 : 1**   | **PASS AAA Focus** (Exceeds 3.0:1)    |
+| UI Element Pair                  | Foreground Color                        | Background Surface                              | Contrast Ratio | WCAG 2.2 Level AAA Status             |
+| :------------------------------- | :-------------------------------------- | :---------------------------------------------- | :------------- | :------------------------------------ |
+| **Primary Ink on Canvas**        | `{colors.ink}` (`#0f172a`)              | `{colors.canvas}` (`#f8f9fc`)                   | **16.96 : 1**  | **PASS AAA**                          |
+| **Primary Ink on Card**          | `{colors.ink}` (`#0f172a`)              | `{colors.surface-card}` (`#ffffff`)             | **17.85 : 1**  | **PASS AAA**                          |
+| **Secondary Ink on Canvas**      | `{colors.ink-secondary}` (`#1e293b`)    | `{colors.canvas}` (`#f8f9fc`)                   | **13.90 : 1**  | **PASS AAA**                          |
+| **Secondary Ink on Card**        | `{colors.ink-secondary}` (`#1e293b`)    | `{colors.surface-card}` (`#ffffff`)             | **14.63 : 1**  | **PASS AAA**                          |
+| **Body & Muted on Canvas**       | `{colors.body}` (`#334155`)             | `{colors.canvas}` (`#f8f9fc`)                   | **9.84 : 1**   | **PASS AAA**                          |
+| **Body & Muted on Card**         | `{colors.body}` (`#334155`)             | `{colors.surface-card}` (`#ffffff`)             | **10.35 : 1**  | **PASS AAA**                          |
+| **Muted on Card**                | `{colors.muted}` (`#3b4861`)            | `{colors.surface-card}` (`#ffffff`)             | **9.19 : 1**   | **PASS AAA**                          |
+| **Primary Button Text**          | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary}` (`#4338ca`)                  | **7.90 : 1**   | **PASS AAA**                          |
+| **Primary Button Hover Text**    | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary-hover}` (`#3730a3`)            | **9.93 : 1**   | **PASS AAA**                          |
+| **Primary Button Active Text**   | `{colors.on-primary}` (`#ffffff`)       | `{colors.primary-active}` (`#312e81`)           | **11.42 : 1**  | **PASS AAA**                          |
+| **YES Label in Capsule**         | `{colors.outcome-yes-text}` (`#065f46`) | `{colors.outcome-yes-subtle}` (about `#e9f1ee`) | **6.69 : 1**   | **PASS AA (below AAA 7.0:1)**         |
+| **YES Label on Canvas**          | `{colors.outcome-yes-text}` (`#065f46`) | `{colors.canvas}` (`#f8f9fc`)                   | **7.30 : 1**   | **PASS AAA**                          |
+| **YES Active Solid Button Text** | `{colors.on-outcome}` (`#ffffff`)       | `{colors.outcome-yes}` (`#065f46`)              | **7.68 : 1**   | **PASS AAA**                          |
+| **NO Label in Capsule**          | `{colors.outcome-no-text}` (`#9f1239`)  | `{colors.outcome-no-subtle}` (about `#f6eaed`)  | **6.84 : 1**   | **PASS AA (below AAA 7.0:1)**         |
+| **NO Label on Canvas**           | `{colors.outcome-no-text}` (`#9f1239`)  | `{colors.canvas}` (`#f8f9fc`)                   | **7.61 : 1**   | **PASS AAA**                          |
+| **NO Active Solid Button Text**  | `{colors.on-outcome}` (`#ffffff`)       | `{colors.outcome-no}` (`#9f1239`)               | **8.02 : 1**   | **PASS AAA**                          |
+| **Claim Button Text**            | `{colors.primary}` (`#4338ca`)          | `{colors.primary-subtle}` (about `#f0effb`)     | **6.94 : 1**   | **PASS AA (below AAA 7.0:1)**         |
+| **Warning Callout Text**         | `{colors.status-warning}` (`#78350f`)   | `{colors.status-warning-bg}` (`#fef3c7`)        | **8.15 : 1**   | **PASS AAA**                          |
+| **Resolved Market Text**         | `{colors.status-resolved}` (`#581c87`)  | `{colors.status-resolved-bg}` (`#f5f3ff`)       | **9.92 : 1**   | **PASS AAA**                          |
+| **Info / Category Text**         | `{colors.status-info}` (`#075985`)      | `{colors.status-info-bg}` (`#f0f9ff`)           | **7.09 : 1**   | **PASS AAA**                          |
+| **Interactive Border Boundary**  | `{colors.border-strong}` (`#64748b`)    | `{colors.canvas}` (`#f8f9fc`)                   | **4.52 : 1**   | **PASS AAA Non-Text (Exceeds 3.0:1)** |
+| **Interactive Border on Card**   | `{colors.border-strong}` (`#64748b`)    | `{colors.surface-card}` (`#ffffff`)             | **4.76 : 1**   | **PASS AAA Non-Text (Exceeds 3.0:1)** |
+| **Focus Perimeter Outline**      | `{colors.focus-outline}` (`#3730a3`)    | `{colors.canvas}` (`#f8f9fc`)                   | **9.44 : 1**   | **PASS AAA Focus (Exceeds 3.0:1)**    |
 
 #### SC 1.4.8 Visual Presentation (Level AAA)
 
@@ -907,17 +906,17 @@ html {
 
 #### SC 2.4.13 Focus Appearance (Level AAA - New in WCAG 2.2)
 
-- Focus indicators enclose the entire component perimeter with a minimum 2px solid outline in `#e84089`:
+- Focus indicators enclose the entire component perimeter with a minimum 2px solid outline in `#3730a3`:
 
 ```css
 :focus-visible {
-    outline: 2px solid var(--primary-border, #e84089);
+    outline: 2px solid var(--focus-outline, #3730a3);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px rgba(232, 64, 137, 0.35);
+    box-shadow: 0 0 0 4px rgba(55, 48, 163, 0.35);
 }
 ```
 
-- Contrast of `#e84089` against canvas `#07090e` is **5.24:1**, and against card `#111622` is **4.76:1** (both strictly exceeding 3.0:1).
+- Contrast of `#3730a3` against canvas `#f8f9fc` is **9.44:1**, and against card `#ffffff` is **9.93:1** (both exceeding 3.0:1).
 
 #### SC 2.5.5 Target Size (Enhanced — Level AAA)
 

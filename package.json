@@ -18,14 +18,8 @@
         "test:amm": "cd backend && go test -v ./internal/amm/...",
         "test:fe": "cd frontend && pnpm test:ci",
         "test": "pnpm test:backend && pnpm test:fe",
-        "verify:db": "cd backend && go run cmd/verify-db/main.go",
-        "db:clear-markets": "cd backend && go run cmd/clear-markets/main.go",
-        "db:seed": "cd backend && go run cmd/api/main.go -seed",
         "format:go": "cd backend && go fmt ./...",
-        "lint:format": "npx prettier --check \"**/*.{json,md,css,html,ts}\"",
-        "format": "npx prettier --write \"**/*.{json,md,css,html,ts}\" && cd backend && go fmt ./..."
-    },
-    "devDependencies": {
-        "prettier": "^3.5.3"
+        "lint:format": "pnpm --dir frontend exec prettier --ignore-path ../.prettierignore --check \"../**/*.{json,md,css,html,ts}\"",
+        "format": "pnpm --dir frontend exec prettier --ignore-path ../.prettierignore --write \"../**/*.{json,md,css,html,ts}\" && cd backend && go fmt ./..."
     }
 }

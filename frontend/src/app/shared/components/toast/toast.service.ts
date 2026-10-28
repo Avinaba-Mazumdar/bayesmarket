@@ -24,7 +24,7 @@ export class ToastService {
         const id = `toast-${++this.idCounter}-${Date.now()}`;
         const toast: Toast = {
             id,
-            duration: 4500,
+            duration: 0,
             variant: 'default',
             ...params
         };
@@ -39,7 +39,7 @@ export class ToastService {
     }
 
     success(title: string, description?: string): string {
-        return this.show({ title, description, variant: 'success' });
+        return this.show({ title, description, variant: 'success', duration: 0 });
     }
 
     /** Errors persist until the reader dismisses them, so a failed trade cannot vanish unread. */
@@ -53,7 +53,7 @@ export class ToastService {
     }
 
     info(title: string, description?: string): string {
-        return this.show({ title, description, variant: 'info' });
+        return this.show({ title, description, variant: 'info', duration: 0 });
     }
 
     /** Stops the auto-dismiss timer while the reader hovers or focuses the toast (WCAG 2.2 SC 2.2.1). */

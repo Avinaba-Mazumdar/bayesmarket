@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
 )
 
 // SafeTestDatabaseURL resolves a safe database connection string for tests.

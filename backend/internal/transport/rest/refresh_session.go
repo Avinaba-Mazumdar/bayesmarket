@@ -43,22 +43,20 @@ func hashRefreshToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// setRefreshCookie writes the refresh cookie. Production uses SameSite=None; Secure because the
-// frontend and API are usually on different sites; local development uses Lax over plain HTTP.
+// setRefreshCookie writes the refresh cookie. The default is SameSite=Lax so a same-origin
+// frontend proxy keeps the session when the browser blocks third-party cookies.
+// COOKIE_SAMESITE=none is the split-origin escape hatch and requires Secure.
 func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string, maxAge int) {
-	cookie := &http.Cookie{
+	secure := !h.isDevOrLocal || h.cookieSameSite == http.SameSiteNoneMode
+	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    token,
 		Path:     refreshCookiePath,
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   !h.isDevOrLocal,
-		SameSite: http.SameSiteNoneMode,
-	}
-	if h.isDevOrLocal {
-		cookie.SameSite = http.SameSiteLaxMode
-	}
-	http.SetCookie(c.Writer, cookie)
+		Secure:   secure,
+		SameSite: h.cookieSameSite,
+	})
 }
 
 func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
@@ -98,14 +96,14 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 
 	presented, err := c.Cookie(refreshCookieName)
 	if err != nil || presented == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no_session", "message": "No refresh session on this device"})
+		respondError(c, http.StatusUnauthorized, "no_session", "No refresh session on this device")
 		return
 	}
 	hash := hashRefreshToken(presented)
 
 	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to start session refresh"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to start session refresh")
 		return
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -122,32 +120,32 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	`, hash).Scan(&userID, &expiresAt, &revokedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		h.clearRefreshCookie(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no_session", "message": "Refresh session is no longer valid"})
+		respondError(c, http.StatusUnauthorized, "no_session", "Refresh session is no longer valid")
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to start session refresh"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to start session refresh")
 		return
 	}
 
 	if revokedAt != nil {
 		// A rotated token was presented again: assume it was copied and end every session for the account.
 		if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL;`, userID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to end sessions"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to end sessions")
 			return
 		}
 		if err := tx.Commit(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to end sessions"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to end sessions")
 			return
 		}
 		log.Printf("[SECURITY] Reused refresh token for user %s; all refresh sessions revoked", userID)
 		h.clearRefreshCookie(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no_session", "message": "Refresh session is no longer valid"})
+		respondError(c, http.StatusUnauthorized, "no_session", "Refresh session is no longer valid")
 		return
 	}
 	if time.Now().UTC().After(expiresAt) {
 		h.clearRefreshCookie(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no_session", "message": "Refresh session has expired"})
+		respondError(c, http.StatusUnauthorized, "no_session", "Refresh session has expired")
 		return
 	}
 
@@ -167,38 +165,38 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	`, userID).Scan(&user.IsGuest, &user.AuthProvider, &email, &name, &avatar, &cash, &createdAt, &isAdmin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		h.clearRefreshCookie(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no_session", "message": "Account no longer exists"})
+		respondError(c, http.StatusUnauthorized, "no_session", "Account no longer exists")
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to load account"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to load account")
 		return
 	}
 
 	newToken, newHash, err := newRefreshToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "auth_error", "message": "Failed to create refresh session"})
+		respondError(c, http.StatusInternalServerError, "auth_error", "Failed to create refresh session")
 		return
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1;`, hash); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to rotate refresh session"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to rotate refresh session")
 		return
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3);
 	`, userID, newHash, time.Now().UTC().Add(refreshTokenTTL)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to rotate refresh session"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to rotate refresh session")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to rotate refresh session"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to rotate refresh session")
 		return
 	}
 
-	accessToken, err := h.generateJWT(userID.String(), user.IsGuest, isAdmin, deref(email), deref(name), deref(avatar), user.AuthProvider)
+	accessToken, err := h.generateJWT(userID.String(), user.IsGuest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "auth_error", "message": "Failed to sign authentication token"})
+		respondError(c, http.StatusInternalServerError, "auth_error", "Failed to sign authentication token")
 		return
 	}
 
@@ -207,7 +205,6 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	user.Name = name
 	user.AvatarURL = avatar
 	user.IsAdmin = isAdmin
-	user.IsSuperadmin = isAdmin
 	user.CashBalance = cash.StringFixed(8)
 	user.CreatedAt = createdAt.Format(time.RFC3339)
 
@@ -228,11 +225,4 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	}
 	h.clearRefreshCookie(c)
 	c.Status(http.StatusNoContent)
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

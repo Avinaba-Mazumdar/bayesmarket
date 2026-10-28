@@ -7,9 +7,12 @@ import { formatUsd, normalizeDecimal, roundDecimal } from '../core/utils/decimal
 import { newIdempotencyKey } from '../core/utils/idempotency';
 
 const TOKEN_STORAGE_KEY = 'bayesmarket_auth_token';
-const LEGACY_TOKEN_STORAGE_KEY = 'bayesmarket_guest_token';
 const USER_PROFILE_STORAGE_KEY = 'bayesmarket_auth_profile';
 const BALANCE_STORAGE_KEY = 'bayesmarket_user_balance';
+/** Set when a refresh cookie exists. First visits skip POST /auth/refresh. */
+const SESSION_HINT_KEY = 'bm_has_session';
+/** Set when logout could not reach the server, so the next load retries revocation. */
+const REVOKE_PENDING_KEY = 'bm_revoke_pending';
 
 @Injectable({
     providedIn: 'root'
@@ -31,7 +34,6 @@ export class AuthStore {
 
     readonly isGuest = computed(() => this.user()?.is_guest ?? false);
     readonly isAdmin = computed(() => this.user()?.is_admin ?? false);
-    readonly isSuperadmin = computed(() => this.isAdmin());
     readonly isAuthenticated = computed(() => !!this.token() && !!this.user());
     readonly authProvider = computed(() => this.user()?.auth_provider || 'none');
     readonly userName = computed(() => this.user()?.name || (this.isGuest() ? 'Guest Trader' : this.isAuthenticated() ? 'Verified Trader' : 'Visitor'));
@@ -58,18 +60,17 @@ export class AuthStore {
     private getInitialToken(): string | null {
         if (typeof window !== 'undefined') {
             if (window.sessionStorage) {
-                const sessionToken = sessionStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(LEGACY_TOKEN_STORAGE_KEY);
+                const sessionToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
                 if (sessionToken) return sessionToken;
             }
             if (window.localStorage) {
-                const localToken = localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(LEGACY_TOKEN_STORAGE_KEY);
+                const localToken = localStorage.getItem(TOKEN_STORAGE_KEY);
                 if (localToken) {
                     // Migrate to sessionStorage and purge from localStorage to eliminate long-term disk exposure
                     if (window.sessionStorage) {
                         sessionStorage.setItem(TOKEN_STORAGE_KEY, localToken);
                     }
                     localStorage.removeItem(TOKEN_STORAGE_KEY);
-                    localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
                     return localToken;
                 }
             }
@@ -139,14 +140,41 @@ export class AuthStore {
      * Does NOT automatically create guest sessions for first-time visitors.
      */
     initializeSession(): void {
+        if (this.retryPendingRevoke()) {
+            return;
+        }
         const existingToken = this.token();
         if (existingToken) {
             // Verify session by fetching user profile and portfolio balance
             this.fetchCurrentUserProfile(existingToken);
-        } else {
-            // No access token in this tab: the refresh cookie may still hold a session from earlier
+        } else if (this.hasSessionHint()) {
             this.restoreSession();
+        } else {
+            this.isInitializing.set(false);
         }
+    }
+
+    private hasSessionHint(): boolean {
+        return typeof window !== 'undefined' && !!window.localStorage && localStorage.getItem(SESSION_HINT_KEY) === '1';
+    }
+
+    /** A failed logout left the refresh cookie in place. Revoke it before any restore, and stay signed out. */
+    private retryPendingRevoke(): boolean {
+        if (typeof window === 'undefined' || !window.localStorage || localStorage.getItem(REVOKE_PENDING_KEY) !== '1') {
+            return false;
+        }
+        this.clearSession();
+        this.isInitializing.set(true);
+        this.apiService.endSession().subscribe({
+            next: () => {
+                localStorage.removeItem(REVOKE_PENDING_KEY);
+                this.isInitializing.set(false);
+            },
+            error: () => {
+                this.isInitializing.set(false);
+            }
+        });
+        return true;
     }
 
     private fetchCurrentUserProfile(token: string): void {
@@ -275,10 +303,22 @@ export class AuthStore {
      * Logs out of account and reverts to unauthenticated surfing state.
      */
     logout(): void {
-        // Revoke the refresh session first; otherwise the next page load would sign the reader straight back in
-        this.apiService.endSession().subscribe({ error: () => undefined });
+        // Drop the local session immediately. If revocation fails, the next load retries it
+        // and does not sign the reader back in from the leftover cookie.
         this.clearSession();
         this.toastService.info('Signed Out', 'You have been signed out.');
+        this.apiService.endSession().subscribe({
+            next: () => {
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    localStorage.removeItem(REVOKE_PENDING_KEY);
+                }
+            },
+            error: () => {
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    localStorage.setItem(REVOKE_PENDING_KEY, '1');
+                }
+            }
+        });
     }
 
     /**
@@ -434,8 +474,8 @@ export class AuthStore {
             // Clear any lingering localStorage records to mitigate XSS exposure
             if (window.localStorage) {
                 localStorage.removeItem(TOKEN_STORAGE_KEY);
-                localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
                 localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+                localStorage.setItem(SESSION_HINT_KEY, '1');
             }
         }
     }
@@ -444,15 +484,14 @@ export class AuthStore {
         if (typeof window !== 'undefined') {
             if (window.sessionStorage) {
                 sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-                sessionStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
                 sessionStorage.removeItem(USER_PROFILE_STORAGE_KEY);
                 sessionStorage.removeItem(BALANCE_STORAGE_KEY);
             }
             if (window.localStorage) {
                 localStorage.removeItem(TOKEN_STORAGE_KEY);
-                localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
                 localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
                 localStorage.removeItem(BALANCE_STORAGE_KEY);
+                localStorage.removeItem(SESSION_HINT_KEY);
             }
         }
         this.token.set(null);

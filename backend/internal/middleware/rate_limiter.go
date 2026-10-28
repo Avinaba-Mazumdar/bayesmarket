@@ -5,9 +5,18 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"weak"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
+)
+
+const maxTrackedClients = 10000
+
+var (
+	trackedMu      sync.Mutex
+	trackedClients []weak.Pointer[RateLimiter]
+	startCleaner   sync.Once
 )
 
 type clientLimiter struct {
@@ -23,6 +32,7 @@ type RateLimiter struct {
 	burst         int
 	retryAfterSec time.Duration
 	disabled      bool
+	stop          chan struct{}
 }
 
 // SetDisabled programmatically enables or disables rate limit enforcement (useful in testing).
@@ -39,12 +49,53 @@ func NewRateLimiter(r rate.Limit, b int, retryAfterSec time.Duration) *RateLimit
 		rateLimit:     r,
 		burst:         b,
 		retryAfterSec: retryAfterSec,
+		stop:          make(chan struct{}),
 	}
-
-	// Periodically evict limiters inactive for more than 10 minutes
-	go rl.cleanupRoutine(10 * time.Minute)
-
+	trackLimiter(rl)
 	return rl
+}
+
+// Stop ends background eviction for this limiter. The process-wide cleaner also drops it
+// once nothing else holds the limiter.
+func (rl *RateLimiter) Stop() {
+	select {
+	case <-rl.stop:
+	default:
+		close(rl.stop)
+	}
+}
+
+func trackLimiter(rl *RateLimiter) {
+	trackedMu.Lock()
+	trackedClients = append(trackedClients, weak.Make(rl))
+	trackedMu.Unlock()
+	startCleaner.Do(func() {
+		go sharedCleanup(time.Minute)
+	})
+}
+
+func sharedCleanup(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		trackedMu.Lock()
+		kept := trackedClients[:0]
+		for _, ref := range trackedClients {
+			rl := ref.Value()
+			if rl == nil {
+				continue
+			}
+			select {
+			case <-rl.stop:
+				continue
+			default:
+			}
+			rl.evictStale(10 * time.Minute)
+			kept = append(kept, ref)
+		}
+		trackedClients = kept
+		trackedMu.Unlock()
+	}
 }
 
 func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
@@ -53,6 +104,12 @@ func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
 
 	client, exists := rl.clients[key]
 	if !exists {
+		if len(rl.clients) >= maxTrackedClients {
+			rl.evictStaleLocked(time.Minute)
+		}
+		if len(rl.clients) >= maxTrackedClients {
+			rl.dropOldestLocked()
+		}
 		lim := rate.NewLimiter(rl.rateLimit, rl.burst)
 		rl.clients[key] = &clientLimiter{
 			limiter:  lim,
@@ -65,17 +122,34 @@ func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
 	return client.limiter
 }
 
-func (rl *RateLimiter) cleanupRoutine(cleanupInterval time.Duration) {
-	ticker := time.NewTicker(cleanupInterval)
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for key, client := range rl.clients {
-			if now.Sub(client.lastSeen) > cleanupInterval {
-				delete(rl.clients, key)
-			}
+func (rl *RateLimiter) evictStale(maxIdle time.Duration) {
+	rl.mu.Lock()
+	rl.evictStaleLocked(maxIdle)
+	rl.mu.Unlock()
+}
+
+func (rl *RateLimiter) evictStaleLocked(maxIdle time.Duration) {
+	now := time.Now()
+	for key, client := range rl.clients {
+		if now.Sub(client.lastSeen) > maxIdle {
+			delete(rl.clients, key)
 		}
-		rl.mu.Unlock()
+	}
+}
+
+func (rl *RateLimiter) dropOldestLocked() {
+	var oldestKey string
+	var oldest time.Time
+	first := true
+	for key, client := range rl.clients {
+		if first || client.lastSeen.Before(oldest) {
+			oldestKey = key
+			oldest = client.lastSeen
+			first = false
+		}
+	}
+	if oldestKey != "" {
+		delete(rl.clients, oldestKey)
 	}
 }
 

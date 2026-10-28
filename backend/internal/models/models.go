@@ -65,7 +65,6 @@ type Market struct {
 	Title            string       `json:"title" db:"title"`
 	Description      string       `json:"description" db:"description"`
 	Category         string       `json:"category" db:"category"`
-	ImageURL         *string      `json:"image_url,omitempty" db:"image_url"`
 	ResolutionSource string       `json:"resolution_source" db:"resolution_source"`
 	ResolutionDate   time.Time    `json:"resolution_date" db:"resolution_date"`
 	Status           MarketStatus `json:"status" db:"status"`

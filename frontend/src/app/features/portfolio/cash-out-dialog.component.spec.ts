@@ -9,7 +9,17 @@ import { CashOutResponse, SellQuoteResponse, UserPosition } from '../../core/mod
 describe('CashOutDialogComponent', () => {
     let fixture: ComponentFixture<CashOutDialogComponent>;
     let component: CashOutDialogComponent;
-    let apiServiceSpy: { cashOut: any; getSellQuote: any; createGuestSession: any; getPortfolio: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: {
+        cashOut: any;
+        getSellQuote: any;
+        createGuestSession: any;
+        getPortfolio: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+        getMarketTrades: any;
+        getMarketHistory: any;
+    };
     let authStore: AuthStore;
     let toastService: ToastService;
 

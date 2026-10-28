@@ -10,7 +10,17 @@ import { PortfolioResponse } from '../../core/models/market.model';
 describe('PortfolioViewComponent', () => {
     let fixture: ComponentFixture<PortfolioViewComponent>;
     let component: PortfolioViewComponent;
-    let apiServiceSpy: { getPortfolio: any; createGuestSession: any; cashOut: any; getSellQuote: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: {
+        getPortfolio: any;
+        createGuestSession: any;
+        cashOut: any;
+        getSellQuote: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+        getMarketTrades: any;
+        getMarketHistory: any;
+    };
     let authStore: AuthStore;
 
     const mockPortfolioResponse: PortfolioResponse = {

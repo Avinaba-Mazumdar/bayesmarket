@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,7 +21,7 @@ func TestSecurityHeaders(t *testing.T) {
 		Environment: "development",
 		CORSOrigin:  "http://localhost:4200",
 	}
-	devRouter := rest.SetupRouter(nil, devCfg)
+	devRouter := rest.SetupRouter(nil, devCfg, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/healthz", nil)
@@ -55,7 +55,7 @@ func TestSecurityHeaders(t *testing.T) {
 		CORSOrigin:  "https://bayesmarket.com",
 		JWTSecret:   "production-super-secret-key-that-is-at-least-32-chars-long",
 	}
-	prodRouter := rest.SetupRouter(nil, prodCfg)
+	prodRouter := rest.SetupRouter(nil, prodCfg, nil)
 
 	wProd := httptest.NewRecorder()
 	reqProd, _ := http.NewRequest(http.MethodGet, "/healthz", nil)
@@ -75,7 +75,7 @@ func TestCORSOriginHandling(t *testing.T) {
 		CORSOrigin:  "https://bayesmarket.com,https://app.bayesmarket.com",
 		JWTSecret:   "production-super-secret-key-that-is-at-least-32-chars-long",
 	}
-	prodRouter := rest.SetupRouter(nil, prodCfg)
+	prodRouter := rest.SetupRouter(nil, prodCfg, nil)
 
 	// Valid origin OPTIONS
 	w1 := httptest.NewRecorder()
@@ -108,7 +108,7 @@ func TestCORSOriginHandling(t *testing.T) {
 		Environment: "development",
 		CORSOrigin:  "*",
 	}
-	wildcardRouter := rest.SetupRouter(nil, wildcardCfg)
+	wildcardRouter := rest.SetupRouter(nil, wildcardCfg, nil)
 
 	w3 := httptest.NewRecorder()
 	req3, _ := http.NewRequest(http.MethodGet, "/healthz", nil)

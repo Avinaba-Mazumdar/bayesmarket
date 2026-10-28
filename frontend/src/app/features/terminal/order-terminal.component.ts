@@ -12,7 +12,20 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { LabelComponent } from '../../shared/components/label/label.component';
 import { handleRovingKeydown } from '../../core/utils/roving-focus';
-import { absDecimal, addDecimal, compareDecimal, diffDecimal, divideDecimal, formatDecimal, formatUsd, normalizeDecimal, roundDecimal, shiftDecimal, subtractDecimal, trimDecimal } from '../../core/utils/decimal';
+import {
+    absDecimal,
+    addDecimal,
+    compareDecimal,
+    diffDecimal,
+    divideDecimal,
+    formatDecimal,
+    formatUsd,
+    normalizeDecimal,
+    roundDecimal,
+    shiftDecimal,
+    subtractDecimal,
+    trimDecimal
+} from '../../core/utils/decimal';
 import { formatShares, formatUSDC } from '../../core/utils/formatters';
 
 export interface OrderIntent {
@@ -54,12 +67,7 @@ function formatUsd4(value: string): string {
             </div>
 
             <!-- Segmented Dual-Coded Outcome Selector (WCAG 2.2 SC 2.5.5: 44x44px targets) -->
-            <div
-                class="outcome-toggle-group"
-                role="radiogroup"
-                aria-label="Outcome selection"
-                (keydown)="rovingKeydown($event, '[role=radio]')"
-            >
+            <div class="outcome-toggle-group" role="radiogroup" aria-label="Outcome selection" (keydown)="rovingKeydown($event, '[role=radio]')">
                 <app-button
                     variant="yes"
                     size="lg"
@@ -113,7 +121,6 @@ function formatUsd4(value: string): string {
                 <app-button variant="chip" size="sm" ariaLabel="Add 10 USDC" (btnClick)="addAmount(10)"> +$10 </app-button>
                 <app-button variant="chip" size="sm" ariaLabel="Add 50 USDC" (btnClick)="addAmount(50)"> +$50 </app-button>
                 <app-button variant="chip" size="sm" ariaLabel="Add 100 USDC" (btnClick)="addAmount(100)"> +$100 </app-button>
-                <app-button variant="chip" size="sm" ariaLabel="Set amount to maximum available balance" (btnClick)="onSetMax()"> Max </app-button>
                 <app-button variant="chip" size="sm" ariaLabel="Clear amount" (btnClick)="clearAmount()"> Clear </app-button>
             </div>
 

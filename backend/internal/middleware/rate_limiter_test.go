@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 )
@@ -67,7 +67,7 @@ func TestRequireAdminAuth_FailedAttemptLimiting(t *testing.T) {
 	defer middleware.SetAdminFailureLimiterDisabled(true)
 
 	router := gin.New()
-	router.POST("/admin/test", middleware.RequireSuperadminAuth("jwt-secret"), func(c *gin.Context) {
+	router.POST("/admin/test", middleware.RequireAdminAuth("jwt-secret", nil), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "admin_granted"})
 	})
 

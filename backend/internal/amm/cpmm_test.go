@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
 	"github.com/shopspring/decimal"
 )
 

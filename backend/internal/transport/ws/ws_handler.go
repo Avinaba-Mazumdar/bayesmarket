@@ -24,7 +24,7 @@ type WSHandler struct {
 }
 
 // NewWSHandler creates a new WebSocket handler instance.
-func NewWSHandler(hub *Hub, allowedOrigin string, isDev ...bool) *WSHandler {
+func NewWSHandler(hub *Hub, allowedOrigin string, isDev bool) *WSHandler {
 	var origins []string
 	for _, o := range strings.Split(allowedOrigin, ",") {
 		o = strings.TrimSpace(o)
@@ -33,10 +33,7 @@ func NewWSHandler(hub *Hub, allowedOrigin string, isDev ...bool) *WSHandler {
 		}
 	}
 
-	devMode := false
-	if len(isDev) > 0 && isDev[0] {
-		devMode = true
-	}
+	devMode := isDev
 
 	h := &WSHandler{
 		hub:            hub,

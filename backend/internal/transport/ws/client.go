@@ -19,8 +19,8 @@ const (
 	// Must be less than pongWait (30 seconds per ARCHITECTURE.md §7.3).
 	pingPeriod = 30 * time.Second
 
-	// maxMessageSize is the maximum message size allowed from peer (512KB).
-	maxMessageSize = 512 * 1024
+	// maxMessageSize is the maximum inbound frame. Subscribe messages are small JSON.
+	maxMessageSize = 4 * 1024
 
 	// sendBufferSize is the capacity of the outbound message channel.
 	sendBufferSize = 256

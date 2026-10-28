@@ -8,7 +8,16 @@ import { BuyQuoteResponse, Market } from '../../core/models/market.model';
 describe('OrderTerminalComponent', () => {
     let fixture: ComponentFixture<OrderTerminalComponent>;
     let component: OrderTerminalComponent;
-    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; getQuote: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: {
+        createGuestSession: any;
+        getPortfolio: any;
+        getQuote: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+        getMarketTrades: any;
+        getMarketHistory: any;
+    };
     let authStore: AuthStore;
 
     const mockMarket: Market = {

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -76,7 +76,7 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 
 	userID, exists := middleware.GetUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Authentication required"})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
 
@@ -85,10 +85,10 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 	err := h.pool.QueryRow(ctx, "SELECT cash_balance FROM users WHERE id = $1", userID).Scan(&cashBalance)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "User session is invalid or user not found"})
+			respondError(c, http.StatusUnauthorized, "unauthorized", "User session is invalid or user not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query user"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query user")
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 	`
 	rows, err := h.pool.Query(ctx, queryPositions, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query positions"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query positions")
 		return
 	}
 	defer rows.Close()
@@ -131,7 +131,7 @@ func (h *PortfolioHandler) HandleGetPortfolio(c *gin.Context) {
 			&rYes, &rNo, &collateral,
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to parse position"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to parse position")
 			return
 		}
 

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/url"
@@ -60,6 +63,12 @@ type Config struct {
 	GoogleRedirectURI    string
 	DisableRateLimits    bool
 	TrustedProxies       []string
+	// CookieSameSite is "lax" or "none". Lax is the default: the refresh cookie is first-party
+	// when the frontend proxies /api. "none" is only for a split-origin deploy, and browsers
+	// that block third-party cookies will drop the session on reload.
+	CookieSameSite string
+	// OAuthStateSecret signs the browser-bound OAuth state. It is not the JWT signing key.
+	OAuthStateSecret string
 }
 
 // Load reads configuration from environment variables and local .env files.
@@ -146,6 +155,27 @@ func Load() (*Config, error) {
 			}
 		}
 	}
+	if !isDevOrLocal && len(trustedProxies) == 0 {
+		log.Println("[WARN] TRUSTED_PROXIES is empty. X-Forwarded-For is ignored and the client IP is the direct connection. Set TRUSTED_PROXIES to the reverse-proxy CIDRs when the API sits behind one.")
+	}
+
+	cookieSameSite := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE")))
+	if cookieSameSite == "" {
+		cookieSameSite = "lax"
+	}
+	if cookieSameSite != "lax" && cookieSameSite != "none" {
+		return nil, fmt.Errorf("COOKIE_SAMESITE must be lax or none")
+	}
+	if cookieSameSite == "none" && !isDevOrLocal {
+		log.Println("[WARN] COOKIE_SAMESITE=none sends the refresh cookie cross-site. Browsers that block third-party cookies will sign the reader out on reload. Proxy /api on the frontend origin and use lax instead.")
+	}
+
+	oauthStateSecret := strings.TrimSpace(os.Getenv("OAUTH_STATE_SECRET"))
+	if oauthStateSecret == "" {
+		oauthStateSecret = deriveOAuthStateSecret(jwtSecret)
+	} else if len(oauthStateSecret) < 32 {
+		return nil, fmt.Errorf("OAUTH_STATE_SECRET must be at least 32 characters when it is set")
+	}
 
 	return &Config{
 		DatabaseURL:          strings.TrimSpace(dbURL),
@@ -159,7 +189,16 @@ func Load() (*Config, error) {
 		GoogleClientSecret:   strings.TrimSpace(googleClientSecret),
 		GoogleRedirectURI:    strings.TrimSpace(googleRedirectURI),
 		TrustedProxies:       trustedProxies,
+		CookieSameSite:       cookieSameSite,
+		OAuthStateSecret:     oauthStateSecret,
 	}, nil
+}
+
+// deriveOAuthStateSecret separates the OAuth state MAC key from the JWT signing key.
+func deriveOAuthStateSecret(jwtSecret string) string {
+	mac := hmac.New(sha256.New, []byte(jwtSecret))
+	mac.Write([]byte("bayesmarket-oauth-state-v1"))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // IsDevOrLocal returns true if the current environment is dev or local.

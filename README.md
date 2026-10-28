@@ -204,7 +204,7 @@ go mod download
 go run cmd/api/main.go
 ```
 
-The API server boots on `http://localhost:8080`. Database migrations and default seed markets initialize automatically.
+The API server boots on `http://localhost:8080`. Database migrations run automatically on startup. The database starts with no markets: create them in the admin console (`/admin`).
 
 ### 3. Frontend Setup
 

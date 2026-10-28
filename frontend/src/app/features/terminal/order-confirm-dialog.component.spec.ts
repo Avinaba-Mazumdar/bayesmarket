@@ -10,7 +10,16 @@ import { OrderResponse } from '../../core/models/market.model';
 describe('OrderConfirmDialogComponent', () => {
     let fixture: ComponentFixture<OrderConfirmDialogComponent>;
     let component: OrderConfirmDialogComponent;
-    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; placeOrder: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: {
+        createGuestSession: any;
+        getPortfolio: any;
+        placeOrder: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+        getMarketTrades: any;
+        getMarketHistory: any;
+    };
     let authStore: AuthStore;
     let toastService: ToastService;
 

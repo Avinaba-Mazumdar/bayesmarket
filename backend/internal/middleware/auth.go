@@ -19,46 +19,92 @@ const (
 	CtxUserIDKey       = "userID"
 	CtxIsGuestKey      = "isGuest"
 	CtxIsAdminKey      = "isAdmin"
-	CtxIsSuperadminKey = "isSuperadmin"
 	CtxUserEmailKey    = "userEmail"
 	CtxUserNameKey     = "userName"
 	CtxUserAvatarKey   = "userAvatar"
 	CtxAuthProviderKey = "authProvider"
 	CtxAuthClaimsKey   = "authClaims"
+
+	// AccessTokenIssuer is the only issuer accepted on access tokens.
+	AccessTokenIssuer = "bayesmarket"
+	accessTokenTTL    = time.Hour
 )
 
-// AuthClaims defines the cryptographic JWT payload for guest and registered user sessions.
+// AuthClaims is the access-token payload. It carries the account id and the guest flag only.
+// Email, name, avatar, and admin authority are loaded from the database when a handler needs them.
+// The admin flag in an old token is ignored.
 type AuthClaims struct {
-	UserID       string `json:"user_id"`
-	IsGuest      bool   `json:"is_guest"`
-	IsAdmin      bool   `json:"is_admin"`
-	IsSuperadmin bool   `json:"is_superadmin,omitempty"`
-	Email        string `json:"email,omitempty"`
-	Name         string `json:"name,omitempty"`
-	AvatarURL    string `json:"avatar_url,omitempty"`
-	AuthProvider string `json:"auth_provider,omitempty"`
+	UserID  string `json:"user_id"`
+	IsGuest bool   `json:"is_guest"`
 	jwt.RegisteredClaims
 }
 
-// GuestClaims is retained as an alias for backwards compatibility.
-type GuestClaims = AuthClaims
+// SignAccessToken signs a one-hour HS256 access token.
+func SignAccessToken(secret, userID string, isGuest bool) (string, error) {
+	now := time.Now().UTC()
+	claims := AuthClaims{
+		UserID:  userID,
+		IsGuest: isGuest,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    AccessTokenIssuer,
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(accessTokenTTL)),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
+// ParseAccessToken verifies an access token. HS256, the bayesmarket issuer, and an expiry are required.
+func ParseAccessToken(tokenString, secret string) (*AuthClaims, error) {
+	claims := &AuthClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithIssuer(AccessTokenIssuer),
+		jwt.WithExpirationRequired(),
+	)
+	if err != nil || token == nil || !token.Valid {
+		if err == nil {
+			err = errors.New("invalid token")
+		}
+		return nil, err
+	}
+	if _, err := uuid.Parse(claims.UserID); err != nil {
+		return nil, errors.New("malformed user identifier")
+	}
+	return claims, nil
+}
+
+func bearerToken(c *gin.Context) (string, bool) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return "", false
+	}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
+
+func setSession(c *gin.Context, claims *AuthClaims) {
+	userID, _ := uuid.Parse(claims.UserID)
+	c.Set(CtxUserIDKey, userID)
+	c.Set(CtxIsGuestKey, claims.IsGuest)
+	c.Set(CtxAuthClaimsKey, claims)
+}
 
 // RequireAuth validates the Bearer JWT in the Authorization header.
 func RequireAuth(jwtSecret string) gin.HandlerFunc {
-	secretBytes := []byte(jwtSecret)
-
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Authorization header is required",
-			})
-			return
-		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		tokenString, ok := bearerToken(c)
+		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
 				"message": "Authorization header must be formatted as 'Bearer <token>'",
@@ -66,91 +112,30 @@ func RequireAuth(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		tokenString := strings.TrimSpace(parts[1])
-		claims := &GuestClaims{}
-
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return secretBytes, nil
-		})
-
-		if err != nil || !token.Valid {
+		claims, err := ParseAccessToken(tokenString, jwtSecret)
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
 				"message": "Invalid or expired session token",
 			})
 			return
 		}
-
-		userID, err := uuid.Parse(claims.UserID)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Malformed user identifier in session claims",
-			})
-			return
-		}
-
-		isAdmin := claims.IsAdmin || claims.IsSuperadmin
-
-		c.Set(CtxUserIDKey, userID)
-		c.Set(CtxIsGuestKey, claims.IsGuest)
-		c.Set(CtxIsAdminKey, isAdmin)
-		c.Set(CtxIsSuperadminKey, isAdmin)
-		c.Set(CtxUserEmailKey, claims.Email)
-		c.Set(CtxUserNameKey, claims.Name)
-		c.Set(CtxUserAvatarKey, claims.AvatarURL)
-		c.Set(CtxAuthProviderKey, claims.AuthProvider)
-		c.Set(CtxAuthClaimsKey, claims)
-
+		setSession(c, claims)
 		c.Next()
 	}
 }
 
-// OptionalAuth parses Bearer JWT if provided, but does not abort if absent.
+// OptionalAuth parses a Bearer JWT if provided, but does not abort if it is absent or invalid.
 func OptionalAuth(jwtSecret string) gin.HandlerFunc {
-	secretBytes := []byte(jwtSecret)
-
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		tokenString, ok := bearerToken(c)
+		if !ok {
 			c.Next()
 			return
 		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.Next()
-			return
+		if claims, err := ParseAccessToken(tokenString, jwtSecret); err == nil {
+			setSession(c, claims)
 		}
-
-		tokenString := strings.TrimSpace(parts[1])
-		claims := &GuestClaims{}
-
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return secretBytes, nil
-		})
-
-		if err == nil && token.Valid {
-			if userID, parseErr := uuid.Parse(claims.UserID); parseErr == nil {
-				isAdmin := claims.IsAdmin || claims.IsSuperadmin
-				c.Set(CtxUserIDKey, userID)
-				c.Set(CtxIsGuestKey, claims.IsGuest)
-				c.Set(CtxIsAdminKey, isAdmin)
-				c.Set(CtxIsSuperadminKey, isAdmin)
-				c.Set(CtxUserEmailKey, claims.Email)
-				c.Set(CtxUserNameKey, claims.Name)
-				c.Set(CtxUserAvatarKey, claims.AvatarURL)
-				c.Set(CtxAuthProviderKey, claims.AuthProvider)
-				c.Set(CtxAuthClaimsKey, claims)
-			}
-		}
-
 		c.Next()
 	}
 }
@@ -175,7 +160,8 @@ func GetIsGuest(c *gin.Context) bool {
 	return ok && isGuest
 }
 
-// GetIsAdmin retrieves whether the authenticated user has admin privileges.
+// GetIsAdmin reports the database admin flag set by RequireAdminAuth.
+// An access token cannot set this flag.
 func GetIsAdmin(c *gin.Context) bool {
 	val, exists := c.Get(CtxIsAdminKey)
 	if !exists {
@@ -185,12 +171,7 @@ func GetIsAdmin(c *gin.Context) bool {
 	return ok && isAdmin
 }
 
-// GetIsSuperadmin is retained as an alias for GetIsAdmin.
-func GetIsSuperadmin(c *gin.Context) bool {
-	return GetIsAdmin(c)
-}
-
-// GetClaims retrieves the full AuthClaims payload from request context.
+// GetClaims retrieves the access-token claims from the request context.
 func GetClaims(c *gin.Context) (*AuthClaims, bool) {
 	val, exists := c.Get(CtxAuthClaimsKey)
 	if !exists {
@@ -209,14 +190,8 @@ func SetAdminFailureLimiterDisabled(disabled bool) {
 }
 
 // RequireAdminAuth validates that the request comes from an authenticated user with is_admin=true.
-// Static admin tokens are eliminated; authority derives strictly from the user's Neon DB record.
-func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFunc {
-	var pool *pgxpool.Pool
-	if len(poolOpt) > 0 {
-		pool = poolOpt[0]
-	}
-	secretBytes := []byte(jwtSecret)
-
+// Authority is read from the database on every request. Without a database the request fails closed.
+func RequireAdminAuth(jwtSecret string, pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
 		limiter := adminFailureLimiter.getLimiter(clientIP)
@@ -237,8 +212,8 @@ func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFun
 			}
 		}
 
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		tokenString, ok := bearerToken(c)
+		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
 				"message": "Authorization header with user Bearer token is required",
@@ -246,25 +221,8 @@ func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFun
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Authorization header must be formatted as 'Bearer <token>'",
-			})
-			return
-		}
-
-		tokenString := strings.TrimSpace(parts[1])
-		claims := &AuthClaims{}
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return secretBytes, nil
-		})
-
-		if err != nil || !token.Valid {
+		claims, err := ParseAccessToken(tokenString, jwtSecret)
+		if err != nil {
 			if !disabled {
 				limiter.Allow()
 			}
@@ -275,17 +233,9 @@ func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFun
 			return
 		}
 
-		parsedID, parseErr := uuid.Parse(claims.UserID)
-		if parseErr != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Malformed user identifier in session claims",
-			})
-			return
-		}
+		parsedID, _ := uuid.Parse(claims.UserID)
 
-		// Admin authority comes only from the database (real-time revocation); the token's admin
-		// claim is never trusted. Without a database the request fails closed.
+		// Admin authority comes only from the database. The token is never trusted for it.
 		if pool == nil {
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "admin_unavailable",
@@ -309,20 +259,8 @@ func RequireAdminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFun
 			return
 		}
 
-		c.Set(CtxUserIDKey, parsedID)
-		c.Set(CtxIsGuestKey, claims.IsGuest)
+		setSession(c, claims)
 		c.Set(CtxIsAdminKey, true)
-		c.Set(CtxIsSuperadminKey, true)
-		c.Set(CtxUserEmailKey, claims.Email)
-		c.Set(CtxUserNameKey, claims.Name)
-		c.Set(CtxUserAvatarKey, claims.AvatarURL)
-		c.Set(CtxAuthProviderKey, claims.AuthProvider)
-		c.Set(CtxAuthClaimsKey, claims)
 		c.Next()
 	}
-}
-
-// RequireSuperadminAuth is an alias for RequireAdminAuth for backwards compatibility.
-func RequireSuperadminAuth(jwtSecret string, poolOpt ...*pgxpool.Pool) gin.HandlerFunc {
-	return RequireAdminAuth(jwtSecret, poolOpt...)
 }

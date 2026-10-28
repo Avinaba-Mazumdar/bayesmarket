@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -20,7 +20,7 @@ func setupTestWSServer(t *testing.T) (*ws.Hub, *httptest.Server) {
 	hub := ws.NewHub()
 	go hub.Run()
 
-	handler := ws.NewWSHandler(hub, "*")
+	handler := ws.NewWSHandler(hub, "*", false)
 
 	router := gin.New()
 	router.GET("/ws/markets/:id", handler.HandleMarketWS)

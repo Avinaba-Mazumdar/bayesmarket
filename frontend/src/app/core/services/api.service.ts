@@ -81,7 +81,9 @@ export class ApiService {
      * Retrieve the Google OAuth 2.0 authorization URL.
      */
     getGoogleAuthUrl(): Observable<{ url: string; state?: string; simulated: boolean; message?: string }> {
-        return this.http.get<{ url: string; state?: string; simulated: boolean; message?: string }>(`${this.baseUrl}/auth/google/url`);
+        return this.http.get<{ url: string; state?: string; simulated: boolean; message?: string }>(`${this.baseUrl}/auth/google/url`, {
+            withCredentials: true
+        });
     }
 
     /**
@@ -89,7 +91,7 @@ export class ApiService {
      */
     callbackGoogleAuth(request: GoogleCallbackRequest, guestToken?: string | null): Observable<AuthResponse> {
         const headers = this.buildHeaders(guestToken);
-        return this.http.post<AuthResponse>(`${this.baseUrl}/auth/google/callback`, request, { headers });
+        return this.http.post<AuthResponse>(`${this.baseUrl}/auth/google/callback`, request, { headers, withCredentials: true });
     }
 
     /**
@@ -199,6 +201,16 @@ export class ApiService {
         return this.http.post<void>(`${this.baseUrl}/auth/logout`, {}, { withCredentials: true });
     }
 
+    /** Removes profile fields and revokes sessions. Ledger rows are kept. */
+    deleteAccount(token: string): Observable<{ status: string; message: string }> {
+        const headers = this.buildHeaders(token);
+        return this.http.post<{ status: string; message: string }>(
+            `${this.baseUrl}/auth/account/delete`,
+            { confirm: 'DELETE' },
+            { headers, withCredentials: true }
+        );
+    }
+
     /**
      * Get portfolio positions and cash balance.
      */
@@ -226,9 +238,9 @@ export class ApiService {
     /**
      * Verify whether the current user session is authorized as admin.
      */
-    verifyAdmin(token?: string | null): Observable<{ status: string; message: string; is_admin?: boolean; is_superadmin?: boolean }> {
+    verifyAdmin(token?: string | null): Observable<{ status: string; message: string; is_admin?: boolean }> {
         const headers = this.buildHeaders(token);
-        return this.http.get<{ status: string; message: string; is_admin?: boolean; is_superadmin?: boolean }>(`${this.baseUrl}/admin/verify`, { headers });
+        return this.http.get<{ status: string; message: string; is_admin?: boolean }>(`${this.baseUrl}/admin/verify`, { headers });
     }
 
     /**
@@ -262,5 +274,4 @@ export class ApiService {
         const headers = this.buildHeaders(token, idempotencyKey);
         return this.http.post<VoidMarketResponse>(`${this.baseUrl}/admin/markets/${encodeURIComponent(marketId)}/void`, {}, { headers });
     }
-
 }

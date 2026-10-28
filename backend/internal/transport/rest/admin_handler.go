@@ -15,19 +15,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
-	"github.com/bayesmarket/bayesmarket/internal/models"
-	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/models"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
-
-// SystemAdminID is the designated system administrator UUID used for admin-mediated resolutions without a user JWT.
-var SystemAdminID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 // CreateMarketRequest defines input payload for creating a new prediction market.
 type CreateMarketRequest struct {
@@ -36,7 +33,6 @@ type CreateMarketRequest struct {
 	Category              string `json:"category" binding:"required"`
 	ResolutionSource      string `json:"resolution_source" binding:"required"`
 	ResolutionDate        string `json:"resolution_date" binding:"required"`
-	ImageURL              string `json:"image_url"`
 	InitialCollateralUSDC string `json:"initial_collateral_usdc"` // e.g. "10000.00000000" (default 10000)
 	InitialProbabilityYes string `json:"initial_probability_yes"` // e.g. "0.50000000" or "50" (default 0.5)
 	InitialProbabilityNo  string `json:"initial_probability_no"`  // e.g. "0.50000000" or "50" (optional)
@@ -49,7 +45,6 @@ type EditMarketRequest struct {
 	Category         *string `json:"category"`
 	ResolutionSource *string `json:"resolution_source"`
 	ResolutionDate   *string `json:"resolution_date"`
-	ImageURL         *string `json:"image_url"`
 	Status           *string `json:"status"` // 'active', 'suspended', 'locked'
 }
 
@@ -107,54 +102,51 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	marketID, err := uuid.Parse(marketIDParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market_id", "message": "Market ID must be a valid UUID"})
+		respondError(c, http.StatusBadRequest, "invalid_market_id", "Market ID must be a valid UUID")
 		return
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "idempotency_key_required",
-			"message": "Idempotency-Key header is required for market resolution",
-		})
+		respondError(c, http.StatusBadRequest, "idempotency_key_required", "Idempotency-Key header is required for market resolution")
 		return
 	}
 
 	var req ResolveMarketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payload", "message": "Payload must include winning_outcome ('YES'|'NO') and oracle_proof"})
+		respondError(c, http.StatusBadRequest, "invalid_payload", "Payload must include winning_outcome ('YES'|'NO') and oracle_proof")
 		return
 	}
 
 	outcome, valErr := ParseOutcome(req.WinningOutcome)
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 	winningOutcome := string(outcome)
 
 	oracleProof := strings.TrimSpace(req.OracleProof)
 	if appErr := validateOracleProof(oracleProof); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	proofHash := fmt.Sprintf("%x", sha256.Sum256([]byte(oracleProof)))
 
 	actorID, exists := middleware.GetUserID(c)
 	if !exists || actorID == uuid.Nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "unauthorized",
-			"message": "Superadmin authentication required",
-		})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Admin authentication required")
 		return
 	}
 
 	// Acquire in-process mutex lock to prevent concurrent mutation collisions
-	unlock := h.locks.acquire("market:" + marketID.String())
+	unlock, locked := lockMarket(c, h.locks, ctx, "market:"+marketID.String())
+	if !locked {
+		return
+	}
 	defer unlock()
 
 	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 
@@ -162,7 +154,7 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "resolve", idempotencyKey, resolutionFingerprint(marketID, winningOutcome, proofHash, req.ResolveEarly))
 	if errors.Is(err, ErrIdempotencyKeyReused) {
 		appErr := idempotencyReusedError()
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	if err == nil && found {
@@ -185,17 +177,14 @@ func (h *AdminHandler) HandleResolveMarket(c *gin.Context) {
 		}
 		var appErr *AppError
 		if errors.As(err, &appErr) {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 		if IsSerializationOrDeadlock(err) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "concurrency_conflict",
-				"message": "Settlement transaction experienced concurrency conflicts after multiple retries. Please retry.",
-			})
+			respondError(c, http.StatusConflict, "concurrency_conflict", "Settlement transaction experienced concurrency conflicts after multiple retries. Please retry.")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to settle market resolution"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to settle market resolution")
 		return
 	}
 
@@ -423,14 +412,16 @@ func lockOpenPositionHolders(ctx context.Context, tx pgx.Tx, marketID uuid.UUID)
 // GET /api/v1/admin/verify
 func (h *AdminHandler) HandleVerifyAdmin(c *gin.Context) {
 	userID, _ := middleware.GetUserID(c)
-	userEmail, _ := c.Get(middleware.CtxUserEmailKey)
+	var email *string
+	if h.pool != nil && userID != uuid.Nil {
+		_ = h.pool.QueryRow(c.Request.Context(), "SELECT email FROM users WHERE id = $1", userID).Scan(&email)
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"status":        "authorized",
-		"message":       "Admin credential is valid",
-		"is_admin":      true,
-		"is_superadmin": true,
-		"user_id":       userID.String(),
-		"email":         userEmail,
+		"status":   "authorized",
+		"message":  "Admin credential is valid",
+		"is_admin": true,
+		"user_id":  userID.String(),
+		"email":    email,
 	})
 }
 
@@ -450,7 +441,7 @@ func slugifyTitle(title string) string {
 	return slug
 }
 
-// Market text limits. Title, category and image_url mirror the VARCHAR columns so oversized input
+// Market text limits. Title and category mirror the VARCHAR columns so oversized input
 // is a 400 instead of a database error; description and resolution_source (TEXT) are capped to
 // keep payloads reasonable.
 const (
@@ -458,7 +449,6 @@ const (
 	maxMarketDescriptionLen = 10000
 	maxMarketCategoryLen    = 64
 	maxMarketSourceLen      = 2000
-	maxMarketImageURLLen    = 512
 )
 
 // Market creation bounds. Probabilities are fractions in [0.01, 0.99] with at most 8 decimal
@@ -472,7 +462,7 @@ var (
 
 // validateMarketText checks field lengths in characters. Empty values pass; callers decide which
 // fields are required.
-func validateMarketText(title, description, category, source, imageURL string) *AppError {
+func validateMarketText(title, description, category, source string) *AppError {
 	fields := []struct {
 		name  string
 		value string
@@ -482,7 +472,6 @@ func validateMarketText(title, description, category, source, imageURL string) *
 		{"description", description, maxMarketDescriptionLen},
 		{"category", category, maxMarketCategoryLen},
 		{"resolution_source", source, maxMarketSourceLen},
-		{"image_url", imageURL, maxMarketImageURLLen},
 	}
 	for _, f := range fields {
 		if utf8.RuneCountInString(f.value) > f.max {
@@ -553,7 +542,6 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	req.Description = strings.TrimSpace(req.Description)
 	req.Category = strings.ToLower(strings.TrimSpace(req.Category))
 	req.ResolutionSource = strings.TrimSpace(req.ResolutionSource)
-	req.ImageURL = strings.TrimSpace(req.ImageURL)
 	if req.Title == "" || req.Description == "" || req.Category == "" || req.ResolutionSource == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
@@ -561,32 +549,22 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		})
 		return
 	}
-	if appErr := validateMarketText(req.Title, req.Description, req.Category, req.ResolutionSource, req.ImageURL); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+	if appErr := validateMarketText(req.Title, req.Description, req.Category, req.ResolutionSource); appErr != nil {
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	if appErr := validateMarketCategory(req.Category); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
-		return
-	}
-	if appErr := validateMarketImageURL(req.ImageURL); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 
 	resolutionDate, err := parseResolutionDate(req.ResolutionDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_date",
-			"message": err.Error(),
-		})
+		respondError(c, http.StatusBadRequest, "invalid_date", err.Error())
 		return
 	}
 	if resolutionDate.Before(time.Now().UTC()) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_date",
-			"message": "Resolution date must be in the future",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_date", "Resolution date must be in the future")
 		return
 	}
 
@@ -609,7 +587,7 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	if strings.TrimSpace(req.InitialProbabilityYes) != "" {
 		pYes, appErr := parseMarketProbability(req.InitialProbabilityYes, "initial_probability_yes")
 		if appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 		probYes = pYes
@@ -619,14 +597,11 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	if strings.TrimSpace(req.InitialProbabilityNo) != "" {
 		pNo, appErr := parseMarketProbability(req.InitialProbabilityNo, "initial_probability_no")
 		if appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 		if !probYes.Add(pNo).Equal(decimal.NewFromInt(1)) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_probability",
-				"message": "initial_probability_yes and initial_probability_no must sum to exactly 1",
-			})
+			respondError(c, http.StatusBadRequest, "invalid_probability", "initial_probability_yes and initial_probability_no must sum to exactly 1")
 			return
 		}
 		probNo = pNo
@@ -638,17 +613,13 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	reserveYes := collateral.Mul(probNo).Truncate(8)
 	reserveNo := collateral.Sub(reserveYes)
 	if reserveYes.LessThanOrEqual(decimal.Zero) || reserveNo.LessThanOrEqual(decimal.Zero) || reserveYes.Add(reserveNo).GreaterThan(collateral) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_reserves",
-			"message": "Derived reserves must be positive and not exceed total collateral",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_reserves", "Derived reserves must be positive and not exceed total collateral")
 		return
 	}
 	kInvariant := reserveYes.Mul(reserveNo)
 
 	// 3. Unique slug generation & atomic database insertion with collision retry
 	baseSlug := slugifyTitle(req.Title)
-	imageURL := req.ImageURL
 
 	var (
 		marketID  uuid.UUID
@@ -657,8 +628,8 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	)
 
 	queryMarket := `
-		INSERT INTO markets (slug, title, description, category, image_url, resolution_source, resolution_date, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+		INSERT INTO markets (slug, title, description, category, resolution_source, resolution_date, status)
+		VALUES ($1, $2, $3, $4, $5, $6, 'active')
 		RETURNING id, created_at;
 	`
 	queryPool := `
@@ -675,15 +646,12 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 
 		tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to begin transaction",
-			})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to begin transaction")
 			return
 		}
 
 		err = tx.QueryRow(ctx, queryMarket,
-			slug, req.Title, req.Description, req.Category, imageURL, req.ResolutionSource, resolutionDate,
+			slug, req.Title, req.Description, req.Category, req.ResolutionSource, resolutionDate,
 		).Scan(&marketID, &createdAt)
 
 		if err != nil {
@@ -693,20 +661,14 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 				continue
 			}
 			log.Printf("[Admin CreateMarket] failed to insert market record: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to insert market record",
-			})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to insert market record")
 			return
 		}
 
 		if _, err := tx.Exec(ctx, queryPool, marketID, reserveYes, reserveNo, collateral, kInvariant); err != nil {
 			_ = tx.Rollback(ctx)
 			log.Printf("[Admin CreateMarket] failed to insert liquidity pool: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to insert liquidity pool",
-			})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to insert liquidity pool")
 			return
 		}
 
@@ -719,19 +681,13 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			log.Printf("[Admin CreateMarket] failed to record seed ledger: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to record market seed ledger",
-			})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to record market seed ledger")
 			return
 		}
 
 		if err := tx.Commit(ctx); err != nil {
 			log.Printf("[Admin CreateMarket] failed to commit market creation: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "database_error",
-				"message": "Failed to commit market creation transaction",
-			})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to commit market creation transaction")
 			return
 		}
 
@@ -740,10 +696,7 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	}
 
 	if marketID == uuid.Nil {
-		c.JSON(http.StatusConflict, gin.H{
-			"error":   "slug_conflict",
-			"message": "Failed to allocate a unique market slug after multiple attempts",
-		})
+		respondError(c, http.StatusConflict, "slug_conflict", "Failed to allocate a unique market slug after multiple attempts")
 		return
 	}
 
@@ -757,7 +710,6 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		"title":               req.Title,
 		"description":         req.Description,
 		"category":            req.Category,
-		"image_url":           imageURL,
 		"resolution_source":   req.ResolutionSource,
 		"resolution_date":     resolutionDate.Format(time.RFC3339),
 		"status":              string(models.MarketStatusActive),
@@ -783,23 +735,26 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	marketID, err := uuid.Parse(marketIDParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market_id", "message": "Market ID must be a valid UUID"})
+		respondError(c, http.StatusBadRequest, "invalid_market_id", "Market ID must be a valid UUID")
 		return
 	}
 
 	var req EditMarketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payload", "message": "Failed to parse edit market request"})
+		respondError(c, http.StatusBadRequest, "invalid_payload", "Failed to parse edit market request")
 		return
 	}
 
 	// Acquire in-process lock
-	unlock := h.locks.acquire("market:" + marketID.String())
+	unlock, locked := lockMarket(c, h.locks, ctx, "market:"+marketID.String())
+	if !locked {
+		return
+	}
 	defer unlock()
 
 	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to begin transaction"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to begin transaction")
 		return
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -810,7 +765,6 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		curTitle            string
 		curDescription      string
 		curCategory         string
-		curImageURL         *string
 		curResolutionSource string
 		curResolutionDate   time.Time
 		curStatus           string
@@ -818,21 +772,21 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		curCreatedAt        time.Time
 	)
 	query := `
-		SELECT slug, title, description, category, image_url, resolution_source, resolution_date, status, winning_outcome, created_at
+		SELECT slug, title, description, category, resolution_source, resolution_date, status, winning_outcome, created_at
 		FROM markets
 		WHERE id = $1
 		FOR UPDATE;
 	`
 	err = tx.QueryRow(ctx, query, marketID).Scan(
-		&curSlug, &curTitle, &curDescription, &curCategory, &curImageURL,
+		&curSlug, &curTitle, &curDescription, &curCategory,
 		&curResolutionSource, &curResolutionDate, &curStatus, &curWinningOutcome, &curCreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "market_not_found", "message": "Market does not exist"})
+			respondError(c, http.StatusNotFound, "market_not_found", "Market does not exist")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query market")
 		return
 	}
 
@@ -880,22 +834,14 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	if req.ResolutionDate != nil {
 		parsedDate, parseErr := parseResolutionDate(*req.ResolutionDate)
 		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_date", "message": parseErr.Error()})
+			respondError(c, http.StatusBadRequest, "invalid_date", parseErr.Error())
 			return
 		}
 		if parsedDate.Before(time.Now().UTC()) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_date", "message": "Resolution date must be in the future"})
+			respondError(c, http.StatusBadRequest, "invalid_date", "Resolution date must be in the future")
 			return
 		}
 		newDate = parsedDate
-	}
-
-	newImageURL := ""
-	if curImageURL != nil {
-		newImageURL = *curImageURL
-	}
-	if req.ImageURL != nil {
-		newImageURL = strings.TrimSpace(*req.ImageURL)
 	}
 
 	newStatus := curStatus
@@ -905,51 +851,42 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		case string(models.MarketStatusActive), string(models.MarketStatusSuspended), string(models.MarketStatusLocked):
 			newStatus = s
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_status", "message": "Status must be 'active', 'suspended', or 'locked'"})
+			respondError(c, http.StatusBadRequest, "invalid_status", "Status must be 'active', 'suspended', or 'locked'")
 			return
 		}
 	}
 
 	// An expired market can only be reopened together with a new, future resolution date.
 	if newStatus == string(models.MarketStatusActive) && curStatus != string(models.MarketStatusActive) && newDate.Before(time.Now().UTC()) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_status",
-			"message": "Cannot reactivate a market whose resolution date has passed; set a future resolution_date",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_status", "Cannot reactivate a market whose resolution date has passed; set a future resolution_date")
 		return
 	}
 
-	if appErr := validateMarketText(newTitle, newDesc, newCat, newSource, newImageURL); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+	if appErr := validateMarketText(newTitle, newDesc, newCat, newSource); appErr != nil {
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	// Existing markets keep their stored category; only a change must be on the list.
 	if newCat != curCategory {
 		if appErr := validateMarketCategory(newCat); appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
-			return
-		}
-	}
-	if req.ImageURL != nil {
-		if appErr := validateMarketImageURL(newImageURL); appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 	}
 
 	updateQuery := `
 		UPDATE markets
-		SET title = $1, description = $2, category = $3, resolution_source = $4, resolution_date = $5, image_url = $6, status = $7
-		WHERE id = $8;
+		SET title = $1, description = $2, category = $3, resolution_source = $4, resolution_date = $5, status = $6
+		WHERE id = $7;
 	`
-	_, err = tx.Exec(ctx, updateQuery, newTitle, newDesc, newCat, newSource, newDate, newImageURL, newStatus, marketID)
+	_, err = tx.Exec(ctx, updateQuery, newTitle, newDesc, newCat, newSource, newDate, newStatus, marketID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to update market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to update market")
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to commit market update"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to commit market update")
 		return
 	}
 
@@ -976,107 +913,10 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 		"title":             newTitle,
 		"description":       newDesc,
 		"category":          newCat,
-		"image_url":         newImageURL,
 		"resolution_source": newSource,
 		"resolution_date":   newDate.Format(time.RFC3339),
 		"status":            newStatus,
 		"created_at":        curCreatedAt.Format(time.RFC3339),
-	})
-}
-
-// HandleDeleteMarket permanently deletes a prediction market that has never been traded.
-// Markets with trades, positions, or ledger history must be voided instead so users are refunded.
-//
-// DELETE /api/v1/admin/markets/:id
-func (h *AdminHandler) HandleDeleteMarket(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
-
-	marketIDParam := strings.TrimSpace(c.Param("id"))
-	marketID, err := uuid.Parse(marketIDParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market_id", "message": "Market ID must be a valid UUID"})
-		return
-	}
-
-	// Acquire in-process lock
-	unlock := h.locks.acquire("market:" + marketID.String())
-	defer unlock()
-
-	tx, err := h.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to begin transaction"})
-		return
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	var title string
-	err = tx.QueryRow(ctx, "SELECT title FROM markets WHERE id = $1 FOR UPDATE", marketID).Scan(&title)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "market_not_found", "message": "Market does not exist"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query market"})
-		return
-	}
-
-	// Trades and positions are only written while the market row is locked, so this check cannot race.
-	// The market's own seed posting is not user activity.
-	var hasActivity bool
-	activityQuery := `
-		SELECT EXISTS (SELECT 1 FROM trades WHERE market_id = $1)
-			OR EXISTS (SELECT 1 FROM user_positions WHERE market_id = $1)
-			OR EXISTS (SELECT 1 FROM ledger_entries WHERE market_id = $1 AND entry_type <> 'market_seed');
-	`
-	if err := tx.QueryRow(ctx, activityQuery, marketID).Scan(&hasActivity); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to check market activity"})
-		return
-	}
-	if hasActivity {
-		c.JSON(http.StatusConflict, gin.H{
-			"error":   "market_has_activity",
-			"message": "Market has trading history and cannot be deleted. Void it instead to refund open positions.",
-		})
-		return
-	}
-
-	// An untraded market only has its treasury seed posting; it is removed with the market
-	// (ledger_entries.market_id is ON DELETE RESTRICT). Cascades to liquidity_pools.
-	if _, err := tx.Exec(ctx, "DELETE FROM ledger_entries WHERE market_id = $1 AND entry_type = 'market_seed';", marketID); err == nil {
-		_, err = tx.Exec(ctx, "DELETE FROM markets WHERE id = $1;", marketID)
-	}
-	if err != nil {
-		log.Printf("[ERROR] Failed to delete market %s: %v", marketID.String(), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to delete market"})
-		return
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to commit market deletion"})
-		return
-	}
-
-	if h.marketCache != nil {
-		h.marketCache.Invalidate(marketID.String())
-		h.marketCache.InvalidateAll()
-	}
-
-	if h.hub != nil {
-		h.hub.BroadcastMarketDeleted(ws.MarketDeletedMessage{
-			Type:      ws.MessageTypeMarketDeleted,
-			MarketID:  marketID.String(),
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		})
-	}
-
-	log.Printf("[ADMIN ACTION] Deleted market %s (%q)\n", marketID.String(), title)
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "deleted",
-		"market_id": marketID.String(),
-		"title":     title,
-		"message":   "Market successfully deleted",
 	})
 }
 
@@ -1100,37 +940,37 @@ func (h *AdminHandler) HandleVoidMarket(c *gin.Context) {
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	marketID, err := uuid.Parse(marketIDParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market_id", "message": "Market ID must be a valid UUID"})
+		respondError(c, http.StatusBadRequest, "invalid_market_id", "Market ID must be a valid UUID")
 		return
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "idempotency_key_required",
-			"message": "Idempotency-Key header is required for voiding a market",
-		})
+		respondError(c, http.StatusBadRequest, "idempotency_key_required", "Idempotency-Key header is required for voiding a market")
 		return
 	}
 
 	actorID, exists := middleware.GetUserID(c)
 	if !exists || actorID == uuid.Nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Admin authentication required"})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Admin authentication required")
 		return
 	}
 
-	unlock := h.locks.acquire("market:" + marketID.String())
+	unlock, locked := lockMarket(c, h.locks, ctx, "market:"+marketID.String())
+	if !locked {
+		return
+	}
 	defer unlock()
 
 	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 
 	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, actorID, "void", idempotencyKey, voidFingerprint(marketID))
 	if errors.Is(err, ErrIdempotencyKeyReused) {
 		appErr := idempotencyReusedError()
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	if err == nil && found {
@@ -1145,18 +985,15 @@ func (h *AdminHandler) HandleVoidMarket(c *gin.Context) {
 	if err != nil {
 		var appErr *AppError
 		if errors.As(err, &appErr) {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 		if IsSerializationOrDeadlock(err) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "concurrency_conflict",
-				"message": "Void transaction experienced concurrency conflicts after multiple retries. Please retry.",
-			})
+			respondError(c, http.StatusConflict, "concurrency_conflict", "Void transaction experienced concurrency conflicts after multiple retries. Please retry.")
 			return
 		}
 		log.Printf("[ERROR] Failed to void market %s: %v", marketID.String(), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to void market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to void market")
 		return
 	}
 

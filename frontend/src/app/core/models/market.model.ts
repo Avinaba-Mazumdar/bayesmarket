@@ -11,7 +11,6 @@ export interface Market {
     title: string;
     description: string;
     category: string;
-    image_url?: string;
     resolution_source: string;
     resolution_date: string;
     status: MarketStatus;
@@ -167,7 +166,6 @@ export interface EditMarketRequest {
     category?: string;
     resolution_source?: string;
     resolution_date?: string;
-    image_url?: string;
     status?: EditableMarketStatus;
 }
 
@@ -269,7 +267,6 @@ export interface CreateMarketRequest {
     category: string;
     resolution_source: string;
     resolution_date: string;
-    image_url?: string;
     initial_collateral_usdc?: string;
     initial_probability_yes?: string;
 }
@@ -280,7 +277,6 @@ export interface CreateMarketResponse {
     title: string;
     description: string;
     category: string;
-    image_url?: string;
     resolution_source: string;
     resolution_date: string;
     status: string;
@@ -294,4 +290,3 @@ export interface CreateMarketResponse {
     probability_no_pct: string;
     created_at: string;
 }
-

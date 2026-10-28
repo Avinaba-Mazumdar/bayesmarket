@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
-	"github.com/bayesmarket/bayesmarket/internal/database"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
-	"github.com/bayesmarket/bayesmarket/internal/testutil"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/database"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/testutil"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -37,12 +37,10 @@ func getSuperadminToken(t *testing.T, pool *pgxpool.Pool, cfg *config.Config) st
 		}
 	}
 	claims := middleware.AuthClaims{
-		UserID:       adminID.String(),
-		IsGuest:      false,
-		IsAdmin:      true,
-		IsSuperadmin: true,
-		Email:        "admin@test.local",
+		UserID:  adminID.String(),
+		IsGuest: false,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    middleware.AccessTokenIssuer,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
 		},
 	}
@@ -66,7 +64,7 @@ func getTestEnv(t *testing.T) (*pgxpool.Pool, *config.Config, *gin.Engine) {
 	}
 
 	cfg := testutil.TestConfig(dbURL)
-	router := rest.SetupRouter(pool, cfg)
+	router := rest.SetupRouter(pool, cfg, nil)
 	return pool, cfg, router
 }
 

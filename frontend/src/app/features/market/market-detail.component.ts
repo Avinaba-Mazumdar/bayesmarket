@@ -731,6 +731,25 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
         });
 
         effect(() => {
+            const updated = this.wsService.lastMarketUpdated();
+            const targetId = this.id();
+            if (updated && updated.market_id === targetId) {
+                untracked(() => this.fetchMarket(false));
+            }
+        });
+
+        effect(() => {
+            const removed = this.wsService.lastMarketDeleted();
+            const targetId = this.id();
+            if (removed && removed.market_id === targetId) {
+                untracked(() => {
+                    this.isLoading.set(false);
+                    this.market.set(null);
+                });
+            }
+        });
+
+        effect(() => {
             const res = this.wsService.lastMarketResolved();
             const targetId = this.id();
             if (res && res.market_id === targetId) {

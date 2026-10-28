@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
 )
 
 const testJWTSecret = "this-is-a-valid-test-jwt-secret-of-32-bytes-plus"

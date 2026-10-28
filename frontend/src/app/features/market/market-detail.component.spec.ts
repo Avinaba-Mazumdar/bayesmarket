@@ -18,7 +18,11 @@ describe('MarketDetailComponent', () => {
         getQuote: any;
         placeOrder: any;
         getMarketHistory: any;
-        getMarketTrades: any; refreshSession: any; endSession: any; getMarketCategories: any; };
+        getMarketTrades: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+    };
     let wsService: WebSocketService;
 
     const mockMarket: Market = {

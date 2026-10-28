@@ -5,7 +5,6 @@ import { Market } from '../../core/models/market.model';
 
 describe('MarketCardComponent', () => {
     let fixture: ComponentFixture<MarketCardComponent>;
-    let component: MarketCardComponent;
 
     const mockMarket: Market = {
         id: '11111111-1111-1111-1111-111111111111',
@@ -36,7 +35,6 @@ describe('MarketCardComponent', () => {
         }).compileComponents();
 
         fixture = TestBed.createComponent(MarketCardComponent);
-        component = fixture.componentInstance;
         fixture.componentRef.setInput('market', mockMarket);
         fixture.detectChanges();
     });

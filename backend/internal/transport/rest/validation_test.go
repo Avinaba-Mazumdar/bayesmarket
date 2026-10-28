@@ -3,8 +3,8 @@ package rest_test
 import (
 	"testing"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 )

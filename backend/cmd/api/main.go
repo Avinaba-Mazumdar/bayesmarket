@@ -10,11 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
-	"github.com/bayesmarket/bayesmarket/internal/database"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
-	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/database"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -30,12 +31,9 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	port := os.Getenv("PORT")
+	port := cfg.ServerPort
 	if port == "" {
 		port = "8080"
-	}
-	if cfg.ServerPort != "" {
-		port = cfg.ServerPort
 	}
 
 	// The server never runs without its database: every endpoint reads or writes money.
@@ -95,6 +93,24 @@ func main() {
 		log.Fatalf("[FATAL] Could not connect to PostgreSQL: %v\n", err)
 	}
 	defer dbPool.Close()
+
+	var privileged *pgxpool.Pool
+	if migrationURL != cfg.DatabaseURL {
+		privCtx, privCancel := context.WithTimeout(context.Background(), 45*time.Second)
+		privileged, err = database.NewPool(privCtx, migrationURL)
+		privCancel()
+		if err != nil {
+			log.Fatalf("[FATAL] Could not connect with MIGRATION_DATABASE_URL: %v\n", err)
+		}
+		defer privileged.Close()
+	}
+	retentionPool := dbPool
+	if privileged != nil {
+		retentionPool = privileged
+	}
+	retentionCtx, stopRetention := context.WithCancel(context.Background())
+	defer stopRetention()
+	database.StartRetention(retentionCtx, retentionPool)
 
 	// Initialize real-time WebSocket broker hub
 	wsHub := ws.NewHub()

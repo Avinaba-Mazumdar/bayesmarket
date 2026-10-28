@@ -211,34 +211,31 @@ func (h *Hub) BroadcastTradeEvent(msg TradeEventMessage) {
 // BroadcastMarketResolved formats and broadcasts a MARKET_RESOLVED telemetry frame.
 func (h *Hub) BroadcastMarketResolved(msg MarketResolvedMessage) {
 	msg.Type = MessageTypeMarketResolved
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("[ERROR] Failed to marshal MarketResolvedMessage: %v", err)
-		return
-	}
-	h.Broadcast(msg.MarketID, data)
+	h.broadcastMarketFrame("MarketResolvedMessage", msg.MarketID, msg, false)
 }
 
-// BroadcastMarketUpdated formats and broadcasts a MARKET_UPDATED telemetry frame.
+// BroadcastMarketUpdated formats and broadcasts a MARKET_UPDATED telemetry frame to the market and the global feed.
 func (h *Hub) BroadcastMarketUpdated(msg MarketUpdatedMessage) {
 	msg.Type = MessageTypeMarketUpdated
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("[ERROR] Failed to marshal MarketUpdatedMessage: %v", err)
-		return
-	}
-	h.Broadcast(msg.MarketID, data)
-	h.Broadcast("", data)
+	h.broadcastMarketFrame("MarketUpdatedMessage", msg.MarketID, msg, true)
 }
 
-// BroadcastMarketDeleted formats and broadcasts a MARKET_DELETED telemetry frame.
+// BroadcastMarketDeleted formats and broadcasts a MARKET_DELETED telemetry frame to the market and the global feed.
 func (h *Hub) BroadcastMarketDeleted(msg MarketDeletedMessage) {
 	msg.Type = MessageTypeMarketDeleted
-	data, err := json.Marshal(msg)
+	h.broadcastMarketFrame("MarketDeletedMessage", msg.MarketID, msg, true)
+}
+
+// broadcastMarketFrame marshals a market frame once and sends it to the market's subscribers, and to
+// the global feed when global is set.
+func (h *Hub) broadcastMarketFrame(name, marketID string, frame any, global bool) {
+	data, err := json.Marshal(frame)
 	if err != nil {
-		log.Printf("[ERROR] Failed to marshal MarketDeletedMessage: %v", err)
+		log.Printf("[ERROR] Failed to marshal %s: %v", name, err)
 		return
 	}
-	h.Broadcast(msg.MarketID, data)
-	h.Broadcast("", data)
+	h.Broadcast(marketID, data)
+	if global {
+		h.Broadcast("", data)
+	}
 }

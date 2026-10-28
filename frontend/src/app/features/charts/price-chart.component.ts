@@ -7,14 +7,14 @@ import {
     ElementRef,
     inject,
     input,
-    NgZone,
+    AfterViewInit,
     OnDestroy,
     OnInit,
     signal,
     untracked,
     viewChild
 } from '@angular/core';
-import { AreaSeries, ColorType, createChart, IChartApi, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
+import { AreaSeries, ColorType, createChart, IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import { LucideTrendingUp, LucideTrendingDown } from '@lucide/angular';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../../core/services/api.service';
@@ -95,7 +95,7 @@ interface ChartPoint {
                 }
                 @if (historyState() === 'empty') {
                     <p class="chart-state" role="status">
-                        No trades in this range yet. The line starts at the first trade and updates live.
+                        No recorded prices in this range. The line starts at the first trade stored after price history was enabled, and it updates live.
                     </p>
                 }
                 @if (historyState() === 'error') {
@@ -110,7 +110,10 @@ interface ChartPoint {
             <div class="sr-only">
                 <table>
                     <caption>
-                        Recorded implied probabilities for {{ selectedTimeframe() }}, newest first
+                        Recorded implied probabilities for
+                        {{
+                            selectedTimeframe()
+                        }}, newest first
                     </caption>
                     <thead>
                         <tr>
@@ -294,7 +297,7 @@ interface ChartPoint {
         `
     ]
 })
-export class PriceChartComponent implements OnInit, OnDestroy {
+export class PriceChartComponent implements OnInit, AfterViewInit, OnDestroy {
     readonly marketId = input<string>('');
     readonly initialProbabilityYes = input<number>(0.5);
 
@@ -302,7 +305,6 @@ export class PriceChartComponent implements OnInit, OnDestroy {
 
     private readonly wsService = inject(WebSocketService);
     private readonly destroyRef = inject(DestroyRef);
-    private readonly ngZone = inject(NgZone);
     private readonly themeService = inject(ThemeService);
     private readonly apiService = inject(ApiService);
 
@@ -406,7 +408,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
         const el = this.chartContainer()?.nativeElement;
         if (!el) return;
         const p = this.palette();
-        this.ngZone.runOutsideAngular(() => {
+        {
             this.chart = createChart(el, {
                 autoSize: true,
                 layout: {
@@ -443,14 +445,14 @@ export class PriceChartComponent implements OnInit, OnDestroy {
                     formatter: (price: number) => `${(price * 100).toFixed(1)}%`
                 }
             });
-        });
+        }
         this.loadHistory();
     }
 
     private updateChartTheme(): void {
         if (!this.chart || !this.areaSeries) return;
         const p = this.palette();
-        this.ngZone.runOutsideAngular(() => {
+        {
             this.chart?.applyOptions({
                 layout: { background: { type: ColorType.Solid, color: p.background }, textColor: p.text },
                 grid: {
@@ -469,11 +471,11 @@ export class PriceChartComponent implements OnInit, OnDestroy {
                 bottomColor: p.bottom,
                 lineColor: p.line
             });
-        });
+        }
     }
 
     private teardownChart(): void {
-        this.ngZone.runOutsideAngular(() => {
+        {
             if (this.tickRafId !== null) {
                 cancelAnimationFrame(this.tickRafId);
                 this.tickRafId = null;
@@ -487,7 +489,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
                 this.chart.remove();
                 this.chart = null;
             }
-        });
+        }
     }
 
     selectTimeframe(tf: ChartTimeframe): void {
@@ -531,10 +533,10 @@ export class PriceChartComponent implements OnInit, OnDestroy {
         }
         this.currentData = data;
 
-        this.ngZone.runOutsideAngular(() => {
-            this.areaSeries?.setData(data as any);
+        {
+            this.areaSeries?.setData(data);
             if (data.length > 0) this.chart?.timeScale().fitContent();
-        });
+        }
 
         this.tableRows.set(
             res.points
@@ -559,7 +561,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
         this.currentData = [];
         this.tableRows.set([]);
         this.hasChange.set(false);
-        this.ngZone.runOutsideAngular(() => this.areaSeries?.setData([]));
+        this.areaSeries?.setData([]);
     }
 
     private onNewPriceTick(newProb: number, date: Date): void {
@@ -571,7 +573,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
         }
         this.pendingTick = { prob: newProb, date };
         if (this.tickRafId === null) {
-            this.ngZone.runOutsideAngular(() => {
+            {
                 this.tickRafId = requestAnimationFrame(() => {
                     this.tickRafId = null;
                     if (!this.pendingTick) return;
@@ -585,7 +587,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
                     if (this.areaSeries) {
                         try {
                             const point: ChartPoint = { time, value: prob };
-                            this.areaSeries.update(point as any);
+                            this.areaSeries.update(point);
                             if (this.currentData.length > 0) {
                                 const first = this.currentData[0].value;
                                 const newChange = (prob - first) * 100;
@@ -599,7 +601,7 @@ export class PriceChartComponent implements OnInit, OnDestroy {
                         }
                     }
                 });
-            });
+            }
         }
     }
 }

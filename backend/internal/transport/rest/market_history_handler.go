@@ -69,7 +69,7 @@ func (h *MarketHandler) HandleGetMarketHistory(c *gin.Context) {
 	rangeKey := strings.ToLower(strings.TrimSpace(c.DefaultQuery("range", "24h")))
 	spec, ok := historyRanges[rangeKey]
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_range", "message": "range must be one of 1h, 24h, 7d or all"})
+		respondError(c, http.StatusBadRequest, "invalid_range", "range must be one of 1h, 24h, 7d or all")
 		return
 	}
 
@@ -79,10 +79,10 @@ func (h *MarketHandler) HandleGetMarketHistory(c *gin.Context) {
 	marketID, err := h.resolveMarketUUID(ctx, param)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Prediction market not found"})
+			respondError(c, http.StatusNotFound, "not_found", "Prediction market not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to resolve market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to resolve market")
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *MarketHandler) HandleGetMarketHistory(c *gin.Context) {
 		LIMIT $4;
 	`, marketID, since, spec.bucket, maxHistoryPoints)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query market history"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query market history")
 		return
 	}
 	defer rows.Close()
@@ -118,13 +118,13 @@ func (h *MarketHandler) HandleGetMarketHistory(c *gin.Context) {
 		var bucket time.Time
 		var prob decimal.Decimal
 		if err := rows.Scan(&bucket, &prob); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to read market history"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to read market history")
 			return
 		}
 		points = append(points, HistoryPoint{Time: bucket.UTC().Format(time.RFC3339), Probability: prob.StringFixed(8)})
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to read market history"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to read market history")
 		return
 	}
 
@@ -153,10 +153,10 @@ func (h *MarketHandler) HandleGetMarketTrades(c *gin.Context) {
 	marketID, err := h.resolveMarketUUID(ctx, param)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "Prediction market not found"})
+			respondError(c, http.StatusNotFound, "not_found", "Prediction market not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to resolve market"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to resolve market")
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *MarketHandler) HandleGetMarketTrades(c *gin.Context) {
 		LIMIT $2;
 	`, marketID, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to query trades"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to query trades")
 		return
 	}
 	defer rows.Close()
@@ -182,7 +182,7 @@ func (h *MarketHandler) HandleGetMarketTrades(c *gin.Context) {
 			createdAt                 time.Time
 		)
 		if err := rows.Scan(&id, &tradeType, &outcome, &shares, &execPrice, &amount, &createdAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to read trades"})
+			respondError(c, http.StatusInternalServerError, "database_error", "Failed to read trades")
 			return
 		}
 		trades = append(trades, MarketTradeResponse{
@@ -196,7 +196,7 @@ func (h *MarketHandler) HandleGetMarketTrades(c *gin.Context) {
 		})
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to read trades"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to read trades")
 		return
 	}
 

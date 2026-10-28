@@ -1,5 +1,13 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
-import { ConnectionStatus, MarketResolvedEvent, PriceUpdateEvent, TradeEvent, WebSocketMessage } from '../models/websocket.model';
+import {
+    ConnectionStatus,
+    MarketDeletedEvent,
+    MarketResolvedEvent,
+    MarketUpdatedEvent,
+    PriceUpdateEvent,
+    TradeEvent,
+    WebSocketMessage
+} from '../models/websocket.model';
 
 @Injectable({
     providedIn: 'root'
@@ -21,6 +29,8 @@ export class WebSocketService implements OnDestroy {
     readonly lastPriceTick = signal<PriceUpdateEvent | null>(null);
     readonly recentTrades = signal<TradeEvent[]>([]);
     readonly lastMarketResolved = signal<MarketResolvedEvent | null>(null);
+    readonly lastMarketUpdated = signal<MarketUpdatedEvent | null>(null);
+    readonly lastMarketDeleted = signal<MarketDeletedEvent | null>(null);
     readonly activeMarketId = signal<string | null>(null);
 
     /**
@@ -149,6 +159,14 @@ export class WebSocketService implements OnDestroy {
                 case 'MARKET_RESOLVED':
                     this.lastMarketResolved.set(msg);
                     break;
+
+                case 'MARKET_UPDATED':
+                    this.lastMarketUpdated.set(msg);
+                    break;
+
+                case 'MARKET_DELETED':
+                    this.lastMarketDeleted.set(msg);
+                    break;
             }
         } catch (e) {
             console.warn('[WS] Failed to parse WebSocket message frame:', e, raw);
@@ -183,8 +201,6 @@ export class WebSocketService implements OnDestroy {
                 // If frontend is on localhost:4200, point to default Go backend port 8080
                 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                     base = `${protocol}//${window.location.hostname}:8080`;
-                } else if (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('avinaba.com')) {
-                    base = 'wss://bayesmarket-oss.onrender.com';
                 } else {
                     base = `${protocol}//${window.location.host}`;
                 }

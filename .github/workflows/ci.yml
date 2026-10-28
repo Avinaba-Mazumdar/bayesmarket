@@ -63,7 +63,6 @@ jobs:
               env:
                   DATABASE_URL: postgres://bayesuser:bayespassword@localhost:5432/bayesmarket?sslmode=disable
                   JWT_SECRET: bayesmarket-development-hmac-sha256-default-secret-key-32b
-                  ADMIN_TOKEN: test-admin-token-secret
               run: |
                   cd backend
                   go test -v -race ./internal/...
@@ -90,9 +89,17 @@ jobs:
               with:
                   node-version: 22
                   cache: 'pnpm'
+                  cache-dependency-path: frontend/pnpm-lock.yaml
 
-            - name: Install Root & Workspace Dependencies
-              run: pnpm install --no-frozen-lockfile
+            - name: Install Frontend Dependencies
+              run: |
+                  cd frontend
+                  pnpm install --frozen-lockfile
+
+            - name: Lint frontend
+              run: |
+                  cd frontend
+                  pnpm lint
 
             - name: Run Frontend Unit Tests
               env:
@@ -123,9 +130,12 @@ jobs:
               with:
                   node-version: 22
                   cache: 'pnpm'
+                  cache-dependency-path: frontend/pnpm-lock.yaml
 
-            - name: Install Dependencies
-              run: pnpm install --no-frozen-lockfile
+            - name: Install Frontend Dependencies (provides Prettier)
+              run: |
+                  cd frontend
+                  pnpm install --frozen-lockfile
 
             - name: Verify Prettier Code Formatting
               run: pnpm lint:format

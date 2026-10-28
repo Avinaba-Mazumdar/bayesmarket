@@ -12,7 +12,7 @@ describe('AuthCallbackComponent', () => {
     let component: AuthCallbackComponent;
     let routerSpy: { navigate: any };
     let toastServiceSpy: { success: any; error: any; warning: any; info: any };
-    let apiServiceSpy: { callbackGoogleAuth: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+    let apiServiceSpy: { callbackGoogleAuth: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any };
 
     const mockStorage: Record<string, string> = {};
     const sessionStorageMock = {

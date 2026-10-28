@@ -690,7 +690,6 @@ export class PortfolioViewComponent implements OnInit {
             });
     }
 
-
     openCashOutModal(pos: UserPosition): void {
         this.selectedPosition.set(pos);
         this.isCashOutModalOpen.set(true);

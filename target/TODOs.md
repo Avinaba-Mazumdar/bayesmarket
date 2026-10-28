@@ -4,19 +4,21 @@ This document tracks the phased execution plan for **BayesMarket**. It divides t
 
 **Anti-Shortcut Protocol**: Do not mark tasks `[x]` until files exist on disk, unit/integration tests pass with race detection, the application builds cleanly, and the user verification gate is satisfied.
 
+**Status legend**: `[x]` is reserved for tasks that pass the protocol above. `[~]` means the code is on disk and builds, but the verification gate is not yet recorded. Database tests have not run, the race detector has not run, and the User Verification Tasks are manual steps with no recorded result. Current verification state is in `report.md` (section 10).
+
 ---
 
 ## Phase Overview & Progress Tracker
 
-- [x] **Phase 1: Project Scaffolding, Development Tooling & Monorepo Foundation**
-- [x] **Phase 2: Database Schema, Migration Pipeline & Seed Datasets**
-- [x] **Phase 3: Fixed-Point Mathematical AMM Engine & Invariant Test Suite**
-- [x] **Phase 4: Backend REST API, Token-Bucket Rate Limiting & Guest Session Management**
-- [x] **Phase 5: Atomic Order Execution Engine & Pessimistic Concurrency Controls**
-- [x] **Phase 6: Real-Time WebSocket Multiplexer & Live Telemetry Broadcasting**
-- [x] **Phase 7: Frontend Design System, Typography & WCAG 2.2 Level AAA Core Components**
-- [x] **Phase 8: Interactive Trading Cockpit, Lightweight Charts & Two-Step Order Flow**
-- [x] **Phase 9: Portfolio Ledger, AMM Liquidation, Oracle Resolution & End-to-End Hardening**
+- [~] **Phase 1: Project Scaffolding, Development Tooling & Monorepo Foundation**
+- [~] **Phase 2: Database Schema, Migration Pipeline & Seed Datasets**
+- [~] **Phase 3: Fixed-Point Mathematical AMM Engine & Invariant Test Suite**
+- [~] **Phase 4: Backend REST API, Token-Bucket Rate Limiting & Guest Session Management**
+- [~] **Phase 5: Atomic Order Execution Engine & Pessimistic Concurrency Controls**
+- [~] **Phase 6: Real-Time WebSocket Multiplexer & Live Telemetry Broadcasting**
+- [~] **Phase 7: Frontend Design System, Typography & WCAG 2.2 Level AAA Core Components**
+- [~] **Phase 8: Interactive Trading Cockpit, Lightweight Charts & Two-Step Order Flow**
+- [~] **Phase 9: Portfolio Ledger, AMM Liquidation, Oracle Resolution & End-to-End Hardening**
 
 ---
 
@@ -24,22 +26,21 @@ This document tracks the phased execution plan for **BayesMarket**. It divides t
 
 Establish the monorepo directory layout, initialize Go and Angular workspaces, configure Neon Serverless PostgreSQL 18, and set up unified development scripts.
 
-- [x] **Task 1.1: Monorepo & Backend Workspace Initialization**
-    - Initialize Go 1.24+ module in `backend/` (`go mod init github.com/bayesmarket/bayesmarket`).
+- [~] **Task 1.1: Monorepo & Backend Workspace Initialization**
+    - Initialize the Go 1.27 module in `backend/` (`github.com/Avinaba-Mazumdar/bayesmarket`). The historical note said Go 1.24+ and `github.com/bayesmarket/bayesmarket`; the module path matches the GitHub repository.
     - Install core backend dependencies: `github.com/jackc/pgx/v5`, `github.com/shopspring/decimal`, `github.com/gin-gonic/gin`, `golang.org/x/time/rate` (`github.com/gorilla/websocket` installed in Phase 6).
     - Establish backend package structure: `cmd/api/`, `internal/amm/`, `internal/database/`, `internal/middleware/`, `internal/transport/`, `internal/models/`.
 
-- [x] **Task 1.2: Frontend Workspace Initialization (Angular 22 Zoneless)**
+- [~] **Task 1.2: Frontend Workspace Initialization (Angular 22 Zoneless)**
     - Initialize Angular 22 standalone client in `frontend/` configured for zoneless change detection (`provideExperimentalZonelessChangeDetection()`).
     - Install frontend dependencies: `lightweight-charts`.
     - Set up directory structure: `src/app/core/`, `src/app/features/`, `src/app/state/`, `src/styles/`.
 
-- [x] **Task 1.3: Neon Database & Environment Configuration**
-    - Configure root `.env.example` with Neon PostgreSQL connection parameters (`DATABASE_URL=postgres://...@...neon.tech/bayesmarket?sslmode=require`, `SERVER_PORT=8080`, `JWT_SECRET`, `CORS_ORIGIN=http://localhost:4200`).
-    - Implement environment loader in backend validating required configuration on startup.
-    - Provide `.env` loading and verification scripts ensuring pooled/direct connection to Neon.
+- [~] **Task 1.3: Local Database & Environment Configuration**
+    - Configure root `.env.example` for local Postgres (`localhost` / `127.0.0.1` / `postgres`). `APP_ENV=local` refuses a hosted `DATABASE_URL`. A hosted database is an `APP_ENV=production` choice and is not the example default.
+    - Implement environment loader in backend validating required configuration on startup (`JWT_SECRET` required, 32+ characters, no built-in default).
 
-- [x] **Task 1.4: Code Formatting & Tooling Validation**
+- [~] **Task 1.4: Code Formatting & Tooling Validation**
     - Configure root `.prettierrc` for Markdown, JSON, and CSS formatting.
     - Verify Go formatting (`gofmt`) and linting configurations.
     - Create basic root developer task scripts in `Makefile` or `package.json` (`dev:backend`, `dev:frontend`).
@@ -56,23 +57,23 @@ Establish the monorepo directory layout, initialize Go and Angular workspaces, c
 
 Implement the production PostgreSQL database schema, automated migration runner, connection pool lifecycle, and real-world seed markets.
 
-- [x] **Task 2.1: PostgreSQL DDL Schema & Migration Pipeline**
+- [~] **Task 2.1: PostgreSQL DDL Schema & Migration Pipeline**
     - Create migration files in `backend/internal/database/migrations/`:
         - `000001_init_schema.up.sql`: Tables for `users`, `markets`, `liquidity_pools`, `trades`, `user_positions`, `ledger_entries`, `idempotency_keys`, and `faucet_claims`.
         - Use `NUMERIC(28, 8)` for all balances, shares, prices, and collateral; enforce `cash_balance >= 0`, `reserve_yes > 0`, `reserve_no > 0`, `collateral_reserve >= 0`, and `shares_owned >= 0`.
         - Add `UNIQUE (user_id, idempotency_key)` to `trades` and `PRIMARY KEY (actor_id, operation, idempotency_key)` to `idempotency_keys`; add indexes `idx_trades_market_created`, `idx_positions_user`, and `idx_ledger_entries_transaction`.
 
-- [x] **Task 2.2: Connection Pool Management (`pgx/v5`)**
+- [~] **Task 2.2: Connection Pool Management (`pgx/v5`)**
     - Implement connection pool factory in `backend/internal/database/db.go` with configurable min/max connections, idle timeouts, and health ping telemetry.
     - Implement a migration runner utility executing pending SQL migration scripts on startup.
 
-- [x] **Task 2.3: Admin-Driven Prediction Market Lifecycle (Zero Pre-Fed Markets)**
+- [~] **Task 2.3: Admin-Driven Prediction Market Lifecycle (Zero Pre-Fed Markets)**
     - Removed all static pre-fed demo markets from database, code, and tests.
     - Provisioned dynamic admin market creation (`POST /api/v1/admin/markets`), editing (`PUT /api/v1/admin/markets/:id`), deletion (`DELETE /api/v1/admin/markets/:id`), and settlement (`POST /api/v1/admin/markets/:id/resolve`).
     - Enforced strict Neon DB-only admin designation (`UPDATE users SET is_admin = true WHERE email = '...';`).
     - Protected AMM constant-product invariants ($k = R_{\text{YES}} \times R_{\text{NO}}$) and complete-set collateral backing during dynamic provisioning.
 
-- [x] **Task 2.4: Schema Constraint & Migration Unit Tests**
+- [~] **Task 2.4: Schema Constraint & Migration Unit Tests**
     - Write unit tests in `backend/internal/database/db_test.go` verifying that negative balances and zero reserves trigger database check constraint errors.
 
 ### 🔍 User Verification Task (Phase 2)
@@ -88,26 +89,26 @@ Implement the production PostgreSQL database schema, automated migration runner,
 
 Construct the pure, high-precision Constant Product Market Maker mathematical engine enforcing arbitrary-precision arithmetic and zero floating-point drift.
 
-- [x] **Task 3.1: Core CPMM Bonding Invariant Engine**
+- [~] **Task 3.1: Core CPMM Bonding Invariant Engine**
     - Create `backend/internal/amm/cpmm.go` utilizing `shopspring/decimal`.
     - Implement the virtual-reserve invariant $k = R_{\text{YES}} \times R_{\text{NO}}$ and the complete-set accounting invariant: each issued YES/NO pair is backed by exactly one USDC in `collateral_reserve`.
     - Implement spot price calculation functions:
       $$P_{\text{YES}} = \frac{R_{\text{NO}}}{R_{\text{YES}} + R_{\text{NO}}}, \quad P_{\text{NO}} = \frac{R_{\text{YES}}}{R_{\text{YES}} + R_{\text{NO}}}$$
     - Enforce constraint: $P_{\text{YES}} + P_{\text{NO}} = 1.000000$ to 6 decimal places.
 
-- [x] **Task 3.2: Share Purchase & Quote Calculation Algorithm**
+- [~] **Task 3.2: Share Purchase & Quote Calculation Algorithm**
     - Implement `CalculateCompleteSetBuy(depositUSDC, outcome, currentYes, currentNo, collateral)`:
         - Mint $d$ complete YES/NO sets and add $d$ to collateral. For YES: $R_{\text{NO}}' = R_{\text{NO}} + d$, $R_{\text{YES}}' = k / R_{\text{NO}}'$, $\Delta \text{YES} = R_{\text{YES}} + d - R_{\text{YES}}'$.
         - Average execution price $\bar{P} = d / \Delta \text{YES}$; use the symmetric formula for NO.
         - Marginal price impact / slippage: $\text{Slippage} = \frac{\bar{P} - P_{\text{initial}}}{P_{\text{initial}}} \times 100\%$.
 
-- [x] **Task 3.3: Pool Liquidation & "Cash Out" Share Sale Algorithm**
+- [~] **Task 3.3: Pool Liquidation & "Cash Out" Share Sale Algorithm**
     - Implement `CalculateCompleteSetSell(sharesToSell, outcome, currentYes, currentNo, collateral)`:
         - For YES shares $s$, solve $d = (A - \sqrt{A^2 - 4sR_{\text{NO}}}) / 2$, where $A = R_{\text{YES}} + R_{\text{NO}} + s$; burn $d$ complete sets and return $d$ USDC.
         - Reject any quote that would make collateral, virtual inventory, or a user position negative.
         - Returns net USDC payout and post-sale spot prices.
 
-- [x] **Task 3.4: Rigorous Invariant & Concurrency Unit Test Suite**
+- [~] **Task 3.4: Rigorous Invariant & Concurrency Unit Test Suite**
     - Write extensive unit tests in `backend/internal/amm/cpmm_test.go`:
         - Invariant preservation: $k_{\text{after}} = k_{\text{before}}$ within the documented decimal rounding bound across 10,000 random transaction iterations.
         - Solvency preservation: issued YES supply equals issued NO supply and is fully backed by the collateral reserve after every operation.
@@ -128,23 +129,23 @@ Construct the pure, high-precision Constant Product Market Maker mathematical en
 
 Implement the RESTful HTTP API layer, guest session issuance, in-memory token-bucket rate limiting, and market discovery endpoints.
 
-- [x] **Task 4.1: Ephemeral 1-Click Guest Session Authentication**
+- [~] **Task 4.1: Ephemeral 1-Click Guest Session Authentication**
     - Create `backend/internal/transport/rest/auth_handler.go` and `POST /api/v1/auth/guest`.
     - Provision guest record in `users` with `is_guest = true` and `cash_balance = 1000.00000000` (virtual USDC). All financial API values are decimal strings, never JSON numbers.
     - Issue cryptographically signed HMAC-SHA256 JWT containing `user_id` and guest claims.
     - Implement JWT authentication middleware extracting user context into HTTP request context.
 
-- [x] **Task 4.2: In-Memory Token-Bucket Rate Limiting**
+- [~] **Task 4.2: In-Memory Token-Bucket Rate Limiting**
     - Create `backend/internal/middleware/rate_limiter.go` using `golang.org/x/time/rate`.
     - Implement 60 public reads/minute per IP (burst 10) and 12 quote/order requests per guest ID and IP per minute (burst 3).
     - Return standardized `429 Too Many Requests` with `Retry-After` header when limit is exceeded.
 
-- [x] **Task 4.3: Market Discovery & Quote Endpoints**
+- [~] **Task 4.3: Market Discovery & Quote Endpoints**
     - Implement `GET /api/v1/markets`: Returns active markets with category, volume, implied probabilities, and resolution date.
     - Implement `GET /api/v1/markets/:id`: Returns full market metadata, pool reserves, 24h stats, and resolution rules.
     - Implement `POST /api/v1/markets/:id/quote`: Accepts `{ outcome: "YES", amount_usdc: "100.00000000" }` and returns authoritative decimal-string shares, price, and slippage without mutating state.
 
-- [x] **Task 4.4: Sandbox Claim & Portfolio Read Endpoints**
+- [~] **Task 4.4: Sandbox Claim & Portfolio Read Endpoints**
     - Implement `POST /api/v1/claim`: Claims 500 virtual USDC for guest accounts with an enforced 5-minute cooldown period and an `Idempotency-Key`.
     - Implement `GET /api/v1/portfolio`: Returns user cash balance, open positions, current market value, and unrealized profit/loss.
 
@@ -172,7 +173,7 @@ Implement the RESTful HTTP API layer, guest session issuance, in-memory token-bu
 
 Implement atomic trade placement, database row-level locking (`SELECT ... FOR UPDATE`), position updates, and AMM liquidation handling.
 
-- [x] **Task 5.1: Atomic Order Execution Pipeline**
+- [~] **Task 5.1: Atomic Order Execution Pipeline**
     - Create `backend/internal/transport/rest/trade_handler.go` handling `POST /api/v1/markets/:id/orders`.
     - Payload validation: `{ outcome: "YES"|"NO", amount_usdc: "100.00000000", min_shares_out: "135.20000000" }` (quoted shares × (1 − tolerance); see ARCHITECTURE.md §6).
     - Enforce atomic transaction boundary:
@@ -184,13 +185,13 @@ Implement atomic trade placement, database row-level locking (`SELECT ... FOR UP
         6. Insert a `trades` record with the required `Idempotency-Key`, returning the original receipt on a retry.
         7. Upsert user position in `user_positions` and write balanced immutable `ledger_entries` for cash, collateral, and shares.
 
-- [x] **Task 5.2: Atomic "Cash Out" Share Liquidation Handler**
+- [~] **Task 5.2: Atomic "Cash Out" Share Liquidation Handler**
     - Implement `POST /api/v1/portfolio/cashout`:
         - Requires bearer authentication and `Idempotency-Key`, and validates user owns sufficient shares of the specified outcome.
         - Inside one serializable transaction, locks market, liquidity pool, user cash balance, then user position in the global lock order.
         - Sells shares through the collateralized complete-set AMM, credits user cash balance, decrements user position, and records trade plus immutable ledger entries.
 
-- [x] **Task 5.3: Concurrency & Balance Collision Test Suite**
+- [~] **Task 5.3: Concurrency & Balance Collision Test Suite**
     - Create integration test `backend/internal/transport/rest/order_concurrency_test.go`:
         - Spawns 20 concurrent goroutines attempting to spend the same $100 USDC balance simultaneously.
         - Verifies that exactly one trade succeeds and 19 fail with insufficient balance (no double spending).
@@ -211,24 +212,24 @@ Implement atomic trade placement, database row-level locking (`SELECT ... FOR UP
 
 Implement the low-latency WebSocket connection broker, non-blocking channel fan-out multiplexer, and real-time streaming subscriptions.
 
-- [x] **Task 6.1: WebSocket Broker Hub & Connection Lifecycle**
+- [~] **Task 6.1: WebSocket Broker Hub & Connection Lifecycle**
     - Create `backend/internal/transport/ws/hub.go` using Gorilla WebSocket.
     - Implement dedicated per-client read and write pumps with ping/pong keep-alive (30s intervals) and write deadline timeouts.
     - Implement thread-safe client registration and unregistration via Go channels.
 
-- [x] **Task 6.2: Non-Blocking Fan-Out Broadcast Multiplexer**
+- [~] **Task 6.2: Non-Blocking Fan-Out Broadcast Multiplexer**
     - Implement channel broadcast multiplexer:
         - Use buffered outbound channels per client (`chan []byte`, buffer size 256).
         - Use non-blocking send with `select` + `default` to immediately disconnect slow or stalled network consumers without blocking the central trade execution engine.
 
-- [x] **Task 6.3: Streaming Telemetry Topics**
+- [~] **Task 6.3: Streaming Telemetry Topics**
     - Define JSON WebSocket broadcast payloads for:
         - `PRICE_UPDATE`: `{ type: "PRICE_UPDATE", market_id: "<uuid>", yes_price: "0.72000000", no_price: "0.28000000", timestamp: "2026-09-07T00:00:00Z" }`
         - `TRADE_EVENT`: `{ type: "TRADE_EVENT", market_id: "<uuid>", outcome: "YES", shares: "138.67403315", price: "0.72111554", trade_id: "<uuid>" }`
         - `MARKET_RESOLVED`: `{ type: "MARKET_RESOLVED", market_id: "<uuid>", winning_outcome: "YES" }`
     - Hook trade execution handler (Phase 5) into `wsHub.Broadcast()` to push live events on every completed trade.
 
-- [x] **Task 6.4: Frontend Reconnecting WebSocket Service**
+- [~] **Task 6.4: Frontend Reconnecting WebSocket Service**
     - Create `frontend/src/app/core/services/websocket.service.ts`:
         - Auto-reconnect with exponential backoff (`1s`, `2s`, `5s`, `10s`).
         - Expose Angular Signals: `isConnected()`, `lastPriceTick()`, `recentTrades()`.
@@ -251,7 +252,7 @@ Implement the low-latency WebSocket connection broker, non-blocking channel fan-
 
 Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBrains Mono typography pairing, universal 44×44px interactive components, and WCAG 2.2 Level AAA layout shell.
 
-- [x] **Task 7.1: Design Tokens & Base CSS Architecture**
+- [~] **Task 7.1: Design Tokens & Base CSS Architecture**
     - Create `frontend/src/styles/tokens.css` declaring all CSS custom properties from `target/DESIGN.md`:
         - Canvas: `--canvas: #07090e`, `--canvas-subtle: #0c1017`.
         - Cards: `--surface-card: #111622`, `--surface-card-elevated: #171f30`, `--surface-terminal: #0e131d`.
@@ -260,12 +261,12 @@ Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBr
         - Text: `--ink: #f8fafc`, `--ink-secondary: #cbd5e1`, `--body: #a2b4c9`.
         - Borders: `--border-strong: #606e85`, `--hairline: #1e2638`.
 
-- [x] **Task 7.2: Typography System & SC 1.4.8 Visual Rules**
+- [~] **Task 7.2: Typography System & SC 1.4.8 Visual Rules**
     - Import web fonts: **Scoutie Sans** (interface) and **JetBrains Mono** (quantitative financial figures).
     - Enforce tabular figures across JetBrains Mono (`font-feature-settings: "tnum" 1`).
     - Implement SC 1.4.8 visual presentation constraints: `max-width: 68ch` on prose, `line-height: 1.55`, `margin-bottom: 2.25em` on paragraphs, left-aligned only (`text-align: left`).
 
-- [x] **Task 7.3: Universal 44×44px Interactive Primitives (SC 2.5.5 Level AAA)**
+- [~] **Task 7.3: Universal 44×44px Interactive Primitives (SC 2.5.5 Level AAA)**
     - Implement unified `ButtonComponent` (`frontend/src/app/shared/components/button/button.component.ts`) with variant-driven styling, guaranteed `min-height: 44px; min-width: 44px;`, and $\ge 8\text{px}$ touch envelopes:
         - Variant `primary`: Deep Amaranth button with `#ffffff` text (**7.67:1** contrast).
         - Variant `yes` / `no`: Dual-coded outcome selector buttons.
@@ -274,7 +275,7 @@ Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBr
     - Additional shared primitives: `DialogComponent`, `InputComponent`, `SelectComponent`, `SwitchComponent`, `BadgeComponent`, `LabelComponent`, `TextareaComponent`, `ToastComponent`, `AvatarComponent`.
     - _Note: Feature-specific chip compositions (`QuickAmountChipComponent`, `ChartIntervalChipComponent`) are delivered in Phase 8 alongside their consuming views._
 
-- [x] **Task 7.4: Navigation Shell & Focus Visibility (SC 2.4.12 & SC 2.4.13 Level AAA)**
+- [~] **Task 7.4: Navigation Shell & Focus Visibility (SC 2.4.12 & SC 2.4.13 Level AAA)**
     - Implement `TopHeaderDockComponent`:
         - Left: BayesMarket brand emblem and navigation links.
         - Right: Guest balance pill (`"$1,000.00 USDC"` in JetBrains Mono), `[+ Claim]` button, live WebSocket pulse indicator.
@@ -304,14 +305,14 @@ Implement the institutional-grade design system stylesheet, Scoutie Sans + JetBr
 
 Assemble the TradingView candlestick/probability chart, the real-time Order Execution Terminal, and the mandatory WCAG 2.2 SC 3.3.6 Two-Step Order Confirmation Review Dialog.
 
-- [x] **Task 8.1: TradingView Lightweight Charts Integration**
+- [~] **Task 8.1: TradingView Lightweight Charts Integration**
     - Create `frontend/src/app/features/charts/price-chart.component.ts`:
         - Wraps `lightweight-charts` inside an Angular Signal component.
         - Renders probability timeline curve ($0\%$ to $100\%$) with hardware-accelerated 60fps canvas.
         - Supports timeframe selector (`1H`, `1D`, `1W`, `ALL`) via 44×44px chips.
         - Updates dynamically from WebSocket `PRICE_UPDATE` events without triggering Angular change-detection cycles.
 
-- [x] **Task 8.2: Order Execution Terminal & Real-Time Slippage Drawer**
+- [~] **Task 8.2: Order Execution Terminal & Real-Time Slippage Drawer**
     - Create `frontend/src/app/features/terminal/order-terminal.component.ts`:
         - Segmented outcome toggle: `[BUY YES]` vs `[BUY NO]` (dual-coded with `▲` and `▼` glyphs).
         - Numerical USDC amount input with embedded `MAX` chip.
@@ -322,14 +323,14 @@ Assemble the TradingView candlestick/probability chart, the real-time Order Exec
             - Slippage warning badge (Green $< 1.0\%$, Amber $1.0\%–3.0\%$, Crimson $> 3.0\%$).
             - Potential percentage return (`+36.9%`).
 
-- [x] **Task 8.3: Two-Step Financial Order Confirmation Dialog (SC 3.3.6 Level AAA)**
+- [~] **Task 8.3: Two-Step Financial Order Confirmation Dialog (SC 3.3.6 Level AAA)**
     - Create `frontend/src/app/features/terminal/order-confirm-dialog.component.ts`:
         - Triggered when the user clicks `"Trade $100.00 on YES"`.
         - Traps keyboard focus (`inert` attribute on parent containers) and prevents accidental one-click submissions.
         - Summarizes: Market question, Outcome (`▲ YES`), USDC deposit, Estimated shares received, Avg execution price, Max slippage tolerance, and Post-trade cash balance.
         - Actions: `"Confirm & Place Trade"` (`ButtonPrimary`) and `"Edit Order"` (dismisses dialog and refocuses input).
 
-- [x] **Task 8.4: Market Discovery Grid & Jargon Glossary Popovers**
+- [~] **Task 8.4: Market Discovery Grid & Jargon Glossary Popovers**
     - Implement `MarketCardComponent` in discovery catalog:
         - Dual probability split bar (72% Green / 28% Red track).
         - High-contrast probability pills (`▲ 72¢ YES` / `▼ 28¢ NO`).
@@ -353,19 +354,19 @@ Assemble the TradingView candlestick/probability chart, the real-time Order Exec
 
 Build the portfolio position tracker, "Cash Out" AMM liquidation flow, automated oracle market resolution, responsive mobile audits, and production packaging.
 
-- [x] **Task 9.1: Portfolio Ledger & Real-Time Position Accounting**
+- [~] **Task 9.1: Portfolio Ledger & Real-Time Position Accounting**
     - Create `frontend/src/app/features/portfolio/portfolio-view.component.ts`:
         - Summary metrics: Total Portfolio Value, Cash Balance, Active Positions Count, Total Unrealized PnL.
         - Positions table: Market Name, Outcome (`▲ YES` / `▼ NO`), Shares Owned, Avg Entry Price, Current Spot Price, Market Value, and PnL badge.
         - Each position row includes a 44×44px `"Cash Out"` button.
 
-- [x] **Task 9.2: 1-Tap "Cash Out" AMM Liquidation Workflow**
+- [~] **Task 9.2: 1-Tap "Cash Out" AMM Liquidation Workflow**
     - Implement Cash Out interaction modal:
         - Calculates expected USDC proceeds from selling shares back into the AMM pool.
         - Confirms liquidation with the user.
         - Calls `POST /api/v1/portfolio/cashout` and updates cash balance and position tables in real time via Angular Signals.
 
-- [x] **Task 9.3: Oracle Market Resolution & Payout Distribution Engine**
+- [~] **Task 9.3: Oracle Market Resolution & Payout Distribution Engine**
     - Create `backend/internal/transport/rest/admin_handler.go` (`POST /api/v1/admin/markets/:id/resolve`):
         - Accepts `{ winning_outcome: "YES"|"NO", oracle_proof: "..." }`.
         - Requires an authenticated admin role and `Idempotency-Key`; records the oracle proof before any payout.
@@ -373,12 +374,12 @@ Build the portfolio position tracker, "Cash Out" AMM liquidation flow, automated
         - In-memory 60-second caching for external oracle source responses.
         - Broadcasts `MARKET_RESOLVED` event over WebSockets to trigger client celebration banners and badge state transitions.
 
-- [x] **Task 9.4: Multi-Device Responsive Ergonomics & Zoom Reflow Audit**
+- [~] **Task 9.4: Multi-Device Responsive Ergonomics & Zoom Reflow Audit**
     - Audit mobile view (375px–430px): Order terminal docks cleanly to bottom 45% of viewport with thumb-zone ergonomics.
     - Audit tablet view (768px–1024px): 2-column split with sticky chart and order book.
     - Test browser zoom up to 200%: Verify 3-column desktop layout gracefully reflows to single-column without horizontal scrolling (SC 1.4.8).
 
-- [x] **Task 9.5: Automated Testing, Telemetry & Health Endpoints**
+- [~] **Task 9.5: Automated Testing, Telemetry & Health Endpoints**
     - Implement `/healthz` (liveness) and `/metrics` (Prometheus telemetry) endpoints.
     - Run full test suite: backend tests (`go test ./...`) and frontend production build (`pnpm build`).
 

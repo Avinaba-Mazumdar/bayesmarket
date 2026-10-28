@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideShield, LucideLock, LucideArrowLeft, LucideFileText, LucideDatabase, LucideServer } from '@lucide/angular';
 import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-icon.component';
+import { ApiService } from '../../../core/services/api.service';
+import { AuthStore } from '../../../state/auth.store';
+import { ToastService } from '../../../shared/components/toast/toast.service';
 
 @Component({
     selector: 'app-privacy-policy',
@@ -107,9 +110,9 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                                 <h3>Abuse Mitigation & IP Addresses</h3>
                             </div>
                             <p>
-                                Client IP addresses are evaluated by in-memory rate limiters and claim cooldown engines (e.g. enforcing our 24-hour claim
-                                interval and anti-DDoS thresholds). IP addresses in database claim records are stored for operational integrity and are not
-                                linked to advertising profiles.
+                                Client IP addresses are evaluated by in-memory rate limiters and claim cooldown engines (the 24-hour claim interval and abuse
+                                thresholds). An IP stored on a claim or account row is kept for 30 days, then replaced with a redacted value or cleared. These
+                                addresses are not used for advertising.
                             </p>
                         </div>
                     </div>
@@ -129,8 +132,14 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                             mode) locally on your device for immediate rendering upon return.
                         </li>
                         <li>
-                            <strong>Zero Tracking Cookies:</strong> We do not issue cross-domain tracking cookies. Session state is passed explicitly via HTTP
-                            <code>Authorization</code> request headers, preventing cookie hijacking across subdomains.
+                            <strong>Refresh cookie (<code>bm_refresh</code>):</strong> An HttpOnly cookie, scoped to <code>/api/v1/auth</code>, keeps you signed
+                            in after the one-hour access token expires. It is sent only to the auth endpoints. Production uses <code>SameSite=Lax</code> on the
+                            site that serves the app, so the cookie is first-party. A split-origin deploy that sets <code>COOKIE_SAMESITE=none</code> is dropped
+                            by browsers that block third-party cookies.
+                        </li>
+                        <li>
+                            <strong>OAuth state cookie (<code>bm_oauth_state</code>):</strong> A short-lived HttpOnly cookie binds a Google sign-in attempt to
+                            the browser that started it.
                         </li>
                     </ul>
                 </section>
@@ -139,7 +148,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                 <section class="legal-section" aria-labelledby="sec-providers">
                     <h2 id="sec-providers" class="section-heading">4. Infrastructure & Third-Party Service Providers</h2>
                     <p>BayesMarket utilizes high-reliability, security-hardened cloud providers to host its open-source infrastructure:</p>
-                    <div class="table-wrapper">
+                    <div class="table-wrapper" tabindex="0" role="region" aria-label="Third-party service providers table">
                         <table class="legal-table" aria-label="Third-party service providers and their data processing scope">
                             <thead>
                                 <tr>
@@ -205,17 +214,39 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                     </p>
                     <ul class="legal-list">
                         <li>
-                            <strong>Right to Deletion:</strong> You may request complete erasure of your user profile and simulation trading history at any
-                            time.
+                            <strong>Right to deletion:</strong> You can remove email, name, avatar, Google id, and stored IP addresses from the signed-in
+                            account, and revoke its sessions. Cash, positions, and ledger rows stay so the books still balance.
                         </li>
                         <li>
-                            <strong>Right of Access:</strong> You may request an export of all simulated trades, balances, and profile attributes associated
-                            with your email.
+                            <strong>Right of access:</strong> You may request an export of simulated trades, balances, and profile attributes associated with
+                            your email.
                         </li>
                         <li>
-                            <strong>Ephemeral Session Lifecycle:</strong> Inactive guest trading sessions are automatically purged after 7 days of inactivity.
+                            <strong>Retention:</strong> IP addresses are redacted after 30 days. Refresh sessions and idempotency receipts are deleted after 7
+                            days when the database role is allowed to delete. Guest accounts are not purged on a timer.
                         </li>
                     </ul>
+                </section>
+
+                <section class="legal-section" aria-labelledby="sec-delete">
+                    <h2 id="sec-delete" class="section-heading">Delete this account</h2>
+                    <p>This removes personal data from the account on this device and revokes its sessions. Type DELETE to confirm. Ledger rows are kept.</p>
+                    @if (signedIn()) {
+                        <label class="delete-label" for="delete-confirm">Confirmation</label>
+                        <input
+                            id="delete-confirm"
+                            class="delete-input"
+                            type="text"
+                            autocomplete="off"
+                            [value]="confirmText()"
+                            (input)="onConfirmInput($event)"
+                        />
+                        <button type="button" class="delete-button" [disabled]="deleting()" (click)="deleteAccount()">
+                            {{ deleting() ? 'Deleting…' : 'Delete account' }}
+                        </button>
+                    } @else {
+                        <p>Sign in to delete the account on this device.</p>
+                    }
                 </section>
 
                 <!-- Section 7: Contact Information -->
@@ -238,6 +269,23 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
         </div>
     `,
     styles: [
+        `
+            .delete-label,
+            .delete-input,
+            .delete-button {
+                display: block;
+            }
+            .delete-input,
+            .delete-button {
+                min-height: 44px;
+                min-width: 44px;
+            }
+            .delete-input {
+                width: min(100%, 280px);
+                margin: 8px 0 12px;
+                padding: 8px 12px;
+            }
+        `,
         `
             :host {
                 display: block;
@@ -521,4 +569,40 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
         `
     ]
 })
-export class PrivacyPolicyComponent {}
+export class PrivacyPolicyComponent {
+    private readonly auth = inject(AuthStore);
+    private readonly api = inject(ApiService);
+    private readonly toast = inject(ToastService);
+
+    readonly confirmText = signal('');
+    readonly deleting = signal(false);
+    readonly signedIn = this.auth.isAuthenticated;
+
+    onConfirmInput(event: Event): void {
+        const target = event.target;
+        this.confirmText.set(target instanceof HTMLInputElement ? target.value : '');
+    }
+
+    deleteAccount(): void {
+        if (this.confirmText().trim() !== 'DELETE') {
+            this.toast.error('Confirmation required', 'Type DELETE to remove personal data from this account.');
+            return;
+        }
+        const token = this.auth.token();
+        if (!token) {
+            this.toast.error('Sign in required', 'Sign in before deleting an account.');
+            return;
+        }
+        this.deleting.set(true);
+        this.api.deleteAccount(token).subscribe({
+            next: () => {
+                this.deleting.set(false);
+                this.auth.logout();
+            },
+            error: (err: { error?: { message?: string } }) => {
+                this.deleting.set(false);
+                this.toast.error('Could not delete the account', err?.error?.message || 'Try again.');
+            }
+        });
+    }
+}

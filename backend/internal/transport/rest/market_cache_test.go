@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/transport/rest"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/rest"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )

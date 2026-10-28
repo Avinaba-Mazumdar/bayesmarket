@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/database"
-	"github.com/bayesmarket/bayesmarket/internal/testutil"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/database"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
@@ -82,46 +82,6 @@ func TestSchemaConstraints_ZeroOrNegativeReserves(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "chk_positive_reserves") {
 		t.Fatalf("Expected error to mention 'chk_positive_reserves', got: %v", err)
-	}
-}
-
-func TestSeedMarkets_Verification(t *testing.T) {
-	pool := getTestPool(t)
-	defer pool.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var count int
-	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM markets WHERE status = 'active'").Scan(&count)
-	if err != nil {
-		t.Fatalf("Failed to query active markets: %v", err)
-	}
-
-	if count < 4 {
-		t.Fatalf("Expected at least 4 seeded prediction markets, found %d", count)
-	}
-
-	// Verify OpenAI GPT-5 market specific CPMM invariant
-	var reserveYes, reserveNo, collateral decimal.Decimal
-	err = pool.QueryRow(ctx, `
-		SELECT p.reserve_yes, p.reserve_no, p.collateral_reserve
-		FROM markets m
-		JOIN liquidity_pools p ON p.market_id = m.id
-		WHERE m.slug = 'will-openai-release-gpt-5-in-2026'
-	`).Scan(&reserveYes, &reserveNo, &collateral)
-	if err != nil {
-		t.Fatalf("Failed to query GPT-5 market pool: %v", err)
-	}
-
-	if !reserveYes.Equal(decimal.NewFromInt(12000)) {
-		t.Errorf("Expected reserve_yes=12000, got %s", reserveYes.String())
-	}
-	if !reserveNo.Equal(decimal.NewFromInt(8000)) {
-		t.Errorf("Expected reserve_no=8000, got %s", reserveNo.String())
-	}
-	if !collateral.Equal(decimal.NewFromInt(20000)) {
-		t.Errorf("Expected collateral=20000, got %s", collateral.String())
 	}
 }
 

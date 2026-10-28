@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"compress/gzip"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,63 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
-	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-type gzipWriter struct {
-	gin.ResponseWriter
-	writer *gzip.Writer
-}
-
-func (g *gzipWriter) WriteHeader(code int) {
-	g.Header().Del("Content-Length")
-	g.ResponseWriter.WriteHeader(code)
-}
-
-func (g *gzipWriter) WriteHeaderNow() {
-	g.Header().Del("Content-Length")
-	g.ResponseWriter.WriteHeaderNow()
-}
-
-func (g *gzipWriter) Write(data []byte) (int, error) {
-	g.Header().Del("Content-Length")
-	return g.writer.Write(data)
-}
-
-func (g *gzipWriter) WriteString(s string) (int, error) {
-	g.Header().Del("Content-Length")
-	return g.writer.Write([]byte(s))
-}
-
-// gzipMiddleware compresses HTTP responses using gzip when supported by the client.
-func gzipMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, "/api/") ||
-			!strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") ||
-			strings.Contains(c.GetHeader("Connection"), "Upgrade") ||
-			strings.HasPrefix(c.Request.URL.Path, "/ws") {
-			c.Next()
-			return
-		}
-
-		gz, err := gzip.NewWriterLevel(c.Writer, gzip.DefaultCompression)
-		if err != nil {
-			c.Next()
-			return
-		}
-		defer gz.Close()
-
-		c.Header("Content-Encoding", "gzip")
-		c.Header("Vary", "Accept-Encoding")
-		c.Writer.Header().Del("Content-Length")
-		c.Writer = &gzipWriter{ResponseWriter: c.Writer, writer: gz}
-		c.Next()
-	}
-}
 
 // maxBodySizeMiddleware restricts incoming HTTP request bodies to prevent DoS via payload exhaustion.
 func maxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
@@ -150,11 +98,7 @@ func checkCORSOrigin(origin string, allowedOrigins []string, isDev bool) (allowe
 }
 
 // SetupRouter constructs and configures the Gin HTTP engine with all REST routes, WebSocket endpoints, and middleware.
-func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin.Engine {
-	var hub *ws.Hub
-	if len(hubOpt) > 0 && hubOpt[0] != nil {
-		hub = hubOpt[0]
-	}
+func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hub *ws.Hub) *gin.Engine {
 
 	isDevOrLocal := true
 	corsOrigin := "*"
@@ -189,7 +133,6 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin
 		securityHeadersMiddleware(isDevOrLocal),
 		redactedLogger(),
 		gin.Recovery(),
-		gzipMiddleware(),
 		maxBodySizeMiddleware(1<<20), // 1MB payload ceiling
 	)
 
@@ -252,7 +195,6 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin
 		wsHandler := ws.NewWSHandler(hub, corsOrigin, isDevOrLocal)
 		router.GET("/ws/markets/:id", wsHandler.HandleMarketWS)
 		router.GET("/ws/markets", wsHandler.HandleGlobalWS)
-		router.GET("/ws", wsHandler.HandleGlobalWS)
 	}
 
 	// Health check endpoints (unlimited, for keep-alive cron jobs, load balancers, and orchestrators)
@@ -282,9 +224,7 @@ func SetupRouter(pool *pgxpool.Pool, cfg *config.Config, hubOpt ...*ws.Hub) *gin
 	}
 
 	router.GET("/healthz", healthHandler)
-	router.GET("/health", healthHandler)
 	router.HEAD("/healthz", healthHandler)
-	router.HEAD("/health", healthHandler)
 
 	// Prometheus metrics endpoint (requires Admin JWT auth)
 	router.GET("/metrics", middleware.RequireAdminAuth(jwtSecret, pool), func(c *gin.Context) {
@@ -342,6 +282,7 @@ bayesmarket_up 1
 			auth.GET("/me", middleware.RequireAuth(jwtSecret), publicReadLimiter.LimitByIP(), authHandler.HandleGetMe)
 			auth.POST("/refresh", actionLimiter.LimitByClientOrUser(), authHandler.HandleRefresh)
 			auth.POST("/logout", publicReadLimiter.LimitByIP(), authHandler.HandleLogout)
+			auth.POST("/account/delete", middleware.RequireAuth(jwtSecret), actionLimiter.LimitByClientOrUser(), authHandler.HandleDeleteAccount)
 		}
 
 		// 2. Markets, Quotes & Orders
@@ -361,11 +302,6 @@ bayesmarket_up 1
 
 		// 3. Balance claim (Protected)
 		v1.POST("/claim",
-			middleware.RequireAuth(jwtSecret),
-			actionLimiter.LimitByClientOrUser(),
-			claimHandler.HandleClaim,
-		)
-		v1.POST("/faucet",
 			middleware.RequireAuth(jwtSecret),
 			actionLimiter.LimitByClientOrUser(),
 			claimHandler.HandleClaim,
@@ -401,10 +337,6 @@ bayesmarket_up 1
 			admin.PUT("/markets/:id",
 				middleware.RequireAdminAuth(jwtSecret, pool),
 				adminHandler.HandleEditMarket,
-			)
-			admin.DELETE("/markets/:id",
-				middleware.RequireAdminAuth(jwtSecret, pool),
-				adminHandler.HandleDeleteMarket,
 			)
 			admin.POST("/markets/:id/void",
 				middleware.RequireAdminAuth(jwtSecret, pool),

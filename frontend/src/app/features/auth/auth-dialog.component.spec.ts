@@ -13,7 +13,13 @@ describe('AuthDialogComponent', () => {
         createGuestSession: any;
         verifyGoogleToken: any;
         getGoogleAuthUrl: any;
-        getCurrentUser: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
+        getCurrentUser: any;
+        refreshSession: any;
+        endSession: any;
+        getMarketCategories: any;
+        getMarketTrades: any;
+        getMarketHistory: any;
+    };
 
     beforeEach(async () => {
         apiServiceSpy = {

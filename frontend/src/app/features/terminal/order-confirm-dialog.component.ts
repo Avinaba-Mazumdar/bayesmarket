@@ -97,8 +97,8 @@ import { OrderIntent } from './order-terminal.component';
                     <div class="reversibility-notice" role="note">
                         <svg lucideInfo class="notice-icon" [size]="16" aria-hidden="true"></svg>
                         <span>
-                            Orders fill at the quoted price, or the order is rejected. You can sell shares back to the pool at any time before the market resolves,
-                            but a large sale moves the price against you.
+                            Orders fill at the quoted price, or the order is rejected. You can sell shares back to the pool at any time before the market
+                            resolves, but a large sale moves the price against you.
                         </span>
                     </div>
                 </div>

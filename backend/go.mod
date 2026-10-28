@@ -1,4 +1,4 @@
-module github.com/bayesmarket/bayesmarket
+module github.com/Avinaba-Mazumdar/bayesmarket
 
 go 1.27.1
 

@@ -13,14 +13,7 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
     template: `
         <div [class]="containerClass()" [attr.aria-label]="ariaLabelText()">
             @if (showImage()) {
-                <img
-                    [src]="src()"
-                    [alt]="alt()"
-                    class="avatar-image"
-                    referrerpolicy="no-referrer"
-                    (error)="onImageError()"
-                    (load)="onImageLoad()"
-                />
+                <img [src]="src()" [alt]="alt()" class="avatar-image" referrerpolicy="no-referrer" (error)="onImageError()" (load)="onImageLoad()" />
             } @else {
                 <span class="avatar-fallback" aria-hidden="true">
                     @if (initials()) {

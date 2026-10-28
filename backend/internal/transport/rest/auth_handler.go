@@ -5,11 +5,13 @@ import (
 	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -19,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/config"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/config"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -36,15 +38,19 @@ var ErrAccountConflict = errors.New("an account with this email already exists; 
 type AuthHandler struct {
 	pool               *pgxpool.Pool
 	jwtSecret          string
+	oauthStateSecret   string
 	googleClientID     string
 	googleClientSecret string
 	googleRedirectURI  string
 	httpClient         *http.Client
 	isDevOrLocal       bool
+	cookieSameSite     http.SameSite
 
-	jwksMu     sync.RWMutex
-	jwksKeys   map[string]*rsa.PublicKey
-	jwksExpiry time.Time
+	jwksMu            sync.RWMutex
+	jwksFetchMu       sync.Mutex
+	jwksKeys          map[string]*rsa.PublicKey
+	jwksExpiry        time.Time
+	jwksMissLimitedAt time.Time
 }
 
 // NewAuthHandler constructs an AuthHandler with configuration.
@@ -54,6 +60,8 @@ func NewAuthHandler(pool *pgxpool.Pool, cfg *config.Config) *AuthHandler {
 	googleRedirectURI := "http://localhost:4200/auth/callback"
 	jwtSecret := config.EphemeralJWTSecret()
 	isDevOrLocal := false
+	cookieSameSite := http.SameSiteLaxMode
+	oauthStateSecret := config.EphemeralJWTSecret()
 
 	if cfg != nil {
 		if cfg.JWTSecret != "" {
@@ -65,15 +73,23 @@ func NewAuthHandler(pool *pgxpool.Pool, cfg *config.Config) *AuthHandler {
 			googleRedirectURI = cfg.GoogleRedirectURI
 		}
 		isDevOrLocal = cfg.IsDevOrLocal()
+		if cfg.OAuthStateSecret != "" {
+			oauthStateSecret = cfg.OAuthStateSecret
+		}
+		if cfg.CookieSameSite == "none" {
+			cookieSameSite = http.SameSiteNoneMode
+		}
 	}
 
 	return &AuthHandler{
 		pool:               pool,
 		jwtSecret:          jwtSecret,
+		oauthStateSecret:   oauthStateSecret,
 		googleClientID:     googleClientID,
 		googleClientSecret: googleClientSecret,
 		googleRedirectURI:  googleRedirectURI,
 		isDevOrLocal:       isDevOrLocal,
+		cookieSameSite:     cookieSameSite,
 		jwksKeys:           make(map[string]*rsa.PublicKey),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
@@ -89,7 +105,6 @@ type UserResponse struct {
 	AvatarURL    *string `json:"avatar_url,omitempty"`
 	IsGuest      bool    `json:"is_guest"`
 	IsAdmin      bool    `json:"is_admin"`
-	IsSuperadmin bool    `json:"is_superadmin,omitempty"`
 	AuthProvider string  `json:"auth_provider"`
 	CashBalance  string  `json:"cash_balance"`
 	CreatedAt    string  `json:"created_at"`
@@ -171,10 +186,7 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 	if err != nil {
 		log.Printf("[HandleGuestAuth] Database insert error: %v (clientIP: %s)\n", err, clientIP)
 		if errors.Is(err, pgx.ErrNoRows) {
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":   "guest_limit_exceeded",
-				"message": "Maximum guest accounts created for this IP address today. Please sign in or try again later.",
-			})
+			respondError(c, http.StatusTooManyRequests, "guest_limit_exceeded", "Maximum guest accounts created for this IP address today. Please sign in or try again later.")
 			return
 		}
 		resp := gin.H{
@@ -188,12 +200,9 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 		return
 	}
 
-	tokenString, err := h.generateJWT(userID.String(), isGuest, false, "", "", "", authProvider)
+	tokenString, err := h.generateJWT(userID.String(), isGuest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "auth_error",
-			"message": "Failed to sign authentication token",
-		})
+		respondError(c, http.StatusInternalServerError, "auth_error", "Failed to sign authentication token")
 		return
 	}
 
@@ -203,7 +212,6 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 		User: UserResponse{
 			ID:           userID.String(),
 			IsGuest:      isGuest,
-			IsSuperadmin: false,
 			IsAdmin:      false,
 			AuthProvider: authProvider,
 			CashBalance:  cashBalance.StringFixed(8),
@@ -219,10 +227,7 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 	var req GoogleVerifyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_request",
-			"message": "id_token is required",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_request", "id_token is required")
 		return
 	}
 
@@ -240,10 +245,7 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 	isMockToken := strings.HasPrefix(req.IDToken, "mock-") || strings.HasPrefix(req.IDToken, "dev-")
 	if isMockToken {
 		if !h.isDevOrLocal {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "dev_mode_disabled",
-				"message": "Dev mock authentication tokens are only allowed when APP_ENV=local or dev",
-			})
+			respondError(c, http.StatusForbidden, "dev_mode_disabled", "Dev mock authentication tokens are only allowed when APP_ENV=local or dev")
 			return
 		}
 		googleID = "google-mock-" + fmt.Sprintf("%x", sha256.Sum256([]byte(req.IDToken)))[:16]
@@ -258,10 +260,7 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 		avatarURL = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80"
 	} else if h.googleClientID == "" {
 		if !h.isDevOrLocal {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "oauth_not_configured",
-				"message": "Google OAuth is not configured in this environment",
-			})
+			respondError(c, http.StatusServiceUnavailable, "oauth_not_configured", "Google OAuth is not configured in this environment")
 			return
 		}
 		googleID = "google-mock-" + fmt.Sprintf("%x", sha256.Sum256([]byte(req.IDToken)))[:16]
@@ -278,18 +277,12 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 		// Verify token with Google TokenInfo endpoint
 		tokenInfo, err := h.verifyGoogleIDToken(ctx, req.IDToken)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "invalid_token",
-				"message": "Failed to verify Google identity token",
-			})
+			respondError(c, http.StatusUnauthorized, "invalid_token", "Failed to verify Google identity token")
 			return
 		}
 
 		if h.googleClientID != "" && tokenInfo.Aud != h.googleClientID {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "invalid_audience",
-				"message": "Google token audience mismatch",
-			})
+			respondError(c, http.StatusUnauthorized, "invalid_audience", "Google token audience mismatch")
 			return
 		}
 
@@ -303,10 +296,7 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 	if err != nil {
 		log.Printf("[HandleGoogleAuthVerify] upsertGoogleUser error: %v\n", err)
 		if errors.Is(err, ErrAccountConflict) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "account_conflict",
-				"message": err.Error(),
-			})
+			respondError(c, http.StatusConflict, "account_conflict", err.Error())
 			return
 		}
 		resp := gin.H{
@@ -320,12 +310,9 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 		return
 	}
 
-	tokenString, err := h.generateJWT(user.ID, false, user.IsSuperadmin, email, name, avatarURL, "google")
+	tokenString, err := h.generateJWT(user.ID, false)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "auth_error",
-			"message": "Failed to sign authentication token",
-		})
+		respondError(c, http.StatusInternalServerError, "auth_error", "Failed to sign authentication token")
 		return
 	}
 
@@ -358,16 +345,16 @@ func (h *AuthHandler) HandleGoogleAuthURL(c *gin.Context) {
 		return
 	}
 
-	state := h.generateOAuthState()
+	state := h.issueOAuthState(c)
 	redirectURI := url.QueryEscape(h.googleRedirectURI)
 	scope := url.QueryEscape("openid email profile")
 
 	authURL := fmt.Sprintf(
-		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s&access_type=offline&prompt=select_account",
+		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s&prompt=select_account",
 		h.googleClientID,
 		redirectURI,
 		scope,
-		state,
+		url.QueryEscape(state),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -377,19 +364,63 @@ func (h *AuthHandler) HandleGoogleAuthURL(c *gin.Context) {
 	})
 }
 
-// generateOAuthState produces a cryptographically HMAC-SHA256 signed, timestamped state token.
-func (h *AuthHandler) generateOAuthState() string {
+const oauthStateCookie = "bm_oauth_state"
+
+// issueOAuthState signs a state token with the OAuth state key and binds it to this browser
+// with an HttpOnly cookie. The callback must present the same cookie.
+func (h *AuthHandler) issueOAuthState(c *gin.Context) string {
+	state := h.signOAuthState()
+	secure := !h.isDevOrLocal || h.cookieSameSite == http.SameSiteNoneMode
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    state,
+		Path:     "/api/v1/auth",
+		MaxAge:   900,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: h.cookieSameSite,
+	})
+	return state
+}
+
+func (h *AuthHandler) clearOAuthStateCookie(c *gin.Context) {
+	secure := !h.isDevOrLocal || h.cookieSameSite == http.SameSiteNoneMode
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    "",
+		Path:     "/api/v1/auth",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: h.cookieSameSite,
+	})
+}
+
+func (h *AuthHandler) signOAuthState() string {
 	timestamp := time.Now().Unix()
 	nonce := uuid.New().String()
 	data := fmt.Sprintf("%s:%d", nonce, timestamp)
-	mac := hmac.New(sha256.New, []byte(h.jwtSecret))
+	mac := hmac.New(sha256.New, []byte(h.oauthStateSecret))
 	mac.Write([]byte(data))
 	sig := hex.EncodeToString(mac.Sum(nil))
 	return fmt.Sprintf("%s.%s", base64.RawURLEncoding.EncodeToString([]byte(data)), sig)
 }
 
-// validateOAuthState validates that the provided state token was signed with jwtSecret and has not expired.
-func (h *AuthHandler) validateOAuthState(state string) bool {
+// consumeOAuthState checks the MAC, the expiry, and the browser cookie, then clears the cookie.
+func (h *AuthHandler) consumeOAuthState(c *gin.Context, state string) bool {
+	defer h.clearOAuthStateCookie(c)
+	if !h.oauthStateMACValid(state) {
+		return false
+	}
+	cookie, err := c.Cookie(oauthStateCookie)
+	if err != nil || subtle.ConstantTimeCompare([]byte(cookie), []byte(state)) != 1 {
+		return false
+	}
+	return true
+}
+
+// oauthStateMACValid checks the HMAC and the 15-minute lifetime. It does not check the browser cookie.
+func (h *AuthHandler) oauthStateMACValid(state string) bool {
 	if state == "" {
 		return false
 	}
@@ -401,7 +432,7 @@ func (h *AuthHandler) validateOAuthState(state string) bool {
 	if err != nil {
 		return false
 	}
-	mac := hmac.New(sha256.New, []byte(h.jwtSecret))
+	mac := hmac.New(sha256.New, []byte(h.oauthStateSecret))
 	mac.Write(dataBytes)
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(parts[1]), []byte(expectedSig)) {
@@ -429,29 +460,20 @@ func (h *AuthHandler) validateOAuthState(state string) bool {
 func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 	var req GoogleCallbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_request",
-			"message": "code is required",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_request", "code is required")
 		return
 	}
 
 	// Validate OAuth state parameter to prevent cross-site request forgery
 	if req.State == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_state",
-			"message": "OAuth state parameter is required",
-		})
+		respondError(c, http.StatusBadRequest, "invalid_state", "OAuth state parameter is required")
 		return
 	}
 
 	isMockCode := strings.HasPrefix(req.Code, "mock-")
-	if !h.validateOAuthState(req.State) {
+	if !h.consumeOAuthState(c, req.State) {
 		if !(h.isDevOrLocal && (req.State == "mock-state" || isMockCode)) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "invalid_state",
-				"message": "OAuth state is invalid or has expired",
-			})
+			respondError(c, http.StatusBadRequest, "invalid_state", "OAuth state is invalid or has expired")
 			return
 		}
 	}
@@ -462,10 +484,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 	// If dev mode or mock code, bypass with mock user (only allowed in local/dev)
 	if h.googleClientID == "" || isMockCode {
 		if !h.isDevOrLocal {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "dev_mode_disabled",
-				"message": "Dev mock authentication codes are only allowed when APP_ENV=local or dev",
-			})
+			respondError(c, http.StatusForbidden, "dev_mode_disabled", "Dev mock authentication codes are only allowed when APP_ENV=local or dev")
 			return
 		}
 		mockGoogleID := "google-mock-" + fmt.Sprintf("%x", sha256.Sum256([]byte(req.Code)))[:16]
@@ -473,10 +492,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 		if err != nil {
 			log.Printf("[HandleGoogleAuthCallback] mock upsertGoogleUser error: %v\n", err)
 			if errors.Is(err, ErrAccountConflict) {
-				c.JSON(http.StatusConflict, gin.H{
-					"error":   "account_conflict",
-					"message": err.Error(),
-				})
+				respondError(c, http.StatusConflict, "account_conflict", err.Error())
 				return
 			}
 			resp := gin.H{"error": "database_error", "message": "Failed to create user session"}
@@ -486,7 +502,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, resp)
 			return
 		}
-		tokenString, _ := h.generateJWT(user.ID, false, user.IsAdmin, "oauth.trader@bayesmarket.com", "OAuth Trader", "", "google")
+		tokenString, _ := h.generateJWT(user.ID, false)
 		h.attachRefreshSession(c, user.ID)
 		c.JSON(http.StatusOK, AuthResponse{Token: tokenString, User: *user})
 		return
@@ -500,12 +516,15 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 	data.Set("redirect_uri", h.googleRedirectURI)
 	data.Set("grant_type", "authorization_code")
 
-	resp, err := h.httpClient.PostForm("https://oauth2.googleapis.com/token", data)
+	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(data.Encode()))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "oauth_error",
-			"message": "Failed to communicate with Google token endpoint",
-		})
+		respondError(c, http.StatusInternalServerError, "oauth_error", "Failed to communicate with Google token endpoint")
+		return
+	}
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := h.httpClient.Do(tokenReq)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "oauth_error", "Failed to communicate with Google token endpoint")
 		return
 	}
 	defer resp.Body.Close()
@@ -515,20 +534,14 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 		Error   string `json:"error_description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokenRes); err != nil || tokenRes.IDToken == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "oauth_error",
-			"message": "Failed to exchange authorization code for Google token",
-		})
+		respondError(c, http.StatusUnauthorized, "oauth_error", "Failed to exchange authorization code for Google token")
 		return
 	}
 
 	// Verify the received ID token
 	tokenInfo, err := h.verifyGoogleIDToken(ctx, tokenRes.IDToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "invalid_token",
-			"message": "Failed to verify exchanged Google token",
-		})
+		respondError(c, http.StatusUnauthorized, "invalid_token", "Failed to verify exchanged Google token")
 		return
 	}
 
@@ -536,10 +549,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 	if err != nil {
 		log.Printf("[Auth GoogleLogin] user profile upsert error: %v", err)
 		if errors.Is(err, ErrAccountConflict) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "account_conflict",
-				"message": err.Error(),
-			})
+			respondError(c, http.StatusConflict, "account_conflict", err.Error())
 			return
 		}
 		resp := gin.H{
@@ -553,12 +563,9 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 		return
 	}
 
-	tokenString, err := h.generateJWT(user.ID, false, user.IsSuperadmin, tokenInfo.Email, tokenInfo.Name, tokenInfo.Picture, "google")
+	tokenString, err := h.generateJWT(user.ID, false)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "auth_error",
-			"message": "Failed to sign authentication token",
-		})
+		respondError(c, http.StatusInternalServerError, "auth_error", "Failed to sign authentication token")
 		return
 	}
 
@@ -575,10 +582,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "unauthorized",
-			"message": "Authentication required",
-		})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
 
@@ -607,16 +611,10 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "User session is invalid or user no longer exists",
-			})
+			respondError(c, http.StatusUnauthorized, "unauthorized", "User session is invalid or user no longer exists")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "database_error",
-			"message": "Failed to retrieve user profile",
-		})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to retrieve user profile")
 		return
 	}
 
@@ -627,7 +625,6 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 		AvatarURL:    avatarURL,
 		IsGuest:      isGuest,
 		IsAdmin:      isAdmin,
-		IsSuperadmin: isAdmin,
 		AuthProvider: authProvider,
 		CashBalance:  cashBalance.StringFixed(8),
 		CreatedAt:    createdAt.Format(time.RFC3339),
@@ -637,40 +634,70 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 // GoogleJWKSURL is the Google public certificates endpoint for RS256 ID token verification.
 var GoogleJWKSURL = "https://www.googleapis.com/oauth2/v3/certs"
 
-// getGooglePublicKey fetches and caches Google's public RSA keys from its official JWKS endpoint.
+// getGooglePublicKey returns Google's RSA key for kid. A fresh cache miss is rate-limited,
+// and the network fetch does not hold the map lock.
 func (h *AuthHandler) getGooglePublicKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
-	h.jwksMu.RLock()
-	if time.Now().Before(h.jwksExpiry) {
-		if key, ok := h.jwksKeys[kid]; ok {
-			h.jwksMu.RUnlock()
-			return key, nil
-		}
+	if key, fresh := h.cachedGoogleKey(kid); key != nil {
+		return key, nil
+	} else if fresh && !h.jwksMissRefreshAllowed() {
+		return nil, fmt.Errorf("key id %q not found in Google JWKS", kid)
 	}
-	h.jwksMu.RUnlock()
 
+	h.jwksFetchMu.Lock()
+	defer h.jwksFetchMu.Unlock()
+
+	if key, fresh := h.cachedGoogleKey(kid); key != nil {
+		return key, nil
+	} else if fresh && !h.jwksMissRefreshAllowed() {
+		return nil, fmt.Errorf("key id %q not found in Google JWKS", kid)
+	}
+
+	keys, expiry, err := h.fetchGoogleJWKS(ctx)
+	if err != nil {
+		return nil, err
+	}
 	h.jwksMu.Lock()
-	defer h.jwksMu.Unlock()
-
-	// Recheck cache under write lock
-	if time.Now().Before(h.jwksExpiry) {
-		if key, ok := h.jwksKeys[kid]; ok {
-			return key, nil
-		}
+	h.jwksKeys = keys
+	h.jwksExpiry = expiry
+	h.jwksMissLimitedAt = time.Now()
+	key := h.jwksKeys[kid]
+	h.jwksMu.Unlock()
+	if key == nil {
+		return nil, fmt.Errorf("key id %q not found in Google JWKS", kid)
 	}
+	return key, nil
+}
 
+func (h *AuthHandler) cachedGoogleKey(kid string) (key *rsa.PublicKey, fresh bool) {
+	h.jwksMu.RLock()
+	defer h.jwksMu.RUnlock()
+	fresh = time.Now().Before(h.jwksExpiry)
+	if !fresh {
+		return nil, false
+	}
+	return h.jwksKeys[kid], true
+}
+
+func (h *AuthHandler) jwksMissRefreshAllowed() bool {
+	h.jwksMu.RLock()
+	defer h.jwksMu.RUnlock()
+	return time.Since(h.jwksMissLimitedAt) >= 30*time.Second
+}
+
+func (h *AuthHandler) fetchGoogleJWKS(ctx context.Context) (map[string]*rsa.PublicKey, time.Time, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GoogleJWKSURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create JWKS request: %w", err)
+		return nil, time.Time{}, fmt.Errorf("failed to create JWKS request: %w", err)
 	}
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("network error fetching Google JWKS: %w", err)
+		return nil, time.Time{}, fmt.Errorf("network error fetching Google JWKS: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Google JWKS endpoint returned status %d", resp.StatusCode)
+		return nil, time.Time{}, fmt.Errorf("Google JWKS endpoint returned status %d", resp.StatusCode)
 	}
 
 	var jwks struct {
@@ -683,8 +710,8 @@ func (h *AuthHandler) getGooglePublicKey(ctx context.Context, kid string) (*rsa.
 			E   string `json:"e"`
 		} `json:"keys"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
-		return nil, fmt.Errorf("failed to parse Google JWKS JSON: %w", err)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&jwks); err != nil {
+		return nil, time.Time{}, fmt.Errorf("failed to parse Google JWKS JSON: %w", err)
 	}
 
 	newKeys := make(map[string]*rsa.PublicKey)
@@ -710,10 +737,7 @@ func (h *AuthHandler) getGooglePublicKey(ctx context.Context, kid string) (*rsa.
 		}
 	}
 
-	h.jwksKeys = newKeys
-
-	// Parse max-age from Cache-Control header, default to 1 hour
-	ttl := 1 * time.Hour
+	ttl := time.Hour
 	cacheControl := resp.Header.Get("Cache-Control")
 	if cacheControl != "" {
 		for _, part := range strings.Split(cacheControl, ",") {
@@ -725,13 +749,7 @@ func (h *AuthHandler) getGooglePublicKey(ctx context.Context, kid string) (*rsa.
 			}
 		}
 	}
-	h.jwksExpiry = time.Now().Add(ttl)
-
-	key, ok := h.jwksKeys[kid]
-	if !ok {
-		return nil, fmt.Errorf("key id %q not found in Google JWKS", kid)
-	}
-	return key, nil
+	return newKeys, time.Now().Add(ttl), nil
 }
 
 // verifyGoogleIDToken cryptographically verifies a Google ID token against Google's JWKS public keys,
@@ -868,7 +886,6 @@ func (h *AuthHandler) upsertGoogleUser(
 			AvatarURL:    existingAvatar,
 			IsGuest:      false,
 			IsAdmin:      existingIsAdmin,
-			IsSuperadmin: existingIsAdmin,
 			AuthProvider: existingProvider,
 			CashBalance:  existingCashBalance.StringFixed(8),
 			CreatedAt:    existingCreatedAt.Format(time.RFC3339),
@@ -921,7 +938,6 @@ func (h *AuthHandler) upsertGoogleUser(
 				AvatarURL:    &avatarURL,
 				IsGuest:      false,
 				IsAdmin:      upgradedIsAdmin,
-				IsSuperadmin: upgradedIsAdmin,
 				AuthProvider: upgradedProvider,
 				CashBalance:  upgradedBalance.StringFixed(8),
 				CreatedAt:    upgradedCreated.Format(time.RFC3339),
@@ -970,32 +986,13 @@ func (h *AuthHandler) upsertGoogleUser(
 		AvatarURL:    &avatarURL,
 		IsGuest:      false,
 		IsAdmin:      newIsAdmin,
-		IsSuperadmin: newIsAdmin,
 		AuthProvider: newProvider,
 		CashBalance:  newBalance.StringFixed(8),
 		CreatedAt:    newCreated.Format(time.RFC3339),
 	}, nil
 }
 
-// generateJWT signs an HMAC-SHA256 JWT containing authenticated user claims.
-func (h *AuthHandler) generateJWT(userID string, isGuest bool, isAdmin bool, email string, name string, avatarURL string, provider string) (string, error) {
-	claims := middleware.AuthClaims{
-		UserID:       userID,
-		IsGuest:      isGuest,
-		IsAdmin:      isAdmin,
-		IsSuperadmin: isAdmin,
-		Email:        email,
-		Name:         name,
-		AvatarURL:    avatarURL,
-		AuthProvider: provider,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "bayesmarket",
-			Subject:   userID,
-			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(1 * time.Hour)), // 1-hour session to mitigate non-revocable token blast radius
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(h.jwtSecret))
+// generateJWT signs an HMAC-SHA256 access token that carries only the account id and guest flag.
+func (h *AuthHandler) generateJWT(userID string, isGuest bool) (string, error) {
+	return middleware.SignAccessToken(h.jwtSecret, userID, isGuest)
 }

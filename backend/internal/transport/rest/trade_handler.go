@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/amm"
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
-	"github.com/bayesmarket/bayesmarket/internal/models"
-	"github.com/bayesmarket/bayesmarket/internal/transport/ws"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/amm"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/models"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/transport/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -42,12 +42,12 @@ type TradeHandler struct {
 }
 
 // NewTradeHandler constructs a TradeHandler.
-func NewTradeHandler(pool *pgxpool.Pool, hubOpt ...*ws.Hub) *TradeHandler {
-	var hub TelemetryBroadcaster
-	if len(hubOpt) > 0 && hubOpt[0] != nil {
-		hub = hubOpt[0]
+func NewTradeHandler(pool *pgxpool.Pool, hub *ws.Hub) *TradeHandler {
+	var broadcaster TelemetryBroadcaster
+	if hub != nil {
+		broadcaster = hub
 	}
-	return &TradeHandler{pool: pool, locks: newMarketLockRegistry(), hub: hub}
+	return &TradeHandler{pool: pool, locks: newMarketLockRegistry(), hub: broadcaster}
 }
 
 // SetCache attaches a cache invalidator instance for event-driven cache invalidation.
@@ -135,61 +135,53 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 
 	userID, exists := middleware.GetUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Authentication required"})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "idempotency_key_required",
-			"message": "Idempotency-Key header is required for order mutations",
-		})
+		respondError(c, http.StatusBadRequest, "idempotency_key_required", "Idempotency-Key header is required for order mutations")
 		return
 	}
 	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 
 	marketIDParam := strings.TrimSpace(c.Param("id"))
 	if marketIDParam == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market", "message": "Market ID is required"})
+		respondError(c, http.StatusBadRequest, "invalid_market", "Market ID is required")
 		return
 	}
 
-	// In-process lock serialization per market to prevent abort storms under high concurrency
-	unlock := h.locks.acquire(h.resolveMarketLockKey(marketIDParam))
-	defer unlock()
-
+	// Read and validate the body before taking the market lock. A slow or malformed client
+	// must not block every other order on this market.
 	var req PlaceOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payload", "message": "Malformed JSON payload"})
+		respondError(c, http.StatusBadRequest, "invalid_payload", "Malformed JSON payload")
 		return
 	}
 
 	outcome, valErr := ParseOutcome(req.Outcome)
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
 	amount, valErr := ParsePositiveDecimal(req.AmountUSDC, "amount_usdc")
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
 	if strings.TrimSpace(req.MinSharesOut) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "min_shares_out_required",
-			"message": "min_shares_out is required: derive it from a quote's shares_received and your slippage tolerance",
-		})
+		respondError(c, http.StatusBadRequest, "min_shares_out_required", "min_shares_out is required: derive it from a quote's shares_received and your slippage tolerance")
 		return
 	}
 	minSharesOut, valErr := ParsePositiveDecimal(req.MinSharesOut, "min_shares_out")
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
@@ -198,13 +190,19 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "place_order", idempotencyKey, fingerprint)
 	if errors.Is(err, ErrIdempotencyKeyReused) {
 		appErr := idempotencyReusedError()
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	if err == nil && found {
 		c.Data(http.StatusOK, "application/json", cachedResp)
 		return
 	}
+
+	unlock, locked := lockMarket(c, h.locks, ctx, h.resolveMarketLockKey(marketIDParam))
+	if !locked {
+		return
+	}
+	defer unlock()
 
 	// 2. Execute with resilient serializable retry loop
 	finalResponse, err := ExecuteSerializableWithRetry(ctx, 25, func() (*OrderResponse, error) {
@@ -221,19 +219,16 @@ func (h *TradeHandler) HandlePlaceOrder(c *gin.Context) {
 
 		var appErr *AppError
 		if errors.As(err, &appErr) {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 
 		if IsSerializationOrDeadlock(err) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "concurrency_conflict",
-				"message": "Order transaction experienced contention after retries. Please retry.",
-			})
+			respondError(c, http.StatusConflict, "concurrency_conflict", "Order transaction experienced contention after retries. Please retry.")
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "execution_failed", "message": "Order execution failed. Please retry."})
+		respondError(c, http.StatusInternalServerError, "execution_failed", "Order execution failed. Please retry.")
 		return
 	}
 
@@ -400,60 +395,51 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 
 	userID, exists := middleware.GetUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Authentication required"})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "idempotency_key_required",
-			"message": "Idempotency-Key header is required for cashout mutations",
-		})
+		respondError(c, http.StatusBadRequest, "idempotency_key_required", "Idempotency-Key header is required for cashout mutations")
 		return
 	}
 	if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 
 	var req CashOutRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payload", "message": "Malformed JSON payload"})
+		respondError(c, http.StatusBadRequest, "invalid_payload", "Malformed JSON payload")
 		return
 	}
 
 	marketIDParam := strings.TrimSpace(req.MarketID)
 	if marketIDParam == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_market", "message": "market_id is required"})
+		respondError(c, http.StatusBadRequest, "invalid_market", "market_id is required")
 		return
 	}
 
-	unlock := h.locks.acquire(h.resolveMarketLockKey(marketIDParam))
-	defer unlock()
-
 	outcome, valErr := ParseOutcome(req.Outcome)
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
 	shares, valErr := ParsePositiveDecimal(req.Shares, "shares")
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
 	if strings.TrimSpace(req.MinPayoutUSDC) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "min_payout_usdc_required",
-			"message": "min_payout_usdc is required: derive it from a SELL quote's payout_usdc and your slippage tolerance",
-		})
+		respondError(c, http.StatusBadRequest, "min_payout_usdc_required", "min_payout_usdc is required: derive it from a SELL quote's payout_usdc and your slippage tolerance")
 		return
 	}
 	minPayout, valErr := ParseBoundedPositiveDecimal(req.MinPayoutUSDC, "min_payout_usdc", MaxTradeAmountUSDC)
 	if valErr != nil {
-		c.JSON(valErr.StatusCode, gin.H{"error": valErr.ErrorCode, "message": valErr.Message})
+		respondError(c, valErr.StatusCode, valErr.ErrorCode, valErr.Message)
 		return
 	}
 
@@ -462,13 +448,19 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 	cachedResp, found, err := GetCachedIdempotencyResponse(ctx, h.pool, userID, "cashout", idempotencyKey, fingerprint)
 	if errors.Is(err, ErrIdempotencyKeyReused) {
 		appErr := idempotencyReusedError()
-		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 		return
 	}
 	if err == nil && found {
 		c.Data(http.StatusOK, "application/json", cachedResp)
 		return
 	}
+
+	unlock, locked := lockMarket(c, h.locks, ctx, h.resolveMarketLockKey(marketIDParam))
+	if !locked {
+		return
+	}
+	defer unlock()
 
 	// 2. Execute with resilient serializable retry loop
 	finalResponse, err := ExecuteSerializableWithRetry(ctx, 25, func() (*CashOutResponse, error) {
@@ -485,19 +477,16 @@ func (h *TradeHandler) HandleCashOut(c *gin.Context) {
 
 		var appErr *AppError
 		if errors.As(err, &appErr) {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 
 		if IsSerializationOrDeadlock(err) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "concurrency_conflict",
-				"message": "Cashout transaction experienced contention after retries. Please retry.",
-			})
+			respondError(c, http.StatusConflict, "concurrency_conflict", "Cashout transaction experienced contention after retries. Please retry.")
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "execution_failed", "message": "Cashout execution failed. Please retry."})
+		respondError(c, http.StatusInternalServerError, "execution_failed", "Cashout execution failed. Please retry.")
 		return
 	}
 

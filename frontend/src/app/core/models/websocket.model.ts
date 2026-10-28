@@ -1,7 +1,7 @@
 /**
  * Telemetry message types received from the BayesMarket WebSocket broker.
  */
-export type WebSocketMessageType = 'PRICE_UPDATE' | 'TRADE_EVENT' | 'MARKET_RESOLVED';
+export type WebSocketMessageType = 'PRICE_UPDATE' | 'TRADE_EVENT' | 'MARKET_RESOLVED' | 'MARKET_UPDATED' | 'MARKET_DELETED';
 
 /**
  * Real-time spot price and virtual inventory update payload.
@@ -44,6 +44,18 @@ export interface MarketResolvedEvent {
     timestamp: string;
 }
 
-export type WebSocketMessage = PriceUpdateEvent | TradeEvent | MarketResolvedEvent;
+export interface MarketUpdatedEvent {
+    type: 'MARKET_UPDATED';
+    market_id: string;
+    timestamp: string;
+}
+
+export interface MarketDeletedEvent {
+    type: 'MARKET_DELETED';
+    market_id: string;
+    timestamp: string;
+}
+
+export type WebSocketMessage = PriceUpdateEvent | TradeEvent | MarketResolvedEvent | MarketUpdatedEvent | MarketDeletedEvent;
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';

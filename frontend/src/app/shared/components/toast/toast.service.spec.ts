@@ -6,7 +6,6 @@ import { ToastContainerComponent } from './toast-container.component';
 describe('ToastService & ToastContainerComponent', () => {
     let service: ToastService;
     let fixture: ComponentFixture<ToastContainerComponent>;
-    let component: ToastContainerComponent;
 
     beforeEach(async () => {
         await TestBed.configureTestingModule({
@@ -16,7 +15,6 @@ describe('ToastService & ToastContainerComponent', () => {
 
         service = TestBed.inject(ToastService);
         fixture = TestBed.createComponent(ToastContainerComponent);
-        component = fixture.componentInstance;
         fixture.detectChanges();
     });
 

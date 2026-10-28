@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bayesmarket/bayesmarket/internal/middleware"
+	"github.com/Avinaba-Mazumdar/bayesmarket/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,23 +23,13 @@ type ClaimHandler struct {
 	isDevOrLocal bool
 }
 
-// FaucetHandler is a legacy alias for ClaimHandler.
-type FaucetHandler = ClaimHandler
-
 // NewClaimHandler constructs a ClaimHandler.
-func NewClaimHandler(pool *pgxpool.Pool, isDevOrLocal ...bool) *ClaimHandler {
-	isDev := false
-	if len(isDevOrLocal) > 0 {
-		isDev = isDevOrLocal[0]
-	}
+func NewClaimHandler(pool *pgxpool.Pool, isDevOrLocal bool) *ClaimHandler {
 	return &ClaimHandler{
 		pool:         pool,
-		isDevOrLocal: isDev,
+		isDevOrLocal: isDevOrLocal,
 	}
 }
-
-// NewFaucetHandler is a legacy alias for NewClaimHandler.
-var NewFaucetHandler = NewClaimHandler
 
 // claimIdempotencyOp is the idempotency_keys.operation for claims, used for both lookup and write.
 const claimIdempotencyOp = "claim"
@@ -71,21 +61,21 @@ type claimReceiptUser struct {
 
 // HandleClaim issues 100 virtual USDC to the user with a 24-hour cooldown.
 //
-// POST /api/v1/claim or POST /api/v1/faucet
+// POST /api/v1/claim
 func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
 	userID, exists := middleware.GetUserID(c)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "Authentication required"})
+		respondError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
 
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey != "" {
 		if appErr := validateIdempotencyKey(idempotencyKey); appErr != nil {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 	}
@@ -116,7 +106,7 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 		}
 		var appErr *AppError
 		if errors.As(err, &appErr) {
-			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			respondError(c, appErr.StatusCode, appErr.ErrorCode, appErr.Message)
 			return
 		}
 		if errors.Is(err, ErrIdempotencyReplay) || IsUniqueViolation(err) {
@@ -127,10 +117,10 @@ func (h *ClaimHandler) HandleClaim(c *gin.Context) {
 			}
 		}
 		if IsSerializationOrDeadlock(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": "concurrency_conflict", "message": "Claim experienced contention after retries. Please retry."})
+			respondError(c, http.StatusConflict, "concurrency_conflict", "Claim experienced contention after retries. Please retry.")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database_error", "message": "Failed to process claim"})
+		respondError(c, http.StatusInternalServerError, "database_error", "Failed to process claim")
 		return
 	}
 
@@ -254,11 +244,6 @@ func (h *ClaimHandler) executeClaimTx(ctx context.Context, userID uuid.UUID, cli
 		return nil, err
 	}
 	return receipt, nil
-}
-
-// HandleClaimFaucet is a legacy alias for HandleClaim.
-func (h *ClaimHandler) HandleClaimFaucet(c *gin.Context) {
-	h.HandleClaim(c)
 }
 
 // claimFingerprint identifies a claim. A claim has no body, so the operation alone is bound.
