@@ -3,6 +3,7 @@ import { Observable, tap } from 'rxjs';
 import { ApiService } from '../core/services/api.service';
 import { ToastService } from '../shared/components/toast/toast.service';
 import { AuthResponse, UserProfile } from '../core/models/market.model';
+import { formatUsd, normalizeDecimal } from '../core/utils/decimal';
 
 const TOKEN_STORAGE_KEY = 'bayesmarket_auth_token';
 const LEGACY_TOKEN_STORAGE_KEY = 'bayesmarket_guest_token';
@@ -19,7 +20,13 @@ export class AuthStore {
     readonly token = signal<string | null>(this.getInitialToken());
     readonly user = signal<UserProfile | null>(this.getInitialProfile());
     readonly userId = signal<string | null>(this.getInitialProfile()?.id || null);
-    readonly cashBalance = signal<string>(this.getInitialBalance());
+    /**
+     * Canonical decimal balance from the server (e.g. "1000.00000000"). All balance checks and
+     * post-trade estimates must use this, never the display string.
+     */
+    readonly cashBalanceRaw = signal<string>(this.readInitialBalanceRaw());
+    /** Display form of cashBalanceRaw, truncated to cents. Never parse it back into a number. */
+    readonly cashBalance = signal<string>(formatUsd(this.cashBalanceRaw()));
 
     readonly isGuest = computed(() => this.user()?.is_guest ?? false);
     readonly isAdmin = computed(() => this.user()?.is_admin ?? false);
@@ -33,6 +40,10 @@ export class AuthStore {
     readonly isInitializing = signal<boolean>(false);
     readonly isAuthenticating = signal<boolean>(false);
     readonly isClaiming = signal<boolean>(false);
+    private refreshInFlight = false;
+    /** Seconds until the next claim is allowed, from the server's cooldown. Zero when claimable. */
+    readonly claimCooldownSeconds = signal<number>(0);
+    private claimCooldownTimer: ReturnType<typeof setInterval> | null = null;
     readonly isAuthModalOpen = signal<boolean>(false);
 
     readonly isDev = signal<boolean>(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
@@ -90,6 +101,12 @@ export class AuthStore {
         return null;
     }
 
+    private readInitialBalanceRaw(): string {
+        // Older sessions stored the formatted display string; strip it back to digits
+        const cleaned = this.getInitialBalance().replace(/[$,]/g, '');
+        return normalizeDecimal(cleaned, 8) ?? '0.00000000';
+    }
+
     private getInitialBalance(): string {
         if (typeof window !== 'undefined') {
             if (window.sessionStorage) {
@@ -126,7 +143,8 @@ export class AuthStore {
             // Verify session by fetching user profile and portfolio balance
             this.fetchCurrentUserProfile(existingToken);
         } else {
-            this.isInitializing.set(false);
+            // No access token in this tab: the refresh cookie may still hold a session from earlier
+            this.restoreSession();
         }
     }
 
@@ -155,16 +173,15 @@ export class AuthStore {
                 if (profile) {
                     this.user.set(profile);
                     this.userId.set(profile.id);
-                    const formatted = this.formatBalance(profile.cash_balance ?? '1000.00');
-                    this.updateBalance(formatted);
+                    this.updateBalance(profile.cash_balance ?? '1000.00');
                     this.persistSession(token, profile);
                 }
                 this.isInitializing.set(false);
             },
             error: (err) => {
-                // If token expired, invalid, or user record deleted, clear session
+                // An expired access token is renewed from the refresh cookie; if that fails, the session is cleared
                 if (err?.status === 401 || err?.status === 404) {
-                    this.clearSession();
+                    this.restoreSession();
                 }
                 this.isInitializing.set(false);
             }
@@ -185,8 +202,7 @@ export class AuthStore {
                     this.token.set(res.token);
                     this.user.set(res.user);
                     this.userId.set(res.user.id);
-                    const formattedBalance = this.formatBalance(res.user.cash_balance ?? '1000.00');
-                    this.updateBalance(formattedBalance);
+                    this.updateBalance(res.user.cash_balance ?? '1000.00');
                     this.persistSession(res.token, res.user);
                     this.closeAuthModal();
                     this.toastService.success('Guest Session Active', 'Gifted $1,000.00 virtual USDC for paper trading!');
@@ -222,8 +238,7 @@ export class AuthStore {
                     this.token.set(res.token);
                     this.user.set(res.user);
                     this.userId.set(res.user.id);
-                    const formattedBalance = this.formatBalance(res.user.cash_balance ?? '1000.00');
-                    this.updateBalance(formattedBalance);
+                    this.updateBalance(res.user.cash_balance ?? '1000.00');
                     this.persistSession(res.token, res.user);
                 }
                 this.isAuthenticating.set(false);
@@ -253,8 +268,7 @@ export class AuthStore {
                         this.token.set(res.token);
                         this.user.set(res.user);
                         this.userId.set(res.user.id);
-                        const formattedBalance = this.formatBalance(res.user.cash_balance ?? '1000.00');
-                        this.updateBalance(formattedBalance);
+                        this.updateBalance(res.user.cash_balance ?? '1000.00');
                         this.persistSession(res.token, res.user);
                     }
                     this.isAuthenticating.set(false);
@@ -274,6 +288,8 @@ export class AuthStore {
      * Logs out of account and reverts to unauthenticated surfing state.
      */
     logout(): void {
+        // Revoke the refresh session first; otherwise the next page load would sign the reader straight back in
+        this.apiService.endSession().subscribe({ error: () => undefined });
         this.clearSession();
         this.toastService.info('Signed Out', 'You have been signed out.');
     }
@@ -287,25 +303,53 @@ export class AuthStore {
 
         this.apiService.getPortfolio(token).subscribe({
             next: (portfolio) => {
-                const formatted = this.formatBalance(portfolio.cash_balance || portfolio.cash_balance_usdc || '0');
-                this.updateBalance(formatted);
+                this.updateBalance(portfolio.cash_balance || portfolio.cash_balance_usdc || '0');
             },
             error: (err) => {
                 if (err?.status === 401 || err?.status === 404) {
-                    this.clearSession();
+                    this.restoreSession();
                 }
             }
         });
     }
 
     /**
-     * Updates cash balance in state and sessionStorage.
+     * Restores the session from the refresh cookie. Concurrent calls share one request: a second refresh
+     * with the same cookie would look like a replayed token to the server and end every session.
      */
-    updateBalance(formattedBalance: string): void {
-        this.cashBalance.set(formattedBalance);
+    restoreSession(): void {
+        if (this.refreshInFlight) return;
+        this.refreshInFlight = true;
+        this.apiService.refreshSession().subscribe({
+            next: (res) => {
+                this.refreshInFlight = false;
+                this.token.set(res.token);
+                this.user.set(res.user);
+                this.userId.set(res.user.id);
+                this.updateBalance(res.user.cash_balance ?? '0');
+                this.persistSession(res.token, res.user);
+                this.isInitializing.set(false);
+            },
+            error: () => {
+                this.refreshInFlight = false;
+                this.clearSession();
+                this.isInitializing.set(false);
+            }
+        });
+    }
+
+    /**
+     * Sets the cash balance from the server's canonical decimal string and persists it. The display
+     * form is derived from the same value.
+     */
+    updateBalance(rawBalance: string): void {
+        const raw = normalizeDecimal(rawBalance, 8);
+        if (raw === null) return;
+        this.cashBalanceRaw.set(raw);
+        this.cashBalance.set(formatUsd(raw));
         if (typeof window !== 'undefined') {
             if (window.sessionStorage) {
-                sessionStorage.setItem(BALANCE_STORAGE_KEY, formattedBalance);
+                sessionStorage.setItem(BALANCE_STORAGE_KEY, raw);
             }
             if (window.localStorage) {
                 localStorage.removeItem(BALANCE_STORAGE_KEY);
@@ -327,8 +371,7 @@ export class AuthStore {
         this.apiService.claim(token).subscribe({
             next: (res) => {
                 const rawBalance = res.new_balance ?? res.user?.cash_balance ?? '0';
-                const formatted = this.formatBalance(rawBalance);
-                this.updateBalance(formatted);
+                this.updateBalance(rawBalance);
 
                 const currentUser = this.user();
                 if (currentUser) {
@@ -345,11 +388,16 @@ export class AuthStore {
                 }
 
                 this.isClaiming.set(false);
+                this.claimCooldownSeconds.set(0);
                 const claimedAmount = res.amount_claimed ? Math.round(parseFloat(res.amount_claimed)).toString() : (res.amount ?? '100');
                 this.toastService.success('Claim Successful', `+$${claimedAmount} USDC credited to your balance`);
             },
             error: (err) => {
                 this.isClaiming.set(false);
+                const retryIn = Number(err?.error?.cooldown_remaining_seconds);
+                if (err?.status === 429 && Number.isFinite(retryIn) && retryIn > 0) {
+                    this.startClaimCooldown(Math.ceil(retryIn));
+                }
                 if (err?.status === 401 || err?.status === 404) {
                     this.clearSession();
                     this.toastService.error('Session Expired', 'Your session is no longer valid. Please sign in again.');
@@ -359,6 +407,24 @@ export class AuthStore {
                 this.toastService.warning('Claim Cooldown', msg);
             }
         });
+    }
+
+    /** Counts the claim cooldown down once a second; the header shows it and disables the claim button. */
+    private startClaimCooldown(seconds: number): void {
+        this.stopClaimCooldown();
+        this.claimCooldownSeconds.set(seconds);
+        this.claimCooldownTimer = setInterval(() => {
+            const left = this.claimCooldownSeconds() - 1;
+            this.claimCooldownSeconds.set(Math.max(0, left));
+            if (left <= 0) this.stopClaimCooldown();
+        }, 1000);
+    }
+
+    private stopClaimCooldown(): void {
+        if (this.claimCooldownTimer !== null) {
+            clearInterval(this.claimCooldownTimer);
+            this.claimCooldownTimer = null;
+        }
     }
 
     openAuthModal(): void {
@@ -406,8 +472,6 @@ export class AuthStore {
     }
 
     formatBalance(raw: string | number): string {
-        const num = typeof raw === 'string' ? parseFloat(raw) : raw;
-        if (isNaN(num)) return '$1,000.00';
-        return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        return formatUsd(String(raw));
     }
 }

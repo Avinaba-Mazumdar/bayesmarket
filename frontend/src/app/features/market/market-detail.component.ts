@@ -16,8 +16,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { LucideArrowLeft, LucideArrowUp, LucideArrowDown, LucideCircleCheck } from '@lucide/angular';
 import { ApiService } from '../../core/services/api.service';
+import { PriceUpdateEvent } from '../../core/models/websocket.model';
 import { WebSocketService } from '../../core/services/websocket.service';
-import { Market, OrderResponse } from '../../core/models/market.model';
+import { Market, OrderResponse, UserPosition } from '../../core/models/market.model';
+import { AuthStore } from '../../state/auth.store';
+import { CashOutDialogComponent } from '../portfolio/cash-out-dialog.component';
 import { formatUSDC, formatShares } from '../../core/utils/formatters';
 import { PriceChartComponent } from '../charts/price-chart.component';
 import { OrderIntent, OrderTerminalComponent } from '../terminal/order-terminal.component';
@@ -35,6 +38,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
         RouterLink,
         PriceChartComponent,
         OrderTerminalComponent,
+        CashOutDialogComponent,
         OrderConfirmDialogComponent,
         ActivityFeedComponent,
         GlossaryPopoverComponent,
@@ -101,7 +105,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
 
                 <!-- Resolution Celebration Banner (WCAG live polite alert) -->
                 @if (isResolved()) {
-                    <section class="resolution-celebration-banner" role="alert" aria-live="polite">
+                    <section class="resolution-celebration-banner" role="status">
                         <div class="banner-badge-icon">
                             <svg lucideCircleCheck [size]="28" aria-hidden="true"></svg>
                         </div>
@@ -133,8 +137,19 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 <!-- 2-Column Cockpit Grid (Reflows to Single Column on Mobile/Zoom) -->
                 <div class="cockpit-grid">
                     <!-- Left Column: Canvas Chart, Resolution Criteria, Live Trades Tape -->
-                    <main class="cockpit-main">
+                    <div class="cockpit-main">
                         <!-- TradingView Canvas Probability Chart -->
+                        <div class="live-controls">
+                            <app-button
+                                variant="outline"
+                                size="sm"
+                                [selected]="isPaused()"
+                                [ariaLabel]="isPaused() ? 'Resume live price and trade updates' : 'Pause live price and trade updates'"
+                                (btnClick)="toggleLivePause()"
+                            >
+                                {{ isPaused() ? 'Resume live updates' : 'Pause live updates' }}
+                            </app-button>
+                        </div>
                         <app-price-chart [marketId]="market()!.id" [initialProbabilityYes]="initialProbabilityNum()" />
 
                         <!-- Market Rules & Resolution Criteria (WCAG Level AAA Clarity) -->
@@ -175,17 +190,54 @@ import { ButtonComponent } from '../../shared/components/button/button.component
 
                         <!-- Live Trade Stream Tape -->
                         <app-activity-feed [marketId]="market()!.id" />
-                    </main>
+                    </div>
 
                     <!-- Right Column: Order Execution Terminal & Two-Step Confirmation Dialog -->
                     <aside class="cockpit-sidebar" aria-label="Trade Execution Sidebar">
                         <div class="sticky-sidebar-wrapper">
-                            <app-order-terminal #orderTerminal [market]="market()!" (orderReviewRequested)="onOrderReviewRequested($event)" />
+                            <app-order-terminal
+                                #orderTerminal
+                                [market]="market()!"
+                                [tradable]="isTradable()"
+                                (orderReviewRequested)="onOrderReviewRequested($event)"
+                            />
+
+                            @if (closedReason(); as reason) {
+                                <p class="trading-closed-note" role="status">Trading is closed: {{ reason }}.</p>
+                            }
+
+                            @if (myPositions().length > 0) {
+                                <section class="my-positions" aria-labelledby="my-positions-title">
+                                    <h3 id="my-positions-title" class="my-positions-title">Your position</h3>
+                                    @for (p of myPositions(); track p.outcome) {
+                                        <div class="my-position-row">
+                                            <span class="my-position-text tabular-nums">{{ p.shares_owned }} {{ p.outcome }} shares</span>
+                                            <app-button
+                                                variant="outline"
+                                                size="sm"
+                                                [disabled]="!isTradable()"
+                                                [ariaLabel]="'Sell ' + p.outcome + ' shares in this market'"
+                                                (btnClick)="openSellDialog(p)"
+                                            >
+                                                Sell
+                                            </app-button>
+                                        </div>
+                                    }
+                                </section>
+                            }
                         </div>
                     </aside>
                 </div>
 
                 <!-- Two-Step Financial Confirmation Review Dialog (SC 3.3.6) -->
+                <app-cash-out-dialog
+                    [isOpen]="isCashOutOpen()"
+                    [position]="selectedPosition()"
+                    [canSell]="isTradable()"
+                    (cashedOut)="onCashedOut()"
+                    (dialogDismissed)="closeCashOut()"
+                />
+
                 <app-order-confirm-dialog
                     [isOpen]="isConfirmDialogOpen()"
                     [intent]="pendingOrderIntent()"
@@ -204,7 +256,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             .cockpit-container {
                 max-width: 1440px;
                 margin: 0 auto;
-                padding: var(--space-lg, 20px) var(--space-lg, 20px) 64px;
+                padding: var(--space-lg) var(--space-lg) 64px;
                 display: flex;
                 flex-direction: column;
                 gap: 24px;
@@ -219,28 +271,28 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             }
 
             .breadcrumb-link {
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 text-decoration: none;
                 font-weight: 600;
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
                 padding: 4px 8px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
             }
 
             .breadcrumb-link:hover {
-                color: var(--ink, #f8fafc);
-                background-color: var(--surface-card, #111622);
+                color: var(--ink);
+                background-color: var(--surface-card);
             }
 
             .breadcrumb-separator {
-                color: var(--hairline, #1e2638);
+                color: var(--hairline);
             }
 
             .breadcrumb-current {
-                color: var(--ink-secondary, #cbd5e1);
+                color: var(--ink-secondary);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -253,7 +305,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 justify-content: space-between;
                 gap: 24px;
                 flex-wrap: wrap;
-                border-bottom: 1px solid var(--hairline, #1e293b);
+                border-bottom: 1px solid var(--hairline);
                 padding-bottom: 20px;
             }
 
@@ -262,14 +314,14 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 align-items: flex-start;
                 gap: 16px;
                 padding: 18px 24px;
-                background-color: var(--status-profit-bg, #ecfdf5);
-                border: 1px solid var(--status-profit-border, #059669);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--status-profit-bg);
+                border: 1px solid var(--status-profit-border);
+                border-radius: var(--radius-lg);
                 box-shadow: var(--shadow-sm);
             }
 
             .banner-badge-icon {
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
                 flex-shrink: 0;
                 display: flex;
                 align-items: center;
@@ -294,14 +346,14 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-family: var(--font-ui);
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .banner-description {
                 margin: 0;
                 font-family: var(--font-ui);
                 font-size: 13.5px;
-                color: var(--ink-secondary, #94a3b8);
+                color: var(--ink-secondary);
                 line-height: 1.5;
             }
 
@@ -322,7 +374,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             .res-date {
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--muted, #94a3b8);
+                color: var(--muted);
             }
 
             .market-hero-title {
@@ -330,7 +382,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-family: var(--font-ui);
                 font-size: 26px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 line-height: 1.3;
                 letter-spacing: -0.3px;
             }
@@ -346,21 +398,21 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 align-items: center;
                 gap: 8px;
                 padding: 8px 16px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 user-select: none;
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
             }
 
             .spot-yes {
-                background-color: var(--outcome-yes-subtle, rgba(6, 95, 70, 0.09));
-                border: 1.5px solid var(--outcome-yes-border, rgba(6, 95, 70, 0.35));
-                color: var(--outcome-yes-text, #065f46);
+                background-color: var(--outcome-yes-subtle);
+                border: 1.5px solid var(--outcome-yes-border);
+                color: var(--outcome-yes-text);
             }
 
             .spot-no {
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.09));
-                border: 1.5px solid var(--outcome-no-border, rgba(159, 18, 57, 0.35));
-                color: var(--outcome-no-text, #9f1239);
+                background-color: var(--outcome-no-subtle);
+                border: 1.5px solid var(--outcome-no-border);
+                color: var(--outcome-no-text);
             }
 
             .spot-glyph {
@@ -392,6 +444,50 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 align-items: start;
             }
 
+            .trading-closed-note {
+                margin: 0;
+                padding: 10px 12px;
+                border: 1px solid var(--status-warning-border);
+                border-radius: var(--radius-md);
+                background-color: var(--status-warning-bg);
+                color: var(--status-warning);
+                font-size: 13px;
+            }
+
+            .my-positions {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                padding: 12px 14px;
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
+                background-color: var(--surface-card);
+            }
+
+            .my-positions-title {
+                margin: 0;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--muted);
+            }
+
+            .my-position-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
+            .my-position-text {
+                font-size: 14px;
+                color: var(--ink);
+            }
+
+            .live-controls {
+                display: flex;
+                justify-content: flex-end;
+            }
+
             .cockpit-main {
                 display: flex;
                 flex-direction: column;
@@ -412,9 +508,9 @@ import { ButtonComponent } from '../../shared/components/button/button.component
 
             /* --- Resolution Card --- */
             .resolution-card {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 padding: 24px;
                 display: flex;
                 flex-direction: column;
@@ -433,21 +529,21 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-family: var(--font-ui);
                 font-size: 17px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .market-description {
                 font-family: var(--font-ui);
                 font-size: 14.5px;
                 line-height: 1.6;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 margin: 0;
             }
 
             .oracle-source-box {
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 12px 16px;
                 display: flex;
                 flex-direction: column;
@@ -460,13 +556,13 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .oracle-text {
                 font-family: var(--font-ui);
                 font-size: 13.5px;
-                color: var(--accent, #00d4ff);
+                color: var(--accent);
                 margin: 0;
             }
 
@@ -474,7 +570,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
                 gap: 12px;
-                border-top: 1px solid var(--hairline, #252140);
+                border-top: 1px solid var(--hairline);
                 padding-top: 16px;
             }
 
@@ -487,7 +583,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             .spec-label {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 text-transform: uppercase;
             }
 
@@ -495,7 +591,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-family: var(--font-mono);
                 font-size: 14px;
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
@@ -514,7 +610,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 width: 40px;
                 height: 40px;
                 border: 3px solid rgba(124, 77, 255, 0.2);
-                border-top-color: var(--primary-border, #7c4dff);
+                border-top-color: var(--primary-border);
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
             }
@@ -568,7 +664,71 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
         return this.winningOutcome() ?? this.market()?.winning_outcome ?? null;
     });
 
+    /** Live price and trade updates for this market, suppressed while the reader has paused them. */
+    protected readonly isPaused = computed(() => this.wsService.isPaused());
+
+    toggleLivePause(): void {
+        this.wsService.togglePause();
+    }
+
+    private readonly authStore = inject(AuthStore);
+
+    /** Trades are accepted only while a market is active and its resolution date has not passed. */
+    protected readonly closedReason = computed<string | null>(() => {
+        const m = this.market();
+        if (!m) return null;
+        if (m.status !== 'active') return `this market is ${m.status}`;
+        if (Date.parse(m.resolution_date) <= Date.now()) return 'the resolution date has passed';
+        return null;
+    });
+
+    protected readonly isTradable = computed(() => this.market() !== null && this.closedReason() === null);
+
+    /** The signed-in reader's open positions in this market. */
+    readonly myPositions = signal<UserPosition[]>([]);
+    readonly selectedPosition = signal<UserPosition | null>(null);
+    readonly isCashOutOpen = signal<boolean>(false);
+
+    private loadMyPositions(): void {
+        const token = this.authStore.token();
+        const marketId = this.market()?.id;
+        if (!token || !marketId) {
+            this.myPositions.set([]);
+            return;
+        }
+        this.apiService
+            .getPortfolio(token)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (portfolio) => this.myPositions.set(portfolio.positions.filter((p) => p.market_id === marketId)),
+                error: () => this.myPositions.set([])
+            });
+    }
+
+    openSellDialog(position: UserPosition): void {
+        this.selectedPosition.set(position);
+        this.isCashOutOpen.set(true);
+    }
+
+    closeCashOut(): void {
+        this.isCashOutOpen.set(false);
+    }
+
+    onCashedOut(): void {
+        this.isCashOutOpen.set(false);
+        this.loadMyPositions();
+        this.fetchMarket(false);
+    }
+
     constructor() {
+        effect(() => {
+            const tick = this.wsService.lastPriceTick();
+            const targetId = this.id();
+            if (tick && tick.market_id === targetId) {
+                untracked(() => this.applyLivePrice(tick));
+            }
+        });
+
         effect(() => {
             const res = this.wsService.lastMarketResolved();
             const targetId = this.id();
@@ -638,7 +798,7 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
     });
 
     ngOnInit(): void {
-        this.fetchMarket();
+        this.fetchMarket(true);
     }
 
     ngOnDestroy(): void {
@@ -649,7 +809,11 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
         this.pendingOrderIntent.set(null);
     }
 
-    private fetchMarket(): void {
+    /**
+     * Loads the market. The WebSocket is opened once, on the first load; a reload after an order only
+     * resyncs the static fields and does not tear down the live connection.
+     */
+    private fetchMarket(connect: boolean): void {
         const marketId = this.id();
         this.isLoading.set(true);
 
@@ -660,8 +824,10 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
                 next: (data) => {
                     this.market.set(data);
                     this.isLoading.set(false);
-                    // Connect WebSocket to market topic
-                    this.wsService.connect(data.id);
+                    if (connect) {
+                        this.wsService.connect(data.id);
+                    }
+                    this.loadMyPositions();
                 },
                 error: (err) => {
                     console.error('Failed to load market:', err);
@@ -675,22 +841,32 @@ export class MarketDetailComponent implements OnInit, OnDestroy {
         this.isConfirmDialogOpen.set(true);
     }
 
-    onOrderSuccessfullyPlaced(receipt: OrderResponse): void {
-        const execPrice = parseFloat(receipt.execution_price);
-        if (!isNaN(execPrice) && execPrice > 0) {
-            const isYes = receipt.outcome === 'YES';
-            const priceYes = isYes ? execPrice : Math.max(0, 1 - execPrice);
-            const priceNo = isYes ? Math.max(0, 1 - execPrice) : execPrice;
-            this.wsService.lastPriceTick.set({
-                type: 'PRICE_UPDATE',
-                market_id: this.id(),
-                yes_price: priceYes.toFixed(4),
-                no_price: priceNo.toFixed(4),
-                timestamp: receipt.created_at || new Date().toISOString()
-            });
-        }
-        // Re-fetch market to update reserves, spot price, and volume
-        this.fetchMarket();
+    onOrderSuccessfullyPlaced(_receipt: OrderResponse): void {
+        // The server broadcasts PRICE_UPDATE for every trade, so live probabilities and reserves arrive
+        // over the WebSocket. Only the static market fields need a refresh.
+        this.fetchMarket(false);
+        this.loadMyPositions();
+    }
+
+    /** Copies the server's post-trade probabilities and reserves into the header state. */
+    private applyLivePrice(tick: PriceUpdateEvent): void {
+        const current = this.market();
+        if (!current) return;
+        this.market.set({
+            ...current,
+            probability_yes: tick.yes_price,
+            probability_no: tick.no_price,
+            probability_yes_pct: (parseFloat(tick.yes_price) * 100).toFixed(1),
+            probability_no_pct: (parseFloat(tick.no_price) * 100).toFixed(1),
+            reserves: tick.reserves
+                ? {
+                      ...current.reserves,
+                      reserve_yes: tick.reserves.yes,
+                      reserve_no: tick.reserves.no,
+                      total_volume_usdc: tick.total_volume_usdc ?? current.reserves.total_volume_usdc
+                  }
+                : current.reserves
+        });
     }
 
     onOrderDialogDismissed(): void {

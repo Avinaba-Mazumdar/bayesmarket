@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { MarketListComponent } from './market-list.component';
 import { ApiService } from '../../core/services/api.service';
 import { Market } from '../../core/models/market.model';
@@ -8,7 +8,7 @@ import { Market } from '../../core/models/market.model';
 describe('MarketListComponent', () => {
     let fixture: ComponentFixture<MarketListComponent>;
     let component: MarketListComponent;
-    let apiServiceSpy: { getMarkets: any };
+    let apiServiceSpy: { getMarkets: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
 
     const mockMarkets: Market[] = [
         {
@@ -57,6 +57,11 @@ describe('MarketListComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             getMarkets: vi.fn().mockReturnValue(of(mockMarkets))
         };
 

@@ -36,9 +36,9 @@ export type BrandIconSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | number;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background-color: var(--primary, #4338ca);
+                background-color: var(--primary);
                 color: #ffffff;
-                border-radius: var(--radius-md, 8px);
+                border-radius: var(--radius-md);
                 transition: opacity 150ms ease;
             }
 

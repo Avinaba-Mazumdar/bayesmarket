@@ -197,6 +197,7 @@ func (h *AuthHandler) HandleGuestAuth(c *gin.Context) {
 		return
 	}
 
+	h.attachRefreshSession(c, userID.String())
 	c.JSON(http.StatusCreated, AuthResponse{
 		Token: tokenString,
 		User: UserResponse{
@@ -328,6 +329,7 @@ func (h *AuthHandler) HandleGoogleAuthVerify(c *gin.Context) {
 		return
 	}
 
+	h.attachRefreshSession(c, user.ID)
 	c.JSON(http.StatusOK, AuthResponse{
 		Token: tokenString,
 		User:  *user,
@@ -485,6 +487,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 			return
 		}
 		tokenString, _ := h.generateJWT(user.ID, false, user.IsAdmin, "oauth.trader@bayesmarket.com", "OAuth Trader", "", "google")
+		h.attachRefreshSession(c, user.ID)
 		c.JSON(http.StatusOK, AuthResponse{Token: tokenString, User: *user})
 		return
 	}
@@ -559,6 +562,7 @@ func (h *AuthHandler) HandleGoogleAuthCallback(c *gin.Context) {
 		return
 	}
 
+	h.attachRefreshSession(c, user.ID)
 	c.JSON(http.StatusOK, AuthResponse{
 		Token: tokenString,
 		User:  *user,

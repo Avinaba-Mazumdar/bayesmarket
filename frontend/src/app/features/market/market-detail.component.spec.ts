@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { MarketDetailComponent } from './market-detail.component';
 import { ApiService } from '../../core/services/api.service';
 import { WebSocketService } from '../../core/services/websocket.service';
@@ -11,7 +11,14 @@ import { OrderIntent } from '../terminal/order-terminal.component';
 describe('MarketDetailComponent', () => {
     let fixture: ComponentFixture<MarketDetailComponent>;
     let component: MarketDetailComponent;
-    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; getMarketById: any; getQuote: any; placeOrder: any };
+    let apiServiceSpy: {
+        createGuestSession: any;
+        getPortfolio: any;
+        getMarketById: any;
+        getQuote: any;
+        placeOrder: any;
+        getMarketHistory: any;
+        getMarketTrades: any; refreshSession: any; endSession: any; getMarketCategories: any; };
     let wsService: WebSocketService;
 
     const mockMarket: Market = {
@@ -77,6 +84,9 @@ describe('MarketDetailComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
             createGuestSession: vi.fn().mockReturnValue(
                 of({
                     token: 'test-token',
@@ -107,7 +117,9 @@ describe('MarketDetailComponent', () => {
                     new_collateral: '100050.00'
                 })
             ),
-            placeOrder: vi.fn().mockReturnValue(of({}))
+            placeOrder: vi.fn().mockReturnValue(of({})),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: mockMarket.id, range: '24h', points: [] })),
+            getMarketTrades: vi.fn().mockReturnValue(of([]))
         };
 
         await TestBed.configureTestingModule({
@@ -185,7 +197,8 @@ describe('MarketDetailComponent', () => {
         expect(component.pendingOrderIntent()).toBeNull();
     });
 
-    it('should update price tick and re-fetch market when order is placed successfully', () => {
+    it('should not fabricate a price tick after an order; the socket stays open and the market is re-read', () => {
+        const connectSpy = vi.spyOn(wsService, 'connect');
         const receipt: OrderResponse = {
             trade_id: 'ord-123',
             market_id: mockMarket.id,
@@ -204,10 +217,23 @@ describe('MarketDetailComponent', () => {
 
         component.onOrderSuccessfullyPlaced(receipt);
 
-        const lastTick = wsService.lastPriceTick();
-        expect(lastTick).toBeTruthy();
-        expect(lastTick?.yes_price).toBe('0.7000');
-        expect(lastTick?.no_price).toBe('0.3000');
+        expect(wsService.lastPriceTick()).toBeNull();
+        expect(connectSpy).not.toHaveBeenCalled();
         expect(apiServiceSpy.getMarketById).toHaveBeenCalledTimes(2);
+    });
+
+    it('should apply the server PRICE_UPDATE probabilities to the market header', () => {
+        wsService.lastPriceTick.set({
+            type: 'PRICE_UPDATE',
+            market_id: mockMarket.id,
+            yes_price: '0.7100',
+            no_price: '0.2900',
+            timestamp: '2026-09-07T12:01:00Z'
+        });
+        TestBed.flushEffects();
+        fixture.detectChanges();
+
+        expect(component.market()?.probability_yes_pct).toBe('71.0');
+        expect(component.market()?.probability_no).toBe('0.2900');
     });
 });

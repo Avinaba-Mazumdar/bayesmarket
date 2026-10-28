@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AuthDialogComponent } from './auth-dialog.component';
 import { AuthStore } from '../../state/auth.store';
 import { ApiService } from '../../core/services/api.service';
@@ -13,11 +13,15 @@ describe('AuthDialogComponent', () => {
         createGuestSession: any;
         verifyGoogleToken: any;
         getGoogleAuthUrl: any;
-        getCurrentUser: any;
-    };
+        getCurrentUser: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             createGuestSession: vi.fn().mockReturnValue(
                 of({
                     token: 'mock-guest-token',

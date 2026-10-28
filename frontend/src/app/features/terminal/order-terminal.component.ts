@@ -11,6 +11,8 @@ import { ButtonComponent } from '../../shared/components/button/button.component
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
 import { InputComponent } from '../../shared/components/input/input.component';
 import { LabelComponent } from '../../shared/components/label/label.component';
+import { handleRovingKeydown } from '../../core/utils/roving-focus';
+import { compareDecimal, formatUsd, normalizeDecimal, subtractDecimal } from '../../core/utils/decimal';
 
 export interface OrderIntent {
     marketId: string;
@@ -44,15 +46,19 @@ export interface OrderIntent {
                 </div>
             </div>
 
-            <!-- Segmented Dual-Coded Outcome Selector (WCAG AAA Touch Target >= 40x40px) -->
-            <div class="outcome-toggle-group" role="radiogroup" aria-label="Outcome selection">
+            <!-- Segmented Dual-Coded Outcome Selector (WCAG 2.2 SC 2.5.5: 44x44px targets) -->
+            <div
+                class="outcome-toggle-group"
+                role="radiogroup"
+                aria-label="Outcome selection"
+                (keydown)="rovingKeydown($event, '[role=radio]')"
+            >
                 <app-button
                     variant="yes"
                     size="lg"
                     [fullWidth]="true"
                     [selected]="selectedOutcome() === 'YES'"
-                    [attr.aria-checked]="selectedOutcome() === 'YES'"
-                    role="radio"
+                    buttonRole="radio"
                     ariaLabel="Select outcome YES at implied probability"
                     (btnClick)="setOutcome('YES')"
                 >
@@ -66,8 +72,7 @@ export interface OrderIntent {
                     size="lg"
                     [fullWidth]="true"
                     [selected]="selectedOutcome() === 'NO'"
-                    [attr.aria-checked]="selectedOutcome() === 'NO'"
-                    role="radio"
+                    buttonRole="radio"
                     ariaLabel="Select outcome NO at implied probability"
                     (btnClick)="setOutcome('NO')"
                 >
@@ -167,7 +172,9 @@ export interface OrderIntent {
                     <span class="quote-label">Potential Payout ($1/share):</span>
                     <div class="return-group">
                         <span class="return-payout tabular-nums">{{ potentialPayout() }}</span>
-                        <span class="return-pct tabular-nums" [class.positive]="potentialReturnPct() > 0"> (+{{ potentialReturnPct() }}%) </span>
+                        @if (latestQuote()) {
+                            <span class="return-pct tabular-nums" [class.positive]="potentialReturnPct() > 0"> (+{{ potentialReturnPct() }}%) </span>
+                        }
                     </div>
                 </div>
             </div>
@@ -208,10 +215,10 @@ export interface OrderIntent {
             }
 
             .order-terminal-card {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-lg, 14px);
-                padding: var(--space-lg, 20px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
+                padding: var(--space-lg);
                 box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
                 display: flex;
                 flex-direction: column;
@@ -222,7 +229,7 @@ export interface OrderIntent {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 padding-bottom: 12px;
             }
 
@@ -230,7 +237,7 @@ export interface OrderIntent {
                 font-family: var(--font-ui);
                 font-size: 16px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.2px;
             }
 
@@ -238,33 +245,33 @@ export interface OrderIntent {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                background-color: var(--canvas-subtle, #0e0c1c);
+                background-color: var(--canvas-subtle);
                 padding: 4px 12px;
-                border-radius: var(--radius-pill, 9999px);
-                border: 1px solid var(--hairline, #252140);
+                border-radius: var(--radius-pill);
+                border: 1px solid var(--hairline);
             }
 
             .balance-title {
                 font-family: var(--font-ui);
                 font-size: 11px;
                 font-weight: 600;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .balance-num {
                 font-family: var(--font-mono);
                 font-size: 13px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
             .simulation-badge {
                 font-size: 11px;
-                color: var(--primary-border, #a855f7);
+                color: var(--primary-border);
                 background-color: rgba(168, 85, 247, 0.12);
                 padding: 1px 6px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 border: 1px solid rgba(168, 85, 247, 0.3);
             }
 
@@ -276,7 +283,7 @@ export interface OrderIntent {
                 padding: 6px 10px;
                 background-color: rgba(124, 77, 255, 0.06);
                 border: 1px solid rgba(124, 77, 255, 0.2);
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
             }
 
             .paper-dot {
@@ -289,7 +296,7 @@ export interface OrderIntent {
             .paper-notice-text {
                 font-family: var(--font-ui);
                 font-size: 11.5px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 letter-spacing: 0.1px;
             }
 
@@ -349,25 +356,25 @@ export interface OrderIntent {
                 font-family: var(--font-ui);
                 font-size: 13px;
                 font-weight: 600;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .input-wrapper {
                 display: flex;
                 align-items: center;
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 4px 8px 4px 14px;
                 gap: 8px;
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 transition:
                     border-color 0.15s ease,
                     box-shadow 0.15s ease;
             }
 
             .input-wrapper:focus-within {
-                border-color: var(--primary-border, #7c4dff);
+                border-color: var(--primary-border);
                 box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.25);
             }
 
@@ -375,14 +382,14 @@ export interface OrderIntent {
                 font-family: var(--font-mono);
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .amount-field {
                 flex: 1;
                 background: transparent;
                 border: none;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-family: var(--font-mono);
                 font-size: 20px;
                 font-weight: 700;
@@ -410,9 +417,9 @@ export interface OrderIntent {
                 flex-direction: column;
                 gap: 6px;
                 padding: 10px 12px;
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
             }
 
             .slippage-setting-header {
@@ -425,14 +432,14 @@ export interface OrderIntent {
                 font-family: var(--font-ui);
                 font-size: 11.5px;
                 font-weight: 600;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .slippage-setting-current {
                 font-family: var(--font-mono);
                 font-size: 11.5px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .slippage-presets-row {
@@ -445,25 +452,26 @@ export interface OrderIntent {
             .custom-slippage-wrapper {
                 display: flex;
                 align-items: center;
-                background-color: var(--canvas, #080613);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-sm, 6px);
+                background-color: var(--canvas);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-sm);
                 padding: 2px 6px;
                 gap: 2px;
-                height: 28px;
+                min-height: var(--touch-target-min);
                 box-sizing: border-box;
                 transition: border-color 0.15s ease;
             }
 
             .custom-slippage-wrapper:focus-within {
-                border-color: var(--primary-border, #7c4dff);
+                border-color: var(--primary-border);
             }
 
             .custom-slippage-input {
-                width: 38px;
+                width: var(--touch-target-min);
+                min-height: var(--touch-target-min);
                 background: transparent;
                 border: none;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-family: var(--font-mono);
                 font-size: 11.5px;
                 font-weight: 600;
@@ -481,13 +489,13 @@ export interface OrderIntent {
             .percent-suffix {
                 font-family: var(--font-mono);
                 font-size: 11px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .quote-drawer {
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 14px;
                 display: flex;
                 flex-direction: column;
@@ -508,20 +516,20 @@ export interface OrderIntent {
 
             .quote-label {
                 font-family: var(--font-ui);
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .quote-val {
                 font-family: var(--font-mono);
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
             .shares-highlight {
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .slippage-val-group {
@@ -531,7 +539,7 @@ export interface OrderIntent {
             }
 
             .total-return-row {
-                border-top: 1px solid var(--hairline, #252140);
+                border-top: 1px solid var(--hairline);
                 padding-top: 10px;
                 margin-top: 2px;
             }
@@ -546,7 +554,7 @@ export interface OrderIntent {
                 font-family: var(--font-mono);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--outcome-yes-text, #065f46);
+                color: var(--outcome-yes-text);
                 font-feature-settings: 'tnum' 1;
             }
 
@@ -554,7 +562,7 @@ export interface OrderIntent {
                 font-family: var(--font-mono);
                 font-size: 12px;
                 font-weight: 600;
-                color: var(--outcome-yes-text, #065f46);
+                color: var(--outcome-yes-text);
             }
 
             .action-footer {
@@ -567,7 +575,7 @@ export interface OrderIntent {
             .validation-warning {
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--status-warning, #fbbf24);
+                color: var(--status-warning);
                 text-align: center;
             }
 
@@ -586,7 +594,10 @@ export interface OrderIntent {
     ]
 })
 export class OrderTerminalComponent {
+    protected readonly rovingKeydown = handleRovingKeydown;
     readonly market = input.required<Market>();
+    /** False when the market is not open for trading; the terminal then cannot submit. */
+    readonly tradable = input<boolean>(true);
     readonly orderReviewRequested = output<OrderIntent>();
 
     protected readonly apiService = inject(ApiService);
@@ -635,18 +646,20 @@ export class OrderTerminalComponent {
         return isNaN(parsed) ? 0 : parsed;
     });
 
+    /** The typed amount as a canonical 8-decimal string, or null when it is not a valid amount. */
+    protected readonly canonicalAmount = computed(() => normalizeDecimal(this.amountInput(), 8));
+
     protected readonly validationError = computed(() => {
-        const amt = this.currentNumericAmount();
-        if (amt <= 0) {
+        const amt = this.canonicalAmount();
+        if (amt === null || compareDecimal(amt, '0') !== 1) {
             return 'Enter a valid positive USDC amount';
         }
         if (!this.authStore.isAuthenticated()) {
             return null;
         }
-        const balStr = this.authStore.cashBalance().replace(/[$,]/g, '');
-        const balNum = parseFloat(balStr);
-        if (!isNaN(balNum) && amt > balNum) {
-            return `Amount exceeds available cash balance ($${balNum.toFixed(2)})`;
+        const balance = this.authStore.cashBalanceRaw();
+        if (compareDecimal(amt, balance) === 1) {
+            return `Amount exceeds available cash balance (${formatUsd(balance)})`;
         }
         return null;
     });
@@ -655,26 +668,29 @@ export class OrderTerminalComponent {
         if (!this.authStore.isAuthenticated()) {
             return false;
         }
+        if (!this.tradable()) {
+            return true;
+        }
         return !!this.validationError() || this.isLoadingQuote() || !this.latestQuote();
     });
 
     protected readonly formattedSharesReceived = computed(() => {
         const q = this.latestQuote();
-        if (!q) return '0.00';
+        if (!q) return '—';
         const num = parseFloat(q.shares_received);
         return isNaN(num) ? '0.00' : num.toFixed(2);
     });
 
     protected readonly formattedAvgPrice = computed(() => {
         const q = this.latestQuote();
-        if (!q) return '$0.00';
+        if (!q) return '—';
         const num = parseFloat(q.avg_price);
         return isNaN(num) ? '$0.00' : `$${num.toFixed(4)}`;
     });
 
     protected readonly formattedPriceImpact = computed(() => {
         const q = this.latestQuote();
-        if (!q) return '0.00';
+        if (!q) return '—';
         const num = parseFloat(q.price_impact_pct);
         return isNaN(num) ? '0.00' : Math.abs(num).toFixed(2);
     });
@@ -690,7 +706,7 @@ export class OrderTerminalComponent {
 
     protected readonly slippageBadgeLabel = computed(() => {
         const q = this.latestQuote();
-        if (!q) return 'Normal';
+        if (!q) return 'Awaiting quote';
         const num = Math.abs(parseFloat(q.price_impact_pct));
         if (num < 1.0) return 'Minimal';
         if (num <= 3.0) return 'Moderate';
@@ -699,7 +715,7 @@ export class OrderTerminalComponent {
 
     protected readonly potentialPayout = computed(() => {
         const q = this.latestQuote();
-        if (!q) return '$0.00';
+        if (!q) return '—';
         const shares = parseFloat(q.shares_received);
         return isNaN(shares) ? '$0.00' : `$${shares.toFixed(2)}`;
     });
@@ -717,6 +733,9 @@ export class OrderTerminalComponent {
     protected readonly tradeButtonText = computed(() => {
         if (!this.authStore.isAuthenticated()) {
             return 'Sign in to Trade';
+        }
+        if (!this.tradable()) {
+            return 'Trading closed';
         }
         const outcome = this.selectedOutcome();
         const amt = this.currentNumericAmount();
@@ -746,7 +765,7 @@ export class OrderTerminalComponent {
             const outcome = this.selectedOutcome();
             const amt = this.amountInput();
 
-            if (m && m.id && parseFloat(amt) > 0) {
+            if (m && m.id && normalizeDecimal(amt, 8) !== null) {
                 untracked(() => {
                     this.scheduleQuoteFetch(m.id, outcome, amt);
                 });
@@ -776,14 +795,13 @@ export class OrderTerminalComponent {
             this.authStore.openAuthModal();
             return;
         }
-        const balStr = this.authStore.cashBalance().replace(/[$,]/g, '');
-        const balNum = parseFloat(balStr);
-        if (!isNaN(balNum) && balNum > 0) {
-            this.amountInput.set(balNum.toFixed(0));
+        const max = normalizeDecimal(this.authStore.cashBalanceRaw(), 2);
+        if (max !== null && compareDecimal(max, '0') === 1) {
+            this.amountInput.set(max);
         }
     }
 
-    private scheduleQuoteFetch(marketId: string, outcome: 'YES' | 'NO', amountStr: string): void {
+    private scheduleQuoteFetch(marketId: string, outcome: 'YES' | 'NO', typedAmount: string): void {
         if (this.quoteDebounceTimer) {
             clearTimeout(this.quoteDebounceTimer);
         }
@@ -792,14 +810,15 @@ export class OrderTerminalComponent {
             this.inFlightQuoteSub = null;
         }
 
-        const amtNum = parseFloat(amountStr);
-        if (isNaN(amtNum) || amtNum <= 0) {
+        const amount = normalizeDecimal(typedAmount, 8);
+        if (amount === null || compareDecimal(amount, '0') !== 1) {
+            this.latestQuote.set(null);
             this.isLoadingQuote.set(false);
             return;
         }
 
         // 1. Client-Side Cache Check (1s TTL to prevent confirm-time staleness)
-        const cacheKey = `${marketId}:${outcome}:${amtNum.toFixed(2)}`;
+        const cacheKey = `${marketId}:${outcome}:${amount}`;
         const now = Date.now();
         const cached = this.quoteCache.get(cacheKey);
         if (cached && now - cached.timestamp < 1000) {
@@ -808,27 +827,8 @@ export class OrderTerminalComponent {
             return;
         }
 
-        // 2. Fast Optimistic Quote for Instant Perceived Responsiveness
-        const m = this.market();
-        const probStr = outcome === 'YES' ? m?.probability_yes : m?.probability_no;
-        const prob = probStr ? parseFloat(probStr) : 0.5;
-        if (prob > 0 && (!this.latestQuote() || this.latestQuote()?.outcome !== outcome)) {
-            const estShares = amtNum / prob;
-            this.latestQuote.set({
-                market_id: marketId,
-                action: 'BUY',
-                outcome: outcome,
-                deposit_usdc: amtNum.toFixed(8),
-                shares_received: estShares.toFixed(8),
-                avg_price: prob.toFixed(8),
-                initial_price: prob.toFixed(8),
-                new_price: prob.toFixed(8),
-                price_impact_pct: '0.00000000',
-                new_reserve_yes: m?.reserves?.reserve_yes || '0',
-                new_reserve_no: m?.reserves?.reserve_no || '0',
-                new_collateral: m?.reserves?.collateral_reserve || '0'
-            });
-        }
+        // No estimate is shown before the server quote arrives: the drawer shows placeholders (U3).
+        this.latestQuote.set(null);
 
         this.isLoadingQuote.set(true);
         this.quoteDebounceTimer = setTimeout(() => {
@@ -836,7 +836,7 @@ export class OrderTerminalComponent {
                 .getQuote(marketId, {
                     action: 'BUY',
                     outcome: outcome,
-                    amount_usdc: amtNum.toFixed(8)
+                    amount_usdc: amount
                 })
                 .pipe(takeUntilDestroyed(this.destroyRef))
                 .subscribe({
@@ -864,7 +864,8 @@ export class OrderTerminalComponent {
         const m = this.market();
         if (!m || this.isTradeDisabled()) return;
 
-        const tradeAmt = this.currentNumericAmount();
+        const tradeAmt = this.canonicalAmount();
+        if (tradeAmt === null) return;
         this.isLoadingQuote.set(true);
 
         // Clear quote cache to guarantee up-to-date CPMM quote for confirmation review
@@ -877,7 +878,7 @@ export class OrderTerminalComponent {
                 {
                     action: 'BUY',
                     outcome: this.selectedOutcome(),
-                    amount_usdc: tradeAmt.toFixed(8)
+                    amount_usdc: tradeAmt
                 },
                 true // fresh quote bypassing server and client cache
             )
@@ -888,15 +889,13 @@ export class OrderTerminalComponent {
                     this.latestQuote.set(freshQuote);
 
                     const currentBalStr = this.authStore.cashBalance();
-                    const currentBalNum = parseFloat(currentBalStr.replace(/[$,]/g, ''));
-                    const postBalNum = Math.max(0, currentBalNum - tradeAmt);
-                    const postTradeBalStr = `$${postBalNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    const postTradeBalStr = formatUsd(subtractDecimal(this.authStore.cashBalanceRaw(), tradeAmt) ?? '0');
 
                     this.orderReviewRequested.emit({
                         marketId: m.id,
                         marketTitle: m.title,
                         outcome: this.selectedOutcome(),
-                        amountUSDC: tradeAmt.toFixed(8),
+                        amountUSDC: tradeAmt,
                         quote: freshQuote,
                         maxSlippagePct: this.maxSlippageTolerancePct(),
                         currentBalance: currentBalStr,

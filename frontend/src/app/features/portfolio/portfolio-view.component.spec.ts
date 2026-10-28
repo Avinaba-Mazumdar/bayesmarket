@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { PortfolioViewComponent } from './portfolio-view.component';
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
@@ -10,7 +10,7 @@ import { PortfolioResponse } from '../../core/models/market.model';
 describe('PortfolioViewComponent', () => {
     let fixture: ComponentFixture<PortfolioViewComponent>;
     let component: PortfolioViewComponent;
-    let apiServiceSpy: { getPortfolio: any; createGuestSession: any; cashOut: any; getSellQuote: any };
+    let apiServiceSpy: { getPortfolio: any; createGuestSession: any; cashOut: any; getSellQuote: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
     let authStore: AuthStore;
 
     const mockPortfolioResponse: PortfolioResponse = {
@@ -36,6 +36,11 @@ describe('PortfolioViewComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             getPortfolio: vi.fn().mockReturnValue(of(mockPortfolioResponse)),
             createGuestSession: vi.fn().mockReturnValue(of({ token: 'test-token', user: { id: 'u-1', cash_balance: '1250' } })),
             cashOut: vi.fn(),
@@ -53,7 +58,8 @@ describe('PortfolioViewComponent', () => {
 
         authStore.token.set('test-auth-token');
         authStore.userId.set('user-123');
-        authStore.cashBalance.set('$1,250.00');
+        authStore.user.set({ id: 'user-123', is_guest: true, auth_provider: 'guest', cash_balance: '1250.00', created_at: '2026-01-01T00:00:00Z' } as any);
+        authStore.updateBalance('1250.00');
 
         fixture.detectChanges();
     });
@@ -107,5 +113,15 @@ describe('PortfolioViewComponent', () => {
         const el = fixture.nativeElement as HTMLElement;
         expect(el.querySelector('.empty-positions-box')).toBeTruthy();
         expect(el.querySelector('.empty-positions-box h3')?.textContent?.trim()).toBe('No Open Positions');
+    });
+
+    it('should ask for sign-in instead of showing zero metrics when signed out', () => {
+        authStore.token.set(null);
+        authStore.user.set(null);
+        fixture.detectChanges();
+
+        const el = fixture.nativeElement as HTMLElement;
+        expect(el.querySelector('.signin-prompt')).toBeTruthy();
+        expect(el.querySelector('.metrics-grid')).toBeNull();
     });
 });

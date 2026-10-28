@@ -552,6 +552,14 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 		return
 	}
+	if appErr := validateMarketCategory(req.Category); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
+	if appErr := validateMarketImageURL(req.ImageURL); appErr != nil {
+		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+		return
+	}
 
 	resolutionDate, err := parseResolutionDate(req.ResolutionDate)
 	if err != nil {
@@ -628,9 +636,6 @@ func (h *AdminHandler) HandleCreateMarket(c *gin.Context) {
 	// 3. Unique slug generation & atomic database insertion with collision retry
 	baseSlug := slugifyTitle(req.Title)
 	imageURL := req.ImageURL
-	if imageURL == "" {
-		imageURL = fmt.Sprintf("/assets/markets/%s.webp", req.Category)
-	}
 
 	var (
 		marketID  uuid.UUID
@@ -904,6 +909,19 @@ func (h *AdminHandler) HandleEditMarket(c *gin.Context) {
 	if appErr := validateMarketText(newTitle, newDesc, newCat, newSource, newImageURL); appErr != nil {
 		c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
 		return
+	}
+	// Existing markets keep their stored category; only a change must be on the list.
+	if newCat != curCategory {
+		if appErr := validateMarketCategory(newCat); appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
+	}
+	if req.ImageURL != nil {
+		if appErr := validateMarketImageURL(newImageURL); appErr != nil {
+			c.JSON(appErr.StatusCode, gin.H{"error": appErr.ErrorCode, "message": appErr.Message})
+			return
+		}
 	}
 
 	updateQuery := `

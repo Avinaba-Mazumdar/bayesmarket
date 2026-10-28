@@ -177,6 +177,36 @@ export type MarketStatus = 'active' | 'suspended' | 'locked' | 'resolved' | 'voi
 /** Statuses an admin can set through PUT /admin/markets/:id. */
 export type EditableMarketStatus = 'active' | 'suspended' | 'locked';
 
+export interface MarketCategory {
+    id: string;
+    label: string;
+}
+
+export type HistoryRange = '1h' | '24h' | '7d' | 'all';
+
+export interface HistoryPoint {
+    /** Bucket start, RFC 3339 UTC. */
+    t: string;
+    /** Implied YES probability after the last trade in the bucket, as a decimal string in [0, 1]. */
+    p: string;
+}
+
+export interface MarketHistoryResponse {
+    market_id: string;
+    range: HistoryRange;
+    points: HistoryPoint[];
+}
+
+export interface MarketTrade {
+    id: string;
+    trade_type: 'BUY' | 'SELL';
+    outcome: 'YES' | 'NO';
+    shares_filled: string;
+    execution_price: string;
+    amount_usdc: string;
+    created_at: string;
+}
+
 export interface DeleteMarketResponse {
     status: string;
     market_id: string;

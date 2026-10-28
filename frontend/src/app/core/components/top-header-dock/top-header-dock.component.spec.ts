@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { TopHeaderDockComponent } from './top-header-dock.component';
 import { ThemeService } from '../../services/theme.service';
 import { AuthStore } from '../../../state/auth.store';
@@ -15,6 +15,11 @@ describe('TopHeaderDockComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             createGuestSession: vi.fn().mockReturnValue(
                 of({
                     token: 'guest-tok',
@@ -64,7 +69,7 @@ describe('TopHeaderDockComponent', () => {
             auth_provider: 'guest',
             created_at: '2026-01-01T00:00:00Z'
         });
-        authStore.cashBalance.set('$1,000.00');
+        authStore.updateBalance('1000.00');
         fixture.detectChanges();
 
         const el = fixture.nativeElement as HTMLElement;

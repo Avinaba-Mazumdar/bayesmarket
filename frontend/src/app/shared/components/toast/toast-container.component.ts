@@ -11,7 +11,14 @@ import { Toast, ToastService } from './toast.service';
     template: `
         <div class="toast-viewport" role="region" aria-label="Notifications" aria-live="polite">
             @for (t of toastService.toasts(); track t.id) {
-                <div [class]="'toast-item toast-' + (t.variant || 'default')" [attr.role]="t.variant === 'destructive' ? 'alert' : 'status'">
+                <div
+                    [class]="'toast-item toast-' + (t.variant || 'default')"
+                    [attr.role]="t.variant === 'destructive' ? 'alert' : 'status'"
+                    (mouseenter)="toastService.pause(t.id)"
+                    (mouseleave)="toastService.resume(t.id)"
+                    (focusin)="toastService.pause(t.id)"
+                    (focusout)="onFocusOut($event, t.id)"
+                >
                     <div class="toast-indicator" aria-hidden="true"></div>
 
                     <div class="toast-icon-box" aria-hidden="true">
@@ -80,11 +87,11 @@ import { Toast, ToastService } from './toast.service';
                 align-items: flex-start;
                 gap: 12px;
                 padding: 14px 16px;
-                background-color: var(--surface-glass, rgba(17, 22, 34, 0.95));
+                background-color: var(--surface-glass);
                 backdrop-filter: blur(16px);
                 -webkit-backdrop-filter: blur(16px);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-lg, 14px);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 box-shadow: var(--shadow-lg, 0 12px 28px -4px rgba(0, 0, 0, 0.65));
                 overflow: hidden;
                 animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -111,19 +118,19 @@ import { Toast, ToastService } from './toast.service';
             }
 
             .toast-default .toast-indicator {
-                background-color: var(--primary, #a6034c);
+                background-color: var(--primary);
             }
             .toast-success .toast-indicator {
-                background-color: var(--outcome-yes, #10b981);
+                background-color: var(--outcome-yes);
             }
             .toast-destructive .toast-indicator {
-                background-color: var(--status-loss-border, #fb7185);
+                background-color: var(--status-loss-border);
             }
             .toast-warning .toast-indicator {
-                background-color: var(--status-warning, #fcd34d);
+                background-color: var(--status-warning);
             }
             .toast-info .toast-indicator {
-                background-color: var(--status-info, #7dd3fc);
+                background-color: var(--status-info);
             }
 
             /* --- Icons --- */
@@ -138,19 +145,19 @@ import { Toast, ToastService } from './toast.service';
             }
 
             .icon-default {
-                color: var(--primary-border, #e84089);
+                color: var(--primary-border);
             }
             .icon-success {
-                color: var(--outcome-yes-text, #34d399);
+                color: var(--outcome-yes-text);
             }
             .icon-destructive {
-                color: var(--status-loss, #fda4af);
+                color: var(--status-loss);
             }
             .icon-warning {
-                color: var(--status-warning, #fcd34d);
+                color: var(--status-warning);
             }
             .icon-info {
-                color: var(--status-info, #7dd3fc);
+                color: var(--status-info);
             }
 
             /* --- Content --- */
@@ -167,14 +174,14 @@ import { Toast, ToastService } from './toast.service';
                 font-size: 14px;
                 font-weight: 600;
                 line-height: 1.3;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .toast-description {
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 13px;
                 line-height: 1.4;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             /* --- Action Button --- */
@@ -198,6 +205,15 @@ import { Toast, ToastService } from './toast.service';
 })
 export class ToastContainerComponent {
     readonly toastService = inject(ToastService);
+
+    /** Resume auto-dismiss only when focus leaves the toast entirely. */
+    onFocusOut(event: FocusEvent, id: string): void {
+        const toastEl = event.currentTarget as HTMLElement;
+        const next = event.relatedTarget as Node | null;
+        if (!next || !toastEl.contains(next)) {
+            this.toastService.resume(id);
+        }
+    }
 
     onAction(toast: Toast): void {
         if (toast.action) {

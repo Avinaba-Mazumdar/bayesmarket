@@ -9,7 +9,7 @@ import { CashOutResponse, SellQuoteResponse, UserPosition } from '../../core/mod
 describe('CashOutDialogComponent', () => {
     let fixture: ComponentFixture<CashOutDialogComponent>;
     let component: CashOutDialogComponent;
-    let apiServiceSpy: { cashOut: any; getSellQuote: any; createGuestSession: any; getPortfolio: any };
+    let apiServiceSpy: { cashOut: any; getSellQuote: any; createGuestSession: any; getPortfolio: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
     let authStore: AuthStore;
     let toastService: ToastService;
 
@@ -58,6 +58,11 @@ describe('CashOutDialogComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             cashOut: vi.fn().mockReturnValue(of(mockCashOutResponse)),
             getSellQuote: vi.fn().mockReturnValue(of(mockSellQuote)),
             createGuestSession: vi.fn().mockReturnValue(of({ token: 'test-token', user: { id: 'u-1', cash_balance: '1000' } })),
@@ -76,7 +81,7 @@ describe('CashOutDialogComponent', () => {
 
         authStore.token.set('test-auth-token');
         authStore.userId.set('user-123');
-        authStore.cashBalance.set('$1,000.00');
+        authStore.updateBalance('1000.00');
 
         fixture.componentRef.setInput('isOpen', true);
         fixture.componentRef.setInput('position', mockPosition);
@@ -86,7 +91,7 @@ describe('CashOutDialogComponent', () => {
     it('should display complete position details and liquidation calculation', () => {
         const el = fixture.nativeElement as HTMLElement;
         expect(el.querySelector('.market-question')?.textContent?.trim()).toBe('Will the Federal Reserve cut rates?');
-        expect(el.querySelector('.shares-amount')?.textContent?.trim()).toContain('100.00 Shares');
+        expect(el.querySelector('.shares-owned')?.textContent?.trim()).toBe('of 100.00 owned');
         expect(el.querySelector('.highlight-val')?.textContent?.trim()).toBe('$61.75 USDC');
         expect(el.querySelector('.min-payout-val')?.textContent?.trim()).toBe('$60.51 USDC');
 
@@ -95,7 +100,7 @@ describe('CashOutDialogComponent', () => {
     });
 
     it('should request a fresh SELL quote for the whole position when opened', () => {
-        expect(apiServiceSpy.getSellQuote).toHaveBeenCalledWith(mockPosition.market_id, 'YES', '100.00');
+        expect(apiServiceSpy.getSellQuote).toHaveBeenCalledWith(mockPosition.market_id, 'YES', '100.00000000');
     });
 
     it('should disable confirm and show retry when the SELL quote fails', () => {
@@ -146,7 +151,7 @@ describe('CashOutDialogComponent', () => {
             {
                 market_id: mockPosition.market_id,
                 outcome: 'YES',
-                shares: '100.00',
+                shares: '100.00000000',
                 // 61.75 quoted payout with 2.0% tolerance: derived from the SELL quote, not spot x 0.98
                 min_payout_usdc: '60.51500000'
             },

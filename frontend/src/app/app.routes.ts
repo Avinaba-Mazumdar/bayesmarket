@@ -5,7 +5,7 @@ export const routes: Routes = [
     {
         path: '',
         loadComponent: () => import('./features/market/market-list.component').then((m) => m.MarketListComponent),
-        title: 'BayesMarket — Institutional Binary Prediction Market Exchange'
+        title: 'BayesMarket — Binary Prediction Markets'
     },
     {
         path: 'markets/:id',

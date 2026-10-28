@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { App } from './app.component';
 import { ApiService } from './core/services/api.service';
 import { ToastService } from './shared/components/toast/toast.service';
@@ -8,6 +8,11 @@ import { ToastService } from './shared/components/toast/toast.service';
 describe('App', () => {
     beforeEach(async () => {
         const apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             createGuestSession: vi.fn().mockReturnValue(of({ token: 't', user: { id: '1', cash_balance: '1000' } })),
             getCurrentUser: vi.fn().mockReturnValue(of({ id: '1', cash_balance: '1000' })),
             getGoogleAuthUrl: vi.fn().mockReturnValue(of({ url: '', simulated: true }))

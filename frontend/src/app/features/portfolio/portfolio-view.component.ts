@@ -41,7 +41,13 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 </div>
             </header>
 
-            @if (isLoading()) {
+            @if (!authStore.isAuthenticated()) {
+                <section class="signin-prompt" aria-labelledby="signin-prompt-title">
+                    <h2 id="signin-prompt-title">Sign in to see your positions</h2>
+                    <p>Positions and cash are tied to a session. Start a guest session to trade, or sign in with Google.</p>
+                    <app-button variant="primary" size="default" ariaLabel="Open sign-in options" (btnClick)="authStore.openAuthModal()">Sign in</app-button>
+                </section>
+            } @else if (isLoading()) {
                 <div class="loading-state" role="status">
                     <div class="spinner" aria-hidden="true"></div>
                     <p>Calculating portfolio valuations...</p>
@@ -70,7 +76,6 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                     <div class="metric-card">
                         <div class="metric-header">
                             <span class="metric-title">Active Positions</span>
-                            <span class="active-count-badge tabular-nums">{{ positions().length }}</span>
                         </div>
                         <span class="metric-value tabular-nums">{{ positions().length }}</span>
                         <span class="metric-desc">Open Market Contracts</span>
@@ -219,7 +224,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .portfolio-container {
                 max-width: 1440px;
                 margin: 0 auto;
-                padding: var(--space-xl, 32px) var(--space-lg, 20px) 64px;
+                padding: var(--space-xl) var(--space-lg) 64px;
                 display: flex;
                 flex-direction: column;
                 gap: 32px;
@@ -238,11 +243,11 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 padding: 4px 10px;
                 background-color: rgba(56, 189, 248, 0.08);
                 border: 1px solid rgba(56, 189, 248, 0.2);
-                border-radius: var(--radius-full, 9999px);
+                border-radius: var(--radius-full);
                 font-family: var(--font-ui);
                 font-size: 11px;
                 font-weight: 700;
-                color: var(--status-info, #7dd3fc);
+                color: var(--status-info);
                 letter-spacing: 0.5px;
                 width: fit-content;
             }
@@ -255,7 +260,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 28px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 margin: 0;
                 letter-spacing: -0.4px;
             }
@@ -263,7 +268,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .portfolio-subtitle {
                 font-family: var(--font-ui);
                 font-size: 14.5px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 margin: 0;
                 max-width: 700px;
                 line-height: 1.45;
@@ -277,9 +282,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .metric-card {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 padding: 20px;
                 display: flex;
                 flex-direction: column;
@@ -298,39 +303,39 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 12px;
                 font-weight: 600;
-                color: var(--muted, #94a3b8);
+                color: var(--muted);
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
             }
 
             .metric-glyph.info {
-                color: var(--status-info, #075985);
+                color: var(--status-info);
             }
             .metric-glyph.primary {
-                color: var(--primary-text, #4338ca);
+                color: var(--primary-text);
             }
             .metric-glyph.profit {
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
             }
             .metric-glyph.loss {
-                color: var(--status-loss, #9f1239);
+                color: var(--status-loss);
             }
 
             .active-count-badge {
                 font-family: var(--font-mono);
                 font-size: 11.5px;
                 font-weight: 700;
-                background-color: var(--hairline, #252140);
-                color: var(--ink, #f8f7ff);
+                background-color: var(--hairline);
+                color: var(--ink);
                 padding: 2px 8px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
             }
 
             .metric-value {
                 font-family: var(--font-mono);
                 font-size: 26px;
                 font-weight: 800;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.5px;
                 margin: 4px 0;
                 font-feature-settings: 'tnum' 1;
@@ -344,11 +349,11 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .profit-text {
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
             }
 
             .loss-text {
-                color: var(--status-loss, #9f1239);
+                color: var(--status-loss);
             }
 
             .pnl-pct-pill {
@@ -356,32 +361,32 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-size: 12px;
                 font-weight: 600;
                 padding: 2px 6px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
             }
 
             .profit-pill {
-                background-color: var(--status-profit-bg, #ecfdf5);
-                color: var(--status-profit, #065f46);
-                border: 1px solid var(--status-profit-border, #059669);
+                background-color: var(--status-profit-bg);
+                color: var(--status-profit);
+                border: 1px solid var(--status-profit-border);
             }
 
             .loss-pill {
-                background-color: var(--status-loss-bg, #fff1f2);
-                color: var(--status-loss, #9f1239);
-                border: 1px solid var(--status-loss-border, #e11d48);
+                background-color: var(--status-loss-bg);
+                color: var(--status-loss);
+                border: 1px solid var(--status-loss-border);
             }
 
             .metric-desc {
                 font-family: var(--font-ui);
                 font-size: 11.5px;
-                color: var(--muted, #94a3b8);
+                color: var(--muted);
             }
 
             /* --- Positions Table --- */
             .positions-section {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 padding: 24px;
                 display: flex;
                 flex-direction: column;
@@ -393,7 +398,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 padding-bottom: 14px;
             }
 
@@ -401,14 +406,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 margin: 0;
             }
 
             .positions-count {
                 font-family: var(--font-ui);
                 font-size: 12.5px;
-                color: var(--muted, #94a3b8);
+                color: var(--muted);
             }
 
             .table-responsive-container {
@@ -429,15 +434,15 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.4px;
-                color: var(--muted, #94a3b8);
+                color: var(--muted);
                 padding: 12px 14px;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 white-space: nowrap;
             }
 
             .positions-table td {
                 padding: 14px;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 vertical-align: middle;
             }
 
@@ -464,11 +469,11 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 flex-direction: column;
                 gap: 4px;
                 text-decoration: none;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .market-link:hover .market-title-text {
-                color: var(--primary-border, #7c4dff);
+                color: var(--primary-border);
             }
 
             .market-title-text {
@@ -480,7 +485,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 10px;
                 font-weight: 700;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 letter-spacing: 0.4px;
             }
 
@@ -491,11 +496,11 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 
             .num-highlight {
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .spot-price {
-                color: var(--status-info, #7dd3fc);
+                color: var(--status-info);
             }
 
             .market-value {
@@ -505,20 +510,20 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .pnl-tag {
                 display: inline-block;
                 padding: 2px 8px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 font-weight: 600;
             }
 
             .profit-tag {
-                background-color: var(--status-profit-bg, #ecfdf5);
-                color: var(--status-profit, #065f46);
-                border: 1px solid var(--status-profit-border, #059669);
+                background-color: var(--status-profit-bg);
+                color: var(--status-profit);
+                border: 1px solid var(--status-profit-border);
             }
 
             .loss-tag {
-                background-color: var(--status-loss-bg, #fff1f2);
-                color: var(--status-loss, #9f1239);
-                border: 1px solid var(--status-loss-border, #e11d48);
+                background-color: var(--status-loss-bg);
+                color: var(--status-loss);
+                border: 1px solid var(--status-loss-border);
             }
 
             .empty-positions-box {
@@ -532,20 +537,20 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .empty-icon {
-                color: var(--hairline, #1e2638);
+                color: var(--hairline);
             }
 
             .empty-positions-box h3 {
                 font-family: var(--font-ui);
                 font-size: 18px;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 margin: 0;
             }
 
             .empty-positions-box p {
                 font-family: var(--font-ui);
                 font-size: 14px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 max-width: 440px;
                 margin: 0;
             }
@@ -557,7 +562,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 justify-content: center;
                 padding: 80px 20px;
                 gap: 16px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 font-family: var(--font-ui);
             }
 
@@ -565,7 +570,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 width: 36px;
                 height: 36px;
                 border: 3px solid rgba(166, 3, 76, 0.2);
-                border-top-color: var(--primary-border, #e84089);
+                border-top-color: var(--primary-border);
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
             }
@@ -583,6 +588,26 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 .metric-card {
                     padding: 16px;
                 }
+            }
+            .signin-prompt {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 24px;
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-xl);
+                background-color: var(--surface-card);
+            }
+
+            .signin-prompt h2 {
+                margin: 0;
+                font-size: 20px;
+            }
+
+            .signin-prompt p {
+                margin: 0;
+                color: var(--muted);
             }
         `
     ]

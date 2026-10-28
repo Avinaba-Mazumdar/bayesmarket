@@ -18,7 +18,11 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
             [disabled]="disabled() || loading()"
             [class]="buttonClass()"
             [attr.aria-busy]="loading()"
-            [attr.aria-pressed]="isToggleable() ? selected() : null"
+            [attr.role]="buttonRole()"
+            [attr.aria-pressed]="buttonRole() ? null : isToggleable() ? selected() : null"
+            [attr.aria-selected]="buttonRole() === 'tab' ? selected() : null"
+            [attr.aria-checked]="buttonRole() === 'radio' ? selected() : null"
+            [attr.tabindex]="buttonRole() === 'tab' || buttonRole() === 'radio' ? (selected() ? 0 : -1) : null"
             [attr.aria-label]="ariaLabel() || null"
             (click)="onClick($event)"
         >
@@ -49,7 +53,7 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
                 font-weight: 600;
                 line-height: 1.3;
                 letter-spacing: 0.1px;
-                border-radius: var(--radius-lg, 14px);
+                border-radius: var(--radius-lg);
                 cursor: pointer;
                 text-decoration: none;
                 user-select: none;
@@ -63,7 +67,7 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
             }
 
             button:focus-visible {
-                outline: 2px solid var(--focus-outline, #7c4dff);
+                outline: 2px solid var(--focus-outline);
                 outline-offset: 2px;
             }
 
@@ -77,77 +81,77 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
                 filter: grayscale(30%);
             }
 
-            /* --- Sizes (WCAG 2.2 AAA Touch Target: min 40x40px) --- */
+            /* --- Sizes (WCAG 2.2 AAA Touch Target: min 44x44px, SC 2.5.5) --- */
             .btn-size-default {
-                min-height: 40px;
-                min-width: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
                 padding: 8px 16px;
                 font-size: 14px;
             }
 
             .btn-size-sm {
-                min-height: 36px;
-                min-width: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
                 padding: 6px 12px;
                 font-size: 13px;
             }
 
             .btn-size-lg {
                 min-height: 48px;
-                min-width: var(--touch-target-min, 40px);
+                min-width: var(--touch-target-min);
                 padding: 12px 24px;
                 font-size: 15px;
             }
 
             .btn-size-icon {
-                min-height: var(--touch-target-min, 40px);
-                min-width: var(--touch-target-min, 40px);
-                width: 40px;
-                height: 40px;
+                min-height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
+                width: var(--touch-target-min);
+                height: var(--touch-target-min);
                 padding: 0;
             }
 
             .btn-size-pill {
-                min-height: 40px;
-                min-width: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
                 padding: 8px 16px;
                 font-size: 13px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
             }
 
             /* --- Variants --- */
             /* Primary (Electric Royal Indigo CTA) */
             .btn-variant-primary {
-                background-color: var(--primary, #3600b3);
-                color: var(--on-primary, #ffffff);
-                border: 1px solid var(--primary-border, #7c4dff);
+                background-color: var(--primary);
+                color: var(--on-primary);
+                border: 1px solid var(--primary-border);
                 box-shadow: 0 2px 10px rgba(54, 0, 179, 0.4);
             }
             .btn-variant-primary:hover:not(:disabled) {
-                background-color: var(--primary-hover, #4e10d8);
+                background-color: var(--primary-hover);
                 box-shadow: var(--shadow-glow-primary);
             }
             .btn-variant-primary:active:not(:disabled) {
-                background-color: var(--primary-active, #29008a);
+                background-color: var(--primary-active);
             }
 
             /* Secondary (Obsidian Card Surface) */
             .btn-variant-secondary {
-                background-color: var(--surface-card, #131126);
-                color: var(--ink, #f8f7ff);
-                border: 1px solid var(--hairline, #252140);
+                background-color: var(--surface-card);
+                color: var(--ink);
+                border: 1px solid var(--hairline);
                 box-shadow: var(--shadow-sm);
             }
             .btn-variant-secondary:hover:not(:disabled) {
-                background-color: var(--surface-card-elevated, #1a1733);
-                border-color: var(--primary-border, #7c4dff);
+                background-color: var(--surface-card-elevated);
+                border-color: var(--primary-border);
             }
 
             /* Destructive (Loss / Sell / Cancel) */
             .btn-variant-destructive {
                 background-color: #be123c;
                 color: #ffffff;
-                border: 1px solid var(--status-loss-border, #fb7185);
+                border: 1px solid var(--status-loss-border);
                 box-shadow: var(--shadow-sm);
             }
             .btn-variant-destructive:hover:not(:disabled) {
@@ -158,30 +162,30 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
             /* Outline */
             .btn-variant-outline {
                 background-color: transparent;
-                color: var(--ink-secondary, #9d97b8);
-                border: 1px solid var(--hairline, #252140);
+                color: var(--ink-secondary);
+                border: 1px solid var(--hairline);
             }
             .btn-variant-outline:hover:not(:disabled) {
-                background-color: var(--surface-card, #131126);
-                color: var(--ink, #f8f7ff);
-                border-color: var(--border-strong, #3d3766);
+                background-color: var(--surface-card);
+                color: var(--ink);
+                border-color: var(--border-strong);
             }
 
             /* Ghost */
             .btn-variant-ghost {
                 background-color: transparent;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 border: 1px solid transparent;
             }
             .btn-variant-ghost:hover:not(:disabled) {
-                background-color: var(--primary-subtle, rgba(79, 70, 229, 0.08));
-                color: var(--ink, #f8f7ff);
+                background-color: var(--primary-subtle);
+                color: var(--ink);
             }
 
             /* Link */
             .btn-variant-link {
                 background-color: transparent;
-                color: var(--link, #7c4dff);
+                color: var(--link);
                 border: none;
                 padding: 0;
                 min-height: auto;
@@ -189,13 +193,13 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
             }
             .btn-variant-link:hover:not(:disabled) {
                 text-decoration: underline;
-                color: var(--link-active, #ffffff);
+                color: var(--link-active);
             }
 
             /* Outcome YES (Mint) & NO (Rose) */
             .btn-variant-yes,
             .btn-variant-no {
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
                 white-space: nowrap;
                 flex-wrap: nowrap;
             }
@@ -209,97 +213,97 @@ export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'pill';
 
             /* --- Unselected Outcome Buttons --- */
             .btn-variant-yes:not(.selected) {
-                background-color: var(--outcome-yes-subtle, rgba(6, 95, 70, 0.09));
-                color: var(--outcome-yes-text, #065f46);
-                border: 1px solid var(--outcome-yes-border, rgba(6, 95, 70, 0.35));
+                background-color: var(--outcome-yes-subtle);
+                color: var(--outcome-yes-text);
+                border: 1px solid var(--outcome-yes-border);
             }
             .btn-variant-yes:not(.selected):hover:not(:disabled) {
-                background-color: var(--outcome-yes-subtle, rgba(6, 95, 70, 0.16));
-                color: var(--outcome-yes-text, #065f46);
-                border-color: var(--outcome-yes-border, rgba(6, 95, 70, 0.5));
+                background-color: var(--outcome-yes-subtle);
+                color: var(--outcome-yes-text);
+                border-color: var(--outcome-yes-border);
                 box-shadow: var(--shadow-glow-yes);
             }
 
             .btn-variant-no:not(.selected) {
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.09));
-                color: var(--outcome-no-text, #9f1239);
-                border: 1px solid var(--outcome-no-border, rgba(159, 18, 57, 0.35));
+                background-color: var(--outcome-no-subtle);
+                color: var(--outcome-no-text);
+                border: 1px solid var(--outcome-no-border);
             }
             .btn-variant-no:not(.selected):hover:not(:disabled) {
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.16));
-                color: var(--outcome-no-text, #9f1239);
-                border-color: var(--outcome-no-border, rgba(159, 18, 57, 0.5));
+                background-color: var(--outcome-no-subtle);
+                color: var(--outcome-no-text);
+                border-color: var(--outcome-no-border);
                 box-shadow: var(--shadow-glow-no);
             }
 
             /* --- Selected Outcome Buttons (Solid High-Contrast CTA) --- */
             .btn-variant-yes.selected {
-                background-color: var(--outcome-yes-solid, #065f46);
-                color: var(--outcome-yes-solid-text, #ffffff);
-                border: 1px solid var(--outcome-yes-solid, #065f46);
+                background-color: var(--outcome-yes-solid);
+                color: var(--outcome-yes-solid-text);
+                border: 1px solid var(--outcome-yes-solid);
                 font-weight: 700;
-                box-shadow: 0 0 16px var(--outcome-yes-glow, rgba(6, 95, 70, 0.45));
+                box-shadow: 0 0 16px var(--outcome-yes-glow);
             }
             .btn-variant-yes.selected:hover:not(:disabled) {
-                background-color: var(--outcome-yes-solid-hover, #044e39);
-                border-color: var(--outcome-yes-solid-hover, #044e39);
-                color: var(--outcome-yes-solid-text, #ffffff);
-                box-shadow: 0 0 20px var(--outcome-yes-glow, rgba(6, 95, 70, 0.55));
+                background-color: var(--outcome-yes-solid-hover);
+                border-color: var(--outcome-yes-solid-hover);
+                color: var(--outcome-yes-solid-text);
+                box-shadow: 0 0 20px var(--outcome-yes-glow);
             }
             .btn-variant-yes.selected:active:not(:disabled) {
-                background-color: var(--outcome-yes-solid-hover, #044e39);
-                border-color: var(--outcome-yes-solid-hover, #044e39);
-                color: var(--outcome-yes-solid-text, #ffffff);
+                background-color: var(--outcome-yes-solid-hover);
+                border-color: var(--outcome-yes-solid-hover);
+                color: var(--outcome-yes-solid-text);
             }
 
             .btn-variant-no.selected {
-                background-color: var(--outcome-no-solid, #9f1239);
-                color: var(--outcome-no-solid-text, #ffffff);
-                border: 1px solid var(--outcome-no-solid, #9f1239);
+                background-color: var(--outcome-no-solid);
+                color: var(--outcome-no-solid-text);
+                border: 1px solid var(--outcome-no-solid);
                 font-weight: 700;
-                box-shadow: 0 0 16px var(--outcome-no-glow, rgba(159, 18, 57, 0.45));
+                box-shadow: 0 0 16px var(--outcome-no-glow);
             }
             .btn-variant-no.selected:hover:not(:disabled) {
-                background-color: var(--outcome-no-solid-hover, #881337);
-                border-color: var(--outcome-no-solid-hover, #881337);
-                color: var(--outcome-no-solid-text, #ffffff);
-                box-shadow: 0 0 20px var(--outcome-no-glow, rgba(159, 18, 57, 0.55));
+                background-color: var(--outcome-no-solid-hover);
+                border-color: var(--outcome-no-solid-hover);
+                color: var(--outcome-no-solid-text);
+                box-shadow: 0 0 20px var(--outcome-no-glow);
             }
             .btn-variant-no.selected:active:not(:disabled) {
-                background-color: var(--outcome-no-solid-hover, #881337);
-                border-color: var(--outcome-no-solid-hover, #881337);
-                color: var(--outcome-no-solid-text, #ffffff);
+                background-color: var(--outcome-no-solid-hover);
+                border-color: var(--outcome-no-solid-hover);
+                color: var(--outcome-no-solid-text);
             }
 
             /* Chip (Amount presets & timeframe intervals) */
             .btn-variant-chip {
-                background-color: var(--surface-card, #131126);
-                color: var(--ink-secondary, #9d97b8);
+                background-color: var(--surface-card);
+                color: var(--ink-secondary);
                 font-family: var(--font-mono, monospace);
                 font-size: 13px;
                 letter-spacing: 0.1px;
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 6px 12px;
-                min-height: 40px;
+                min-height: var(--touch-target-min);
                 font-feature-settings: 'tnum' 1;
             }
             .btn-variant-chip:hover:not(:disabled) {
-                background-color: var(--surface-card-elevated, #1a1733);
-                border-color: var(--primary-border, #7c4dff);
-                color: var(--ink, #f8f7ff);
+                background-color: var(--surface-card-elevated);
+                border-color: var(--primary-border);
+                color: var(--ink);
             }
             .btn-variant-chip.selected {
-                background-color: var(--primary-subtle, rgba(54, 0, 179, 0.25));
-                border-color: var(--primary-border, #7c4dff);
-                color: var(--primary-text, #4338ca);
+                background-color: var(--primary-subtle);
+                border-color: var(--primary-border);
+                color: var(--primary-text);
                 font-weight: 700;
-                box-shadow: 0 0 10px var(--primary-glow, rgba(124, 77, 255, 0.35));
+                box-shadow: 0 0 10px var(--primary-glow);
             }
             .btn-variant-chip.selected:hover:not(:disabled) {
-                background-color: var(--primary-subtle, rgba(54, 0, 179, 0.35));
-                border-color: var(--primary-border, #7c4dff);
-                color: var(--primary-text, #4338ca);
+                background-color: var(--primary-subtle);
+                border-color: var(--primary-border);
+                color: var(--primary-text);
             }
 
             /* Full Width */
@@ -334,6 +338,8 @@ export class ButtonComponent {
     readonly loading = input<boolean>(false);
     readonly fullWidth = input<boolean>(false);
     readonly selected = input<boolean>(false);
+    /** ARIA role for the inner <button> (e.g. 'tab' or 'radio'). The role must sit on the focusable element. */
+    readonly buttonRole = input<'tab' | 'radio' | null>(null);
     readonly ariaLabel = input<string>('');
 
     readonly btnClick = output<MouseEvent>();

@@ -52,9 +52,9 @@ export type InputVariant = 'default' | 'mono';
                 align-items: center;
                 gap: 8px;
                 width: 100%;
-                background-color: var(--surface-terminal, #0e131d);
-                border: 1px solid var(--border-strong, #606e85);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-terminal);
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-lg);
                 padding: 0 14px;
                 box-sizing: border-box;
                 transition:
@@ -64,8 +64,8 @@ export type InputVariant = 'default' | 'mono';
             }
 
             .input-wrapper:focus-within {
-                border-color: var(--focus-outline, #e84089);
-                box-shadow: 0 0 0 2px var(--focus-ring, rgba(232, 64, 137, 0.35));
+                border-color: var(--focus-outline);
+                box-shadow: 0 0 0 2px var(--focus-ring);
             }
 
             .native-input {
@@ -75,7 +75,7 @@ export type InputVariant = 'default' | 'mono';
                 border: none;
                 outline: none;
                 box-shadow: none;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 14px;
                 line-height: 1.4;
@@ -89,20 +89,20 @@ export type InputVariant = 'default' | 'mono';
             }
 
             .native-input::placeholder {
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 opacity: 0.8;
             }
 
             /* --- Sizes (WCAG 2.2 AAA Touch Target: min 40px) --- */
             .input-size-default {
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
             }
             .input-size-default .native-input {
                 font-size: 14px;
             }
 
             .input-size-sm {
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 padding: 0 10px;
             }
             .input-size-sm .native-input {
@@ -126,10 +126,10 @@ export type InputVariant = 'default' | 'mono';
 
             /* --- Error State --- */
             .input-error {
-                border-color: var(--status-loss-border, #fb7185);
+                border-color: var(--status-loss-border);
             }
             .input-error:focus-within {
-                border-color: var(--status-loss-border, #fb7185);
+                border-color: var(--status-loss-border);
                 box-shadow: 0 0 0 2px rgba(251, 113, 133, 0.35);
             }
 
@@ -149,7 +149,7 @@ export type InputVariant = 'default' | 'mono';
                 display: flex;
                 align-items: center;
                 flex-shrink: 0;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 font-size: 14px;
             }
 
@@ -164,7 +164,7 @@ export type InputVariant = 'default' | 'mono';
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 12px;
                 font-weight: 500;
-                color: var(--status-loss, #fda4af);
+                color: var(--status-loss);
                 margin-top: 5px;
                 padding-left: 2px;
             }

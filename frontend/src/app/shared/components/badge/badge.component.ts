@@ -29,7 +29,7 @@ export type BadgeSize = 'default' | 'sm' | 'lg';
                 font-weight: 600;
                 line-height: 1;
                 letter-spacing: 0.15px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 border: 1px solid transparent;
                 user-select: none;
                 white-space: nowrap;
@@ -61,65 +61,65 @@ export type BadgeSize = 'default' | 'sm' | 'lg';
             /* --- Variants --- */
             /* Default (Brand Electric Royal Indigo #3600b3) */
             .badge-variant-default {
-                background-color: var(--primary, #3600b3);
-                color: var(--on-primary, #ffffff);
-                border-color: var(--primary-border, #7c4dff);
+                background-color: var(--primary);
+                color: var(--on-primary);
+                border-color: var(--primary-border);
             }
 
             /* Secondary (Elevated Obsidian Surface) */
             .badge-variant-secondary {
-                background-color: var(--surface-card-elevated, #1a1733);
-                color: var(--ink-secondary, #9d97b8);
-                border-color: var(--hairline, #252140);
+                background-color: var(--surface-card-elevated);
+                color: var(--ink-secondary);
+                border-color: var(--hairline);
             }
 
             /* Destructive (Loss / Danger #be123c) */
             .badge-variant-destructive {
-                background-color: var(--status-loss-bg, rgba(255, 51, 102, 0.12));
-                color: var(--status-loss, #ffa3be);
-                border-color: var(--status-loss-border, #ff668f);
+                background-color: var(--status-loss-bg);
+                color: var(--status-loss);
+                border-color: var(--status-loss-border);
             }
 
             /* Outline (Transparent hairline) */
             .badge-variant-outline {
                 background-color: transparent;
-                color: var(--ink-secondary, #9d97b8);
-                border-color: var(--hairline, #252140);
+                color: var(--ink-secondary);
+                border-color: var(--hairline);
             }
 
             /* Profit / Success / YES Outcome (Mint #34d399) */
             .badge-variant-profit {
-                background-color: var(--status-profit-bg, #06281b);
-                color: var(--status-profit, #34d399);
-                border-color: var(--status-profit-border, #10b981);
+                background-color: var(--status-profit-bg);
+                color: var(--status-profit);
+                border-color: var(--status-profit-border);
             }
 
             /* Loss / NO Outcome (Rose #fda4af) */
             .badge-variant-loss {
-                background-color: var(--status-loss-bg, #330814);
-                color: var(--status-loss, #fda4af);
-                border-color: var(--status-loss-border, #fb7185);
+                background-color: var(--status-loss-bg);
+                color: var(--status-loss);
+                border-color: var(--status-loss-border);
             }
 
             /* Warning / Pending (Amber #fcd34d) */
             .badge-variant-warning {
-                background-color: var(--status-warning-bg, #2a1a02);
-                color: var(--status-warning, #fcd34d);
-                border-color: var(--status-warning-border, #f59e0b);
+                background-color: var(--status-warning-bg);
+                color: var(--status-warning);
+                border-color: var(--status-warning-border);
             }
 
             /* Info / Telemetry (Sky Blue #7dd3fc) */
             .badge-variant-info {
-                background-color: var(--status-info-bg, #082536);
-                color: var(--status-info, #7dd3fc);
-                border-color: var(--status-info-border, #38bdf8);
+                background-color: var(--status-info-bg);
+                color: var(--status-info);
+                border-color: var(--status-info-border);
             }
 
             /* Resolved / Settled (Purple #d8b4fe) */
             .badge-variant-resolved {
-                background-color: var(--status-resolved-bg, #250e38);
-                color: var(--status-resolved, #d8b4fe);
-                border-color: var(--status-resolved-border, #c084fc);
+                background-color: var(--status-resolved-bg);
+                color: var(--status-resolved);
+                border-color: var(--status-resolved-border);
             }
         `
     ]

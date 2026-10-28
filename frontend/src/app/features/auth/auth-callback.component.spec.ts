@@ -12,7 +12,7 @@ describe('AuthCallbackComponent', () => {
     let component: AuthCallbackComponent;
     let routerSpy: { navigate: any };
     let toastServiceSpy: { success: any; error: any; warning: any; info: any };
-    let apiServiceSpy: { callbackGoogleAuth: any };
+    let apiServiceSpy: { callbackGoogleAuth: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
 
     const mockStorage: Record<string, string> = {};
     const sessionStorageMock = {
@@ -40,6 +40,11 @@ describe('AuthCallbackComponent', () => {
             info: vi.fn()
         };
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             callbackGoogleAuth: vi.fn()
         };
     });

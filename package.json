@@ -7,7 +7,7 @@
     "author": "Avinaba Mazumdar",
     "repository": {
         "type": "git",
-        "url": "https://github.com/Avinaba-Mazumdar/bayesmarket-oss.git"
+        "url": "https://github.com/Avinaba-Mazumdar/bayesmarket.git"
     },
     "scripts": {
         "dev:be": "cd backend && go run cmd/api/main.go",

@@ -33,10 +33,10 @@
     --letter-spacing-heading: -0.02em;
 
     /* WCAG SC 2.5.5 Target Size (Enhanced) Level AAA (>= 40x40 CSS pixels) */
-    --touch-target-min: 40px;
+    --touch-target-min: 44px;
 
     /* ==========================================================================
-       LIGHT THEME (DEFAULT PALETTE - WCAG 2.2 LEVEL AAA COMPLIANT)
+       DEFAULT PALETTE: LIGHT (applies when no data-theme attribute is set)
        ========================================================================== */
     color-scheme: light;
 
@@ -289,102 +289,83 @@
 }
 
 /* ==========================================================================
-   DARK THEME (WCAG 2.2 LEVEL AAA COMPLIANT OBSIDIAN/VIOLET PALETTE)
+   DARK THEME (opt-in via data-theme="dark"): the light palette's hues in darker shades.
+   Text tokens are >= 7.0:1 on every dark surface; solid buttons >= 7.0:1 for their label.
    ========================================================================== */
 [data-theme='dark'] {
     color-scheme: dark;
-
-    /* Surface & Base Colors (Tested Against Slate Foregrounds) */
-    --canvas: #080711;
-    --canvas-subtle: #0e0c1c;
-    --surface-card: #131126;
-    --surface-card-elevated: #1a1733;
-    --surface-terminal: #100e21;
-    --surface-glass: rgba(19, 17, 38, 0.92);
-    --surface-glass-border: rgba(196, 181, 253, 0.18);
-    --dock-bg: rgba(14, 12, 28, 0.92);
-
-    /* Primary Brand (High contrast background #3600b3 with white text gives 11.66:1 >= 7.0:1 AAA) */
-    --primary: #3600b3;
-    --primary-text: #c4b5fd; /* Contrast 9.69:1 on #1a1733, 11.22:1 on #080711 */
-    --primary-active: #29008a;
-    --primary-hover: #4e10d8;
-    --primary-subtle: rgba(124, 77, 255, 0.18);
-    --primary-border: #c4b5fd; /* Contrast 9.69:1 on #1a1733, 11.22:1 on #080711 */
-    --primary-glow: rgba(124, 77, 255, 0.35);
-
-    /* Accent (Sky-300: Contrast 9.8:1 on #1a1733, 11.1:1 on #080711) */
+    --canvas: #0b0f1d;
+    --canvas-subtle: #111728;
+    --surface-card: #161c2f;
+    --surface-card-elevated: #1d2439;
+    --surface-terminal: #131a2c;
+    --surface-glass: rgba(22, 28, 47, 0.92);
+    --surface-glass-border: rgba(165, 180, 252, 0.2);
+    --dock-bg: rgba(11, 15, 29, 0.94);
+    --primary: #4338ca;
+    --primary-text: #a5b4fc;
+    --primary-active: #3730a3;
+    --primary-hover: #4f46e5;
+    --primary-subtle: rgba(129, 140, 248, 0.16);
+    --primary-border: #818cf8;
+    --primary-glow: rgba(99, 102, 241, 0.4);
     --accent: #7dd3fc;
     --accent-active: #38bdf8;
-    --accent-subtle: rgba(56, 189, 248, 0.15);
-
-    /* Outcome YES (Mint-400 Text: Contrast 9.27:1 on #1a1733, 10.72:1 on #080711) */
-    --outcome-yes: #00dc82; /* Non-text graphical element contrast > 9:1 */
-    --outcome-yes-text: #34d399; /* Normal text contrast 9.27:1 >= 7.0:1 */
-    --outcome-yes-active: #00b86b;
-    --outcome-yes-subtle: rgba(0, 220, 130, 0.14);
+    --accent-subtle: rgba(125, 211, 252, 0.14);
+    --outcome-yes: #10b981;
+    --outcome-yes-text: #6ee7b7;
+    --outcome-yes-active: #059669;
+    --outcome-yes-subtle: rgba(16, 185, 129, 0.16);
     --outcome-yes-border: #34d399;
-    --outcome-yes-glow: rgba(0, 220, 130, 0.35);
-    --outcome-yes-solid: #047857;
-    --outcome-yes-solid-hover: #065f46;
-    --outcome-yes-solid-text: #ffffff;
-
-    /* Outcome NO (Rose-300 Text: Contrast 9.44:1 on #1a1733, 10.92:1 on #080711) */
-    --outcome-no: #ff3366; /* Non-text graphical element contrast > 9:1 */
-    --outcome-no-text: #fda4af; /* Normal text contrast 9.44:1 >= 7.0:1 */
-    --outcome-no-active: #e01a4f;
-    --outcome-no-subtle: rgba(255, 51, 102, 0.14);
-    --outcome-no-border: #fda4af;
-    --outcome-no-glow: rgba(255, 51, 102, 0.35);
-    --outcome-no-solid: #9f1239;
-    --outcome-no-solid-hover: #881337;
-    --outcome-no-solid-text: #ffffff;
-
-    /* Typography & Ink (WCAG 2.2 AAA Contrast >= 7.0:1 across all dark surfaces) */
-    --ink: #f8f7ff; /* Contrast 16.78:1 on #1a1733, 19.41:1 on #080711 */
-    --ink-secondary: #e2e8f0; /* Contrast 14.24:1 on #1a1733, 16.47:1 on #080711 */
-    --body: #cbd5e1; /* Contrast 11.86:1 on #1a1733, 13.73:1 on #080711 */
-    --muted: #b8b3d4; /* Contrast 8.59:1 on #1a1733, 9.94:1 on #080711 */
-    --hairline: #352f5e;
-    --border-strong: #7c6ea8; /* Non-text contrast 4.27:1 >= 3.0:1 */
-    --on-primary: #ffffff; /* Contrast on #3600b3 is 11.66:1 >= 7.0:1 */
-    --on-outcome: #080711; /* Contrast on #00dc82 is 11.37:1 >= 7.0:1 */
-    --on-dark: #f8f7ff;
-
-    /* Status Tokens (Strict WCAG 2.2 AAA >= 7.0:1 against badge backgrounds and cards) */
-    --status-profit: #34d399; /* Contrast 9.27:1 on #1a1733, 8.41:1 on #06281b */
-    --status-profit-bg: #06281b;
+    --outcome-yes-glow: rgba(16, 185, 129, 0.4);
+    --outcome-yes-solid: #10b981;
+    --outcome-yes-solid-hover: #34d399;
+    --outcome-yes-solid-text: #04130c;
+    --outcome-no: #fb7185;
+    --outcome-no-text: #fda4af;
+    --outcome-no-active: #e11d48;
+    --outcome-no-subtle: rgba(251, 113, 133, 0.16);
+    --outcome-no-border: #fb7185;
+    --outcome-no-glow: rgba(251, 113, 133, 0.4);
+    --outcome-no-solid: #fb7185;
+    --outcome-no-solid-hover: #fda4af;
+    --outcome-no-solid-text: #1f0209;
+    --ink: #f1f5f9;
+    --ink-secondary: #cbd5e1;
+    --body: #c0cad9;
+    --muted: #aab6c8;
+    --hairline: #2a3350;
+    --border-strong: #7c8aa3;
+    --on-primary: #ffffff;
+    --on-outcome: #04130c;
+    --on-dark: #f1f5f9;
+    --status-profit: #6ee7b7;
+    --status-profit-bg: #052e21;
     --status-profit-border: #34d399;
-    --status-loss: #fda4af; /* Contrast 9.44:1 on #1a1733, 8.98:1 on #330814 */
-    --status-loss-bg: #330814;
-    --status-loss-border: #fda4af;
-    --status-warning: #fcd34d; /* Contrast 12.23:1 on #1a1733, 11.83:1 on #2a1a02 */
-    --status-warning-bg: #2a1a02;
-    --status-warning-border: #fcd34d;
-    --status-info: #7dd3fc; /* Contrast 11.10:1 on #1a1733, 9.92:1 on #082536 */
-    --status-info-bg: #082536;
-    --status-info-border: #7dd3fc;
-    --status-resolved: #d8b4fe; /* Contrast 9.79:1 on #1a1733, 9.17:1 on #250e38 */
-    --status-resolved-bg: #250e38;
-    --status-resolved-border: #d8b4fe;
-
-    /* Interactive & Focus (WCAG SC 2.4.12 & SC 2.4.13 Level AAA >= 3.0:1 non-text) */
-    --link: #c4b5fd; /* Contrast 9.69:1 on #1a1733, 11.22:1 on #080711 */
-    --link-active: #ffffff;
-    --focus-outline: #c4b5fd; /* Contrast 9.69:1 on #1a1733 */
-    --focus-ring: rgba(196, 181, 253, 0.45);
-
-    /* Elevation Shadows */
+    --status-loss: #fda4af;
+    --status-loss-bg: #3f0a18;
+    --status-loss-border: #fb7185;
+    --status-warning: #fcd34d;
+    --status-warning-bg: #3a2305;
+    --status-warning-border: #f59e0b;
+    --status-info: #7dd3fc;
+    --status-info-bg: #0a2a40;
+    --status-info-border: #38bdf8;
+    --status-resolved: #d8b4fe;
+    --status-resolved-bg: #2e1065;
+    --status-resolved-border: #a78bfa;
+    --link: #a5b4fc;
+    --link-active: #e0e7ff;
+    --focus-outline: #a5b4fc;
+    --focus-ring: rgba(165, 180, 252, 0.45);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55);
-    --shadow-lg: 0 10px 30px -4px rgba(0, 0, 0, 0.7);
-    --shadow-terminal: 0 8px 32px rgba(0, 0, 0, 0.75);
-    --shadow-glow-primary: 0 0 24px rgba(84, 0, 230, 0.45);
-    --shadow-glow-yes: 0 0 16px rgba(0, 220, 130, 0.35);
-    --shadow-glow-no: 0 0 16px rgba(255, 51, 102, 0.35);
-
-    /* Hero & Special Surfaces */
-    --hero-gradient: linear-gradient(135deg, rgba(19, 17, 38, 0.95) 0%, rgba(14, 12, 28, 0.9) 100%);
-    --hero-glow: radial-gradient(circle, rgba(54, 0, 179, 0.18) 0%, transparent 60%);
-    --dialog-overlay: rgba(8, 7, 17, 0.88);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.45);
+    --shadow-terminal: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+    --shadow-glow-primary: 0 0 20px rgba(99, 102, 241, 0.3);
+    --shadow-glow-yes: 0 0 16px rgba(16, 185, 129, 0.25);
+    --shadow-glow-no: 0 0 16px rgba(251, 113, 133, 0.25);
+    --hero-gradient: linear-gradient(135deg, #161c2f 0%, #131a2c 100%);
+    --hero-glow: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
+    --dialog-overlay: rgba(3, 5, 12, 0.75);
 }

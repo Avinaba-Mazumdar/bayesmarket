@@ -337,11 +337,11 @@ func (h *TradeHandler) executeOrderTx(
 	// 3. Insert trade audit record
 	batch.Queue(`
 		INSERT INTO trades (
-			id, market_id, user_id, idempotency_key, trade_type, outcome, 
-			amount_usdc, shares_filled, execution_price, price_impact_pct, created_at
-		) VALUES ($1, $2, $3, $4, 'BUY', $5, $6, $7, $8, $9, NOW());
+			id, market_id, user_id, idempotency_key, trade_type, outcome,
+			amount_usdc, shares_filled, execution_price, price_impact_pct, yes_probability_after, created_at
+		) VALUES ($1, $2, $3, $4, 'BUY', $5, $6, $7, $8, $9, $10, NOW());
 	`, tradeID, marketUUID, userID, idempotencyKey, string(outcome),
-		amount, quote.SharesReceived, quote.AvgPrice, quote.PriceImpactPct,
+		amount, quote.SharesReceived, quote.AvgPrice, quote.PriceImpactPct, yesProbabilityAfter(quote.NewReserveYes, quote.NewReserveNo, quote.NewCollateral),
 	)
 
 	// 4. Upsert user position
@@ -606,11 +606,11 @@ func (h *TradeHandler) executeCashOutTx(
 	// 4. Insert trade record (SELL)
 	batch.Queue(`
 		INSERT INTO trades (
-			id, market_id, user_id, idempotency_key, trade_type, outcome, 
-			amount_usdc, shares_filled, execution_price, price_impact_pct, created_at
-		) VALUES ($1, $2, $3, $4, 'SELL', $5, $6, $7, $8, $9, NOW());
+			id, market_id, user_id, idempotency_key, trade_type, outcome,
+			amount_usdc, shares_filled, execution_price, price_impact_pct, yes_probability_after, created_at
+		) VALUES ($1, $2, $3, $4, 'SELL', $5, $6, $7, $8, $9, $10, NOW());
 	`, tradeID, marketUUID, userID, idempotencyKey, string(outcome),
-		quote.PayoutUSDC, shares, quote.AvgPrice, quote.PriceImpactPct,
+		quote.PayoutUSDC, shares, quote.AvgPrice, quote.PriceImpactPct, yesProbabilityAfter(quote.NewReserveYes, quote.NewReserveNo, quote.NewCollateral),
 	)
 
 	// 5. Immutable double-entry ledger: cash, collateral, complete-set burn, reserves, position
@@ -872,4 +872,19 @@ func (h *TradeHandler) broadcastCashOutTelemetry(resp *CashOutResponse, marketUU
 		AmountUSDC: resp.PayoutUSDC,
 		Timestamp:  resp.CreatedAt,
 	})
+}
+
+// yesProbabilityAfter is the implied YES probability of the pool after a trade, rounded to the
+// storage precision. It is recorded with each trade so price history can be read back without
+// replaying reserves.
+func yesProbabilityAfter(reserveYes, reserveNo, collateral decimal.Decimal) decimal.Decimal {
+	pYes, _, err := amm.CalculateSpotPrices(amm.PoolReserves{
+		ReserveYes:        reserveYes,
+		ReserveNo:         reserveNo,
+		CollateralReserve: collateral,
+	})
+	if err != nil {
+		return decimal.Zero
+	}
+	return pYes
 }

@@ -13,7 +13,7 @@ import { DialogComponent, DialogRole, DialogSize } from './dialog.component';
             [closeOnOverlayClick]="closeOnOverlay()"
             [closeOnEscape]="closeOnEsc()"
             [size]="size()"
-            [role]="role()"
+            [dialogRole]="role()"
             (closed)="onClosed()"
         >
             <button trigger type="button" class="test-trigger-btn">Open Dialog</button>

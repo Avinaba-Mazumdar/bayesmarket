@@ -99,9 +99,29 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                         </div>
 
                         <div class="profile-actions">
-                            <app-button variant="destructive" size="default" (btnClick)="onSignOut()" ariaLabel="Sign out of guest session">
-                                Sign Out
-                            </app-button>
+                            @if (confirmGuestSignOut()) {
+                                <p class="signout-warning" role="alert">
+                                    Signing out ends this guest account for good. Its balance and positions cannot be recovered afterwards. Connect a Google
+                                    account first to keep them.
+                                </p>
+                                <div class="signout-confirm-actions">
+                                    <app-button variant="outline" size="default" (btnClick)="confirmGuestSignOut.set(false)" ariaLabel="Keep this guest session">
+                                        Keep session
+                                    </app-button>
+                                    <app-button variant="destructive" size="default" (btnClick)="onSignOut()" ariaLabel="Sign out and end the guest account">
+                                        Sign out and end account
+                                    </app-button>
+                                </div>
+                            } @else {
+                                <app-button
+                                    variant="destructive"
+                                    size="default"
+                                    (btnClick)="confirmGuestSignOut.set(true)"
+                                    ariaLabel="Sign out of guest session"
+                                >
+                                    Sign Out
+                                </app-button>
+                            }
                         </div>
                     </div>
                 } @else if (authStore.isAuthenticated()) {
@@ -149,7 +169,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                     <div class="auth-card primary-auth">
                         <div class="auth-card-body">
                             <h3 class="auth-method-title">Sign in with Google</h3>
-                            <p class="auth-method-desc">Seamless one-click authentication. Never lose your predictions or liquidity pool allocations.</p>
+                            <p class="auth-method-desc">One-click guest access, or sign in with Google to keep your account across devices.</p>
 
                             <button
                                 type="button"
@@ -255,17 +275,17 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 padding: 10px 14px;
                 background-color: rgba(124, 77, 255, 0.08);
                 border: 1px solid rgba(124, 77, 255, 0.25);
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
             }
 
             .simulation-tag {
                 font-family: var(--font-mono);
                 font-size: 10px;
                 font-weight: 800;
-                color: var(--primary-border, #7c4dff);
+                color: var(--primary-border);
                 background-color: rgba(124, 77, 255, 0.16);
                 padding: 2px 6px;
-                border-radius: var(--radius-sm, 4px);
+                border-radius: var(--radius-sm);
                 letter-spacing: 0.5px;
                 flex-shrink: 0;
             }
@@ -273,7 +293,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
             .simulation-text {
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 line-height: 1.35;
             }
 
@@ -282,13 +302,13 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 align-items: flex-start;
                 gap: 12px;
                 padding: 12px 16px;
-                background-color: var(--status-info-bg, #f0f9ff);
-                border: 1px solid var(--status-info-border, #0284c7);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--status-info-bg);
+                border: 1px solid var(--status-info-border);
+                border-radius: var(--radius-md);
             }
 
             .banner-icon {
-                color: var(--status-info, #075985);
+                color: var(--status-info);
                 flex-shrink: 0;
                 margin-top: 2px;
             }
@@ -303,26 +323,26 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 13px;
                 font-weight: 700;
-                color: var(--status-info, #075985);
+                color: var(--status-info);
             }
 
             .banner-desc {
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--body, #334155);
+                color: var(--body);
                 line-height: 1.4;
             }
 
             .auth-card {
-                background-color: var(--canvas-subtle, #f1f5f9);
-                border: 1px solid var(--hairline, #cbd5e1);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 overflow: hidden;
             }
 
             .auth-card.primary-auth {
-                border-color: var(--primary-border, #4338ca);
-                background-color: var(--surface-card, #ffffff);
+                border-color: var(--primary-border);
+                background-color: var(--surface-card);
                 box-shadow: var(--shadow-sm);
             }
 
@@ -338,7 +358,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 16px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .auth-method-desc {
@@ -346,7 +366,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 13px;
                 line-height: 1.45;
-                color: var(--body, #ccc7e6);
+                color: var(--body);
             }
 
             .google-signin-btn {
@@ -355,12 +375,12 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 justify-content: center;
                 gap: 12px;
                 width: 100%;
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 padding: 10px 16px;
                 background-color: #ffffff;
                 color: #1f2937;
                 border: 1px solid #d1d5db;
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
                 font-family: var(--font-ui);
                 font-size: 14px;
                 font-weight: 600;
@@ -382,7 +402,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
             }
 
             .google-signin-btn:focus-visible {
-                outline: 2px solid var(--primary-border, #7c4dff);
+                outline: 2px solid var(--primary-border);
                 outline-offset: 2px;
             }
 
@@ -406,7 +426,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
             .divider::after {
                 content: '';
                 flex: 1;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
             }
 
             .divider-label {
@@ -414,7 +434,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-mono);
                 font-size: 10px;
                 font-weight: 700;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 letter-spacing: 0.8px;
             }
 
@@ -430,9 +450,9 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 justify-content: space-between;
                 gap: 12px;
                 padding: 10px 14px;
-                background-color: var(--status-warning-bg, rgba(245, 158, 11, 0.06));
-                border: 1px dashed var(--status-warning-border, rgba(245, 158, 11, 0.3));
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--status-warning-bg);
+                border: 1px dashed var(--status-warning-border);
+                border-radius: var(--radius-md);
             }
 
             .dev-info {
@@ -441,12 +461,12 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 gap: 8px;
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--status-warning, #b45309);
+                color: var(--status-warning);
             }
 
             .dev-icon {
                 flex-shrink: 0;
-                color: var(--status-warning, #b45309);
+                color: var(--status-warning);
             }
 
             .guest-info-row {
@@ -478,14 +498,14 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 14px;
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .guest-desc {
                 margin: 0;
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 line-height: 1.4;
             }
 
@@ -495,9 +515,9 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 flex-direction: column;
                 gap: 20px;
                 padding: 16px;
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--border-subtle, #252140);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
             }
 
             .profile-header {
@@ -510,7 +530,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 width: 52px;
                 height: 52px;
                 border-radius: 50%;
-                border: 2px solid var(--primary-border, #e84089);
+                border: 2px solid var(--primary-border);
                 object-fit: cover;
             }
 
@@ -519,7 +539,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 height: 52px;
                 border-radius: 50%;
                 background-color: rgba(166, 3, 76, 0.2);
-                border: 2px solid var(--primary-border, #e84089);
+                border: 2px solid var(--primary-border);
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -537,14 +557,14 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 16px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .profile-email {
                 margin: 0;
                 font-family: var(--font-mono);
                 font-size: 12px;
-                color: var(--ink-secondary, #cbd5e1);
+                color: var(--ink-secondary);
             }
 
             .provider-badge {
@@ -561,9 +581,9 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 grid-template-columns: 1fr 1fr;
                 gap: 12px;
                 padding: 12px;
-                background-color: var(--surface-card, #111622);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
             }
 
             .stat-item {
@@ -575,7 +595,7 @@ import { ToastService } from '../../shared/components/toast/toast.service';
             .stat-label {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #64748b);
+                color: var(--muted);
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
@@ -585,15 +605,15 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-mono);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .stat-val.highlight {
-                color: var(--accent, #075985);
+                color: var(--accent);
             }
 
             .stat-val.warning-text {
-                color: var(--status-warning, #f59e0b);
+                color: var(--status-warning);
             }
 
             .guest-upgrade-box {
@@ -601,9 +621,9 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 flex-direction: column;
                 gap: 12px;
                 padding: 14px 16px;
-                background-color: var(--surface-card, #111622);
-                border: 1px solid var(--primary-border, #4338ca);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--primary-border);
+                border-radius: var(--radius-md);
             }
 
             .upgrade-info {
@@ -616,15 +636,27 @@ import { ToastService } from '../../shared/components/toast/toast.service';
                 font-family: var(--font-ui);
                 font-size: 13px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .upgrade-desc {
                 margin: 0;
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 line-height: 1.4;
+            }
+
+            .signout-warning {
+                margin: 0;
+                font-size: 13px;
+                color: var(--status-warning);
+            }
+
+            .signout-confirm-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
             }
 
             .profile-actions {
@@ -667,6 +699,8 @@ import { ToastService } from '../../shared/components/toast/toast.service';
 })
 export class AuthDialogComponent {
     readonly authStore = inject(AuthStore);
+    /** Guest sign-out is two steps: the account cannot be recovered once it is ended. */
+    readonly confirmGuestSignOut = signal<boolean>(false);
     private readonly apiService = inject(ApiService);
     private readonly toastService = inject(ToastService);
     private readonly destroyRef = inject(DestroyRef);
@@ -733,6 +767,7 @@ export class AuthDialogComponent {
     }
 
     onSignOut(): void {
+        this.confirmGuestSignOut.set(false);
         this.authStore.logout();
         this.authStore.closeAuthModal();
     }

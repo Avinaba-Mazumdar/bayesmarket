@@ -36,6 +36,7 @@ import { SelectComponent, SelectOption } from '../../shared/components/select/se
 import { TextareaComponent } from '../../shared/components/textarea/textarea.component';
 import { SwitchComponent } from '../../shared/components/switch/switch.component';
 import { BrandIconComponent } from '../../shared/components/brand-icon/brand-icon.component';
+import { handleRovingKeydown } from '../../core/utils/roving-focus';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -67,7 +68,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
         LucideSlidersVertical
     ],
     template: `
-        <div class="admin-container" role="main">
+        <div class="admin-container">
             <!-- Header Banner -->
             <div class="admin-header">
                 <div class="header-left">
@@ -89,13 +90,14 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
             </div>
 
             <!-- Workspace Tabs -->
-            <div class="workspace-tabs" role="tablist" aria-label="Admin Operations">
+            <div class="workspace-tabs" role="tablist" aria-label="Admin Operations" (keydown)="rovingKeydown($event, '[role=tab]')">
                 <button
                     type="button"
                     role="tab"
                     class="tab-btn"
                     [class.active]="activeTab() === 'manage'"
                     [attr.aria-selected]="activeTab() === 'manage'"
+                    [attr.tabindex]="activeTab() === 'manage' ? 0 : -1"
                     (click)="activeTab.set('manage')"
                 >
                     <svg lucideSlidersVertical [size]="16" aria-hidden="true"></svg>
@@ -108,6 +110,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                     class="tab-btn"
                     [class.active]="activeTab() === 'create'"
                     [attr.aria-selected]="activeTab() === 'create'"
+                    [attr.tabindex]="activeTab() === 'create' ? 0 : -1"
                     (click)="activeTab.set('create')"
                 >
                     <svg lucidePlus [size]="16" aria-hidden="true"></svg>
@@ -120,6 +123,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                     class="tab-btn"
                     [class.active]="activeTab() === 'resolve'"
                     [attr.aria-selected]="activeTab() === 'resolve'"
+                    [attr.tabindex]="activeTab() === 'resolve' ? 0 : -1"
                     (click)="activeTab.set('resolve')"
                 >
                     <svg lucideCircleCheck [size]="16" aria-hidden="true"></svg>
@@ -259,7 +263,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                     <app-label htmlFor="m-category" size="default">Category *</app-label>
                                     <app-select
                                         id="m-category"
-                                        [options]="categoryOptions"
+                                        [options]="categoryOptions()"
                                         [value]="category()"
                                         (valueChange)="category.set($event)"
                                         placeholder="Select Category"
@@ -268,7 +272,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                 </div>
 
                                 <div class="form-group">
-                                    <app-label htmlFor="m-date" size="default">Resolution Date (UTC) *</app-label>
+                                    <app-label htmlFor="m-date" size="default">Resolution Date (your local time) *</app-label>
                                     <app-input
                                         id="m-date"
                                         type="datetime-local"
@@ -315,7 +319,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                     size="default"
                                     [value]="imageUrl()"
                                     (valueChange)="onValueChange(imageUrl, $event)"
-                                    placeholder="Leave empty for category default webp asset"
+                                    placeholder="Optional https:// link to a banner image"
                                     ariaLabel="Market Image URL"
                                 />
                             </div>
@@ -436,7 +440,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                     <div class="form-card resolve-card">
                         <h2 class="card-title">Settle & Distribute Collateral</h2>
                         <p class="card-desc">
-                            Select a mature prediction market, designate the authoritative verified outcome, and trigger atomic payout settlement.
+                            Select a mature prediction market, designate the authoritative verified outcome, and trigger payout settlement.
                         </p>
 
                         <div class="market-form">
@@ -455,12 +459,17 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                             <!-- Winning Outcome Toggle -->
                             <div class="form-group">
                                 <app-label>Authoritative Winning Outcome *</app-label>
-                                <div class="outcome-select-row" role="radiogroup" aria-label="Winning outcome">
+                                <div
+                                    class="outcome-select-row"
+                                    role="radiogroup"
+                                    aria-label="Winning outcome"
+                                    (keydown)="rovingKeydown($event, '[role=radio]')"
+                                >
                                     <app-button
                                         variant="yes"
                                         size="lg"
                                         [selected]="winningOutcome() === 'YES'"
-                                        role="radio"
+                                        buttonRole="radio"
                                         ariaLabel="Resolve to outcome YES"
                                         (btnClick)="winningOutcome.set('YES')"
                                     >
@@ -472,7 +481,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                         variant="no"
                                         size="lg"
                                         [selected]="winningOutcome() === 'NO'"
-                                        role="radio"
+                                        buttonRole="radio"
                                         ariaLabel="Resolve to outcome NO"
                                         (btnClick)="winningOutcome.set('NO')"
                                     >
@@ -583,7 +592,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 title="Edit Prediction Market"
                 description="Modify market question, status, or resolution criteria."
                 size="lg"
-                role="dialog"
+                dialogRole="dialog"
                 ariaLabel="Edit Prediction Market Dialog"
             >
                 @if (editingMarket(); as em) {
@@ -598,7 +607,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                                 <app-label htmlFor="edit-category">Category *</app-label>
                                 <app-select
                                     id="edit-category"
-                                    [options]="categoryOptions"
+                                    [options]="categoryOptions()"
                                     [value]="editCategory()"
                                     (valueChange)="editCategory.set($event)"
                                     ariaLabel="Edit Market Category"
@@ -617,7 +626,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                         </div>
 
                         <div class="form-group">
-                            <app-label htmlFor="edit-date">Resolution Date (UTC) *</app-label>
+                            <app-label htmlFor="edit-date">Resolution Date (your local time) *</app-label>
                             <app-input
                                 id="edit-date"
                                 type="datetime-local"
@@ -678,6 +687,43 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 }
             </app-dialog>
 
+            <!-- Resolution Confirmation: final, and pays out every winning position (SC 3.3.6) -->
+            <app-dialog
+                [open]="resolveConfirmOpen()"
+                (closed)="resolveConfirmOpen.set(false)"
+                title="Confirm Market Resolution"
+                description="Resolution is final. It pays out every winning position and cannot be undone."
+                size="sm"
+                dialogRole="alertdialog"
+                ariaLabel="Confirm market resolution"
+            >
+                <div class="delete-body">
+                    <p class="delete-warning-text">
+                        Resolve <strong>{{ selectedMarketTitle() }}</strong> to <strong>{{ winningOutcome() }}</strong>?
+                    </p>
+                    <div class="danger-box">
+                        <p class="danger-text">
+                            Every {{ winningOutcome() }} share is redeemed at $1.00 USDC. Every other share expires at $0.00.
+                        </p>
+                    </div>
+                    <div class="dialog-actions">
+                        <app-button variant="outline" size="default" type="button" (btnClick)="resolveConfirmOpen.set(false)" ariaLabel="Cancel resolution">
+                            Cancel
+                        </app-button>
+                        <app-button
+                            variant="destructive"
+                            size="default"
+                            type="button"
+                            [loading]="isResolving()"
+                            (btnClick)="confirmResolveMarket()"
+                            ariaLabel="Confirm final resolution"
+                        >
+                            Resolve Market
+                        </app-button>
+                    </div>
+                </div>
+            </app-dialog>
+
             <!-- Delete Confirmation Modal -->
             <app-dialog
                 [open]="!!deletingMarket()"
@@ -685,7 +731,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 title="Void or Delete Prediction Market"
                 description="Permanently delete prediction market and purge double-entry records."
                 size="sm"
-                role="alertdialog"
+                dialogRole="alertdialog"
                 ariaLabel="Void or Delete Prediction Market Alert"
             >
                 @if (deletingMarket(); as dm) {
@@ -856,7 +902,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-xs);
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 padding: var(--space-xs) var(--space-md);
                 border-radius: var(--radius-md);
                 background-color: transparent;
@@ -1344,6 +1390,7 @@ import { BrandIconComponent } from '../../shared/components/brand-icon/brand-ico
     ]
 })
 export class AdminDashboardComponent implements OnInit {
+    protected readonly rovingKeydown = handleRovingKeydown;
     private readonly apiService = inject(ApiService);
     private readonly toastService = inject(ToastService);
     readonly authStore = inject(AuthStore);
@@ -1376,6 +1423,8 @@ export class AdminDashboardComponent implements OnInit {
     readonly selectedMarketId = signal<string>('');
     readonly winningOutcome = signal<'YES' | 'NO'>('YES');
     readonly oracleProof = signal<string>('');
+    readonly resolveConfirmOpen = signal<boolean>(false);
+    readonly selectedMarketTitle = computed(() => this.allMarkets().find((m) => m.id === this.selectedMarketId())?.title ?? '');
     readonly resolveEarly = signal<boolean>(false);
 
     /** Resolution date of the selected market when it has not passed yet, otherwise null. */
@@ -1420,12 +1469,8 @@ export class AdminDashboardComponent implements OnInit {
         }
     }
 
-    readonly categoryOptions: SelectOption[] = [
-        { value: 'ai', label: 'AI & Tech' },
-        { value: 'crypto', label: 'Crypto' },
-        { value: 'macro', label: 'Macro Economy' },
-        { value: 'science', label: 'Science & Space' }
-    ];
+    /** Categories from the server (GET /api/v1/categories); the same list creation validates against. */
+    readonly categoryOptions = signal<SelectOption[]>([]);
 
     readonly statusOptions: SelectOption[] = [
         { value: 'active', label: 'Active (Trading Open)' },
@@ -1503,6 +1548,10 @@ export class AdminDashboardComponent implements OnInit {
 
     ngOnInit(): void {
         this.initDefaultDate();
+        this.apiService.getMarketCategories().subscribe({
+            next: (list) => this.categoryOptions.set(list.map((c) => ({ value: c.id, label: c.label }))),
+            error: () => this.toastService.warning('Categories unavailable', 'Could not load the market category list.')
+        });
         this.apiService.getConfig().subscribe({
             next: (cfg) => {
                 if (cfg) {
@@ -1701,7 +1750,17 @@ export class AdminDashboardComponent implements OnInit {
     }
 
     // --- Market Resolution ---
+    /** Opens the confirmation step. Nothing is sent until the reader confirms, because resolution moves money. */
     onSubmitResolveMarket(): void {
+        if (!this.selectedMarketId() || !this.oracleProof().trim()) {
+            this.toastService.warning('Validation Error', 'Select a market and provide oracle proof');
+            return;
+        }
+        this.resolveConfirmOpen.set(true);
+    }
+
+    confirmResolveMarket(): void {
+        this.resolveConfirmOpen.set(false);
         const marketId = this.selectedMarketId();
         const proof = this.oracleProof().trim();
         const outcome = this.winningOutcome();

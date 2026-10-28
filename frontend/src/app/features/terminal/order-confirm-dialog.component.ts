@@ -20,9 +20,9 @@ import { OrderIntent } from './order-terminal.component';
         <app-dialog
             [open]="isOpen()"
             [title]="'Confirm Order Execution'"
-            [description]="'Review your order details carefully before financial commitment (WCAG 2.2 SC 3.3.6).'"
+            [description]="'Review your order details carefully before you commit funds.'"
             size="default"
-            role="alertdialog"
+            dialogRole="alertdialog"
             [closeOnOverlayClick]="!isExecuting()"
             [closeOnEscape]="!isExecuting()"
             [showCloseButton]="!isExecuting()"
@@ -95,8 +95,8 @@ import { OrderIntent } from './order-terminal.component';
                     <div class="reversibility-notice" role="note">
                         <svg lucideInfo class="notice-icon" [size]="16" aria-hidden="true"></svg>
                         <span>
-                            Orders execute atomically against the complete-set CPMM. Shares can be liquidated back at the spot price at any time prior to market
-                            resolution.
+                            Orders fill at the quoted price, or the order is rejected. You can sell shares back to the pool at any time before the market resolves,
+                            but a large sale moves the price against you.
                         </span>
                     </div>
                 </div>
@@ -142,9 +142,9 @@ import { OrderIntent } from './order-terminal.component';
             }
 
             .market-summary-card {
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 12px 14px;
             }
 
@@ -154,14 +154,14 @@ import { OrderIntent } from './order-terminal.component';
                 font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .market-title {
                 font-family: var(--font-ui);
                 font-size: 15px;
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 margin: 4px 0 0 0;
                 line-height: 1.4;
             }
@@ -183,7 +183,7 @@ import { OrderIntent } from './order-terminal.component';
                 font-family: var(--font-ui);
                 font-size: 11px;
                 font-weight: 600;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .badge-glyph {
@@ -198,14 +198,14 @@ import { OrderIntent } from './order-terminal.component';
                 font-family: var(--font-mono);
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
             .financial-table {
-                background-color: var(--canvas, #080711);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--canvas);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 padding: 8px 16px;
                 display: flex;
                 flex-direction: column;
@@ -216,7 +216,7 @@ import { OrderIntent } from './order-terminal.component';
                 align-items: center;
                 justify-content: space-between;
                 padding: 10px 0;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 font-size: 13px;
             }
 
@@ -226,29 +226,29 @@ import { OrderIntent } from './order-terminal.component';
 
             .cell-label {
                 font-family: var(--font-ui);
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .cell-val {
                 font-family: var(--font-mono);
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
             .shares-val {
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
                 font-weight: 700;
             }
 
             .balance-preview-row {
                 margin-top: 4px;
                 padding-top: 12px;
-                border-top: 1px dashed var(--hairline, #cbd5e1);
+                border-top: 1px dashed var(--hairline);
             }
 
             .balance-preview {
-                color: var(--status-info, #075985);
+                color: var(--status-info);
                 font-weight: 700;
             }
 
@@ -259,17 +259,17 @@ import { OrderIntent } from './order-terminal.component';
                 padding: 10px 12px;
                 background-color: rgba(168, 85, 247, 0.08);
                 border: 1px solid rgba(168, 85, 247, 0.25);
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
             }
 
             .paper-trade-pill {
                 font-family: var(--font-mono);
                 font-size: 10.5px;
                 font-weight: 800;
-                color: var(--primary-border, #a855f7);
+                color: var(--primary-border);
                 background-color: rgba(168, 85, 247, 0.16);
                 padding: 2px 6px;
-                border-radius: var(--radius-sm, 4px);
+                border-radius: var(--radius-sm);
                 letter-spacing: 0.5px;
                 flex-shrink: 0;
             }
@@ -277,7 +277,7 @@ import { OrderIntent } from './order-terminal.component';
             .paper-trade-text {
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 line-height: 1.35;
             }
 
@@ -285,13 +285,13 @@ import { OrderIntent } from './order-terminal.component';
                 display: flex;
                 align-items: flex-start;
                 gap: 8px;
-                background-color: var(--status-info-bg, #f0f9ff);
-                border: 1px solid var(--status-info-border, #0284c7);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--status-info-bg);
+                border: 1px solid var(--status-info-border);
+                border-radius: var(--radius-md);
                 padding: 10px 12px;
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--status-info, #075985);
+                color: var(--status-info);
                 line-height: 1.45;
             }
 
@@ -404,8 +404,7 @@ export class OrderConfirmDialogComponent {
                     this.isOpen.set(false);
 
                     // Update store cash balance
-                    const updatedBal = this.authStore.formatBalance(receipt.new_cash_balance);
-                    this.authStore.updateBalance(updatedBal);
+                    this.authStore.updateBalance(receipt.new_cash_balance);
 
                     this.toastService.success(
                         'Trade Executed Successfully',

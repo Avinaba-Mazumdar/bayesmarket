@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { LucideSearch, LucideSearchX } from '@lucide/angular';
@@ -8,9 +8,9 @@ import { MarketCardComponent } from './market-card.component';
 import { GlossaryPopoverComponent } from './glossary-popover.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { InputComponent } from '../../shared/components/input/input.component';
-import { WebSocketService } from '../../core/services/websocket.service';
+import { handleRovingKeydown } from '../../core/utils/roving-focus';
 
-export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
+export type CategoryFilter = string;
 
 @Component({
     selector: 'app-market-list',
@@ -28,8 +28,8 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                     </span>
                     <h1 id="hero-title" class="hero-title">Trade the Probability of Tomorrow.</h1>
                     <p class="hero-desc">
-                        Institutional-grade binary prediction markets powered by fixed-point AMM bonding curves, fully collateralized outcomes, and atomic
-                        settlement.
+                        Binary prediction markets priced by a fixed-point constant-product market maker. Every outcome share is backed by collateral, and
+                        winning shares pay $1.00 USDC at resolution.
                     </p>
                 </div>
 
@@ -52,14 +52,18 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             <!-- Filter Controls & Search Bar -->
             <section class="catalog-controls" aria-label="Market filters and search">
                 <!-- Category Filter Chips -->
-                <div class="category-tabs" role="tablist" aria-label="Filter markets by category">
-                    @for (cat of categories; track cat.id) {
+                <div
+                    class="category-tabs"
+                    role="tablist"
+                    aria-label="Filter markets by category"
+                    (keydown)="rovingKeydown($event, '[role=tab]')"
+                >
+                    @for (cat of categories(); track cat.id) {
                         <app-button
                             variant="chip"
                             size="sm"
                             [selected]="selectedCategory() === cat.id"
-                            role="tab"
-                            [attr.aria-selected]="selectedCategory() === cat.id"
+                            buttonRole="tab"
                             [ariaLabel]="'Filter by ' + cat.label"
                             (btnClick)="setCategory(cat.id)"
                         >
@@ -93,6 +97,12 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                         <div class="spinner" aria-hidden="true"></div>
                         <p class="loading-text">Loading prediction markets...</p>
                     </div>
+                } @else if (loadError()) {
+                    <div class="empty-state" role="alert">
+                        <h3>Markets could not be loaded</h3>
+                        <p>Check your connection, then try again.</p>
+                        <app-button variant="secondary" size="default" ariaLabel="Try loading markets again" (btnClick)="retryLoad()">Try again</app-button>
+                    </div>
                 } @else if (filteredMarkets().length === 0) {
                     <div class="empty-state" role="status">
                         <svg lucideSearchX class="empty-icon" [size]="40" aria-hidden="true"></svg>
@@ -119,7 +129,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             .market-catalog-container {
                 max-width: 1440px;
                 margin: 0 auto;
-                padding: var(--space-xl, 32px) var(--space-lg, 20px) 64px;
+                padding: var(--space-xl) var(--space-lg) 64px;
                 display: flex;
                 flex-direction: column;
                 gap: 32px;
@@ -133,8 +143,8 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 gap: 24px;
                 padding: 32px 28px;
                 background: var(--hero-gradient, linear-gradient(135deg, #ffffff 0%, #f8fafc 100%));
-                border: 1px solid var(--hairline, #cbd5e1);
-                border-radius: var(--radius-lg, 14px);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 position: relative;
                 overflow: hidden;
                 box-shadow: var(--shadow-md);
@@ -161,14 +171,14 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
-                background-color: var(--primary-subtle, rgba(67, 56, 202, 0.08));
-                border: 1px solid var(--primary-border, #4338ca);
-                border-radius: var(--radius-pill, 9999px);
+                background-color: var(--primary-subtle);
+                border: 1px solid var(--primary-border);
+                border-radius: var(--radius-pill);
                 padding: 4px 12px;
                 font-family: var(--font-mono);
                 font-size: 11px;
                 font-weight: 700;
-                color: var(--primary-text, #4338ca);
+                color: var(--primary-text);
                 letter-spacing: 0.5px;
                 margin-bottom: 12px;
             }
@@ -177,8 +187,8 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 width: 6px;
                 height: 6px;
                 border-radius: 50%;
-                background-color: var(--primary-text, #4338ca);
-                box-shadow: 0 0 6px var(--primary-text, #4338ca);
+                background-color: var(--primary-text);
+                box-shadow: 0 0 6px var(--primary-text);
             }
 
             .hero-title {
@@ -186,7 +196,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 font-size: 32px;
                 font-weight: 700;
                 line-height: 1.2;
-                color: var(--ink, #0f172a);
+                color: var(--ink);
                 letter-spacing: -0.5px;
                 margin-bottom: 12px;
             }
@@ -195,7 +205,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 font-family: var(--font-ui);
                 font-size: 14.5px;
                 line-height: 1.55;
-                color: var(--muted, #3b4861);
+                color: var(--muted);
                 margin: 0;
             }
 
@@ -203,9 +213,9 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 16px;
-                background-color: var(--surface-card, #ffffff);
-                border: 1px solid var(--hairline, #cbd5e1);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 16px 20px;
                 position: relative;
                 z-index: 1;
@@ -222,7 +232,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 font-family: var(--font-ui);
                 font-size: 11px;
                 font-weight: 600;
-                color: var(--muted, #3b4861);
+                color: var(--muted);
                 text-transform: uppercase;
                 letter-spacing: 0.4px;
             }
@@ -231,7 +241,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 font-family: var(--font-mono);
                 font-size: 19px;
                 font-weight: 700;
-                color: var(--ink, #0f172a);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
@@ -261,12 +271,12 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             .search-input-wrapper {
                 display: flex;
                 align-items: center;
-                background-color: var(--surface-card, #ffffff);
-                border: 1px solid var(--hairline, #cbd5e1);
-                border-radius: var(--radius-pill, 9999px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-pill);
                 padding: 4px 14px;
                 gap: 8px;
-                min-height: 38px;
+                min-height: var(--touch-target-min);
                 min-width: 260px;
                 box-sizing: border-box;
                 transition:
@@ -275,12 +285,12 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             }
 
             .search-input-wrapper:focus-within {
-                border-color: var(--focus-outline, #3730a3);
-                box-shadow: 0 0 0 3px var(--focus-ring, rgba(55, 48, 163, 0.25));
+                border-color: var(--focus-outline);
+                box-shadow: 0 0 0 3px var(--focus-ring);
             }
 
             .search-icon {
-                color: var(--muted, #3b4861);
+                color: var(--muted);
                 flex-shrink: 0;
                 display: inline-flex;
                 align-items: center;
@@ -290,7 +300,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             .search-input {
                 background: transparent;
                 border: none;
-                color: var(--ink, #0f172a);
+                color: var(--ink);
                 font-family: var(--font-ui);
                 font-size: 13.5px;
                 outline: none;
@@ -334,7 +344,7 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
                 width: 36px;
                 height: 36px;
                 border: 3px solid rgba(124, 77, 255, 0.2);
-                border-top-color: var(--primary-border, #4338ca);
+                border-top-color: var(--primary-border);
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
             }
@@ -348,23 +358,23 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
             .loading-text {
                 font-family: var(--font-ui);
                 font-size: 15px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             .empty-icon {
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 margin-bottom: 4px;
             }
 
             .empty-state h3 {
                 margin: 0;
                 font-size: 18px;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .empty-state p {
                 margin: 0 0 16px 0;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 font-size: 14px;
             }
 
@@ -400,23 +410,19 @@ export type CategoryFilter = 'all' | 'macro' | 'crypto' | 'ai' | 'science';
         `
     ]
 })
-export class MarketListComponent implements OnInit, OnDestroy {
+export class MarketListComponent implements OnInit {
+    protected readonly rovingKeydown = handleRovingKeydown;
     private readonly apiService = inject(ApiService);
     private readonly destroyRef = inject(DestroyRef);
-    private readonly wsService = inject(WebSocketService);
 
     readonly markets = signal<Market[]>([]);
     readonly isLoading = signal<boolean>(true);
     readonly selectedCategory = signal<CategoryFilter>('all');
     readonly searchQuery = signal<string>('');
 
-    protected readonly categories: { id: CategoryFilter; label: string }[] = [
-        { id: 'all', label: 'All Markets' },
-        { id: 'macro', label: 'Macro & Fed' },
-        { id: 'crypto', label: 'Crypto' },
-        { id: 'ai', label: 'Artificial Intelligence' },
-        { id: 'science', label: 'Space & Science' }
-    ];
+    /** Filter chips: 'All' plus the server's category list, loaded on init. */
+    protected readonly categories = signal<{ id: CategoryFilter; label: string }[]>([{ id: 'all', label: 'All Markets' }]);
+    protected readonly loadError = signal<boolean>(false);
 
     protected readonly totalVolume = computed(() => {
         const total = this.markets().reduce((acc, m) => {
@@ -453,13 +459,15 @@ export class MarketListComponent implements OnInit, OnDestroy {
     });
 
     ngOnInit(): void {
+        // The catalog is a snapshot; live prices are streamed on the market page, not here.
         this.fetchMarkets();
-        // Connect to global WS stream for live price updates on the listing page
-        this.wsService.connect();
-    }
-
-    ngOnDestroy(): void {
-        this.wsService.disconnect();
+        this.apiService
+            .getMarketCategories()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (list) => this.categories.set([{ id: 'all', label: 'All Markets' }, ...list]),
+                error: () => undefined
+            });
     }
 
     setCategory(cat: CategoryFilter): void {
@@ -471,8 +479,13 @@ export class MarketListComponent implements OnInit, OnDestroy {
         this.searchQuery.set('');
     }
 
+    retryLoad(): void {
+        this.fetchMarkets();
+    }
+
     private fetchMarkets(): void {
         this.isLoading.set(true);
+        this.loadError.set(false);
         this.apiService
             .getMarkets()
             .pipe(takeUntilDestroyed(this.destroyRef))
@@ -484,6 +497,7 @@ export class MarketListComponent implements OnInit, OnDestroy {
                 error: (err) => {
                     console.error('Failed to load markets:', err);
                     this.isLoading.set(false);
+                    this.loadError.set(true);
                 }
             });
     }

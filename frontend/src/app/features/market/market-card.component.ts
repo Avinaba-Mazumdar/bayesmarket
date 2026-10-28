@@ -79,7 +79,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                         Vol: <strong class="tabular-nums">{{ '$' + formattedVolume() }}</strong>
                     </span>
                     <span class="trade-cta-hint" aria-hidden="true">
-                        <span>Trade</span>
+                        <span>{{ ctaLabel() }}</span>
                         <svg lucideArrowRight [size]="14" aria-hidden="true"></svg>
                     </span>
                 </div>
@@ -94,9 +94,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .market-card {
-                background-color: var(--surface-card, #121926);
-                border: 1px solid var(--hairline, #1e293b);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 transition:
                     transform 0.15s ease,
                     border-color 0.15s ease,
@@ -120,12 +120,12 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 padding: 16px 18px;
                 text-decoration: none;
                 color: inherit;
-                border-radius: var(--radius-lg, 14px);
+                border-radius: var(--radius-lg);
                 outline: none;
             }
 
             .market-card-link:focus-visible {
-                outline: 2px solid var(--focus-outline, #7c4dff);
+                outline: 2px solid var(--focus-outline);
                 outline-offset: 2px;
             }
 
@@ -140,14 +140,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .meta-date {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .market-title {
                 font-family: var(--font-ui);
                 font-size: 15px;
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 line-height: 1.4;
                 margin-bottom: 12px;
                 flex: 1;
@@ -175,7 +175,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-mono);
                 font-size: 20px;
                 font-weight: 800;
-                color: var(--outcome-yes-text, #065f46);
+                color: var(--outcome-yes-text);
                 font-feature-settings: 'tnum' 1;
             }
 
@@ -183,13 +183,13 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 12px;
                 font-weight: 500;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .chance-sub {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .split-bar-container {
@@ -199,19 +199,19 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .split-track {
                 width: 100%;
                 height: 5px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 display: flex;
                 overflow: hidden;
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.25));
+                background-color: var(--outcome-no-subtle);
             }
 
             .split-fill-yes {
-                background-color: var(--outcome-yes, #065f46);
+                background-color: var(--outcome-yes);
                 transition: width 0.3s ease;
             }
 
             .split-fill-no {
-                background-color: var(--outcome-no, #9f1239);
+                background-color: var(--outcome-no);
                 transition: width 0.3s ease;
             }
 
@@ -227,7 +227,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 align-items: center;
                 justify-content: space-between;
                 padding: 7px 12px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 font-family: var(--font-mono);
                 font-weight: 700;
                 font-size: 13px;
@@ -243,15 +243,15 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .pill-yes {
-                background-color: var(--outcome-yes-subtle, rgba(6, 95, 70, 0.09));
-                border: 1px solid var(--outcome-yes-border, rgba(6, 95, 70, 0.35));
-                color: var(--outcome-yes-text, #065f46);
+                background-color: var(--outcome-yes-subtle);
+                border: 1px solid var(--outcome-yes-border);
+                color: var(--outcome-yes-text);
             }
 
             .pill-no {
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.09));
-                border: 1px solid var(--outcome-no-border, rgba(159, 18, 57, 0.35));
-                color: var(--outcome-no-text, #9f1239);
+                background-color: var(--outcome-no-subtle);
+                border: 1px solid var(--outcome-no-border);
+                color: var(--outcome-no-text);
             }
 
             .pill-action-label {
@@ -270,19 +270,19 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                border-top: 1px solid var(--hairline, #252140);
+                border-top: 1px solid var(--hairline);
                 padding-top: 10px;
                 font-size: 12px;
             }
 
             .volume-stat {
                 font-family: var(--font-ui);
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .volume-stat strong {
                 font-family: var(--font-mono);
-                color: var(--ink-secondary, #9d97b8);
+                color: var(--ink-secondary);
                 font-weight: 600;
                 font-feature-settings: 'tnum' 1;
             }
@@ -293,7 +293,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 gap: 4px;
                 font-family: var(--font-ui);
                 font-weight: 600;
-                color: var(--primary-border, #7c4dff);
+                color: var(--primary-border);
                 transition: transform 0.15s ease;
             }
 
@@ -305,6 +305,13 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 })
 export class MarketCardComponent {
     readonly market = input.required<Market>();
+
+    /** Only open markets invite a trade; closed ones link to their details. */
+    protected readonly ctaLabel = computed(() => {
+        const m = this.market();
+        const open = m.status === 'active' && Date.parse(m.resolution_date) > Date.now();
+        return open ? 'Trade' : 'View';
+    });
 
     protected readonly yesPct = computed(() => {
         const val = parseFloat(this.market().probability_yes_pct);

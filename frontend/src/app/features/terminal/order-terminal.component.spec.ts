@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { OrderIntent, OrderTerminalComponent } from './order-terminal.component';
 import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
@@ -8,7 +8,7 @@ import { BuyQuoteResponse, Market } from '../../core/models/market.model';
 describe('OrderTerminalComponent', () => {
     let fixture: ComponentFixture<OrderTerminalComponent>;
     let component: OrderTerminalComponent;
-    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; getQuote: any };
+    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; getQuote: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
     let authStore: AuthStore;
 
     const mockMarket: Market = {
@@ -51,6 +51,11 @@ describe('OrderTerminalComponent', () => {
     beforeEach(async () => {
         vi.useFakeTimers();
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             createGuestSession: vi.fn().mockReturnValue(
                 of({
                     token: 'test-token',
@@ -79,7 +84,7 @@ describe('OrderTerminalComponent', () => {
         authStore.token.set('test-token');
         authStore.user.set({ id: 'u1', cash_balance: '500.00', is_guest: true, auth_provider: 'guest', created_at: '2026-01-01T00:00:00Z' });
         authStore.userId.set('u1');
-        authStore.cashBalance.set('$500.00');
+        authStore.updateBalance('500.00');
 
         fixture.componentRef.setInput('market', mockMarket);
         fixture.detectChanges();
@@ -111,7 +116,7 @@ describe('OrderTerminalComponent', () => {
         expect(component.amountInput()).toBe('0');
 
         component.onSetMax();
-        expect(component.amountInput()).toBe('500');
+        expect(component.amountInput()).toBe('500.00');
     });
 
     it('should validate against overdrafting user cash balance', () => {

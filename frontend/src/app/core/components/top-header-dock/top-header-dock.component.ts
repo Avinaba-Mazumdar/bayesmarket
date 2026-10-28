@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { LucideLogIn, LucideSun, LucideMoon, LucideShieldCheck } from '@lucide/angular';
 import { ThemeService } from '../../services/theme.service';
@@ -38,9 +38,18 @@ import { AuthStore } from '../../../state/auth.store';
                 <div class="dock-right">
                     @if (authStore.isAuthenticated()) {
                         <!-- Claim Button -->
-                        <app-button variant="secondary" size="default" [loading]="isClaiming()" ariaLabel="Claim testnet USDC" (btnClick)="onClaim()">
+                        <app-button
+                            variant="secondary"
+                            size="default"
+                            [loading]="isClaiming()"
+                            [disabled]="authStore.claimCooldownSeconds() > 0"
+                            [ariaLabel]="claimAriaLabel()"
+                            (btnClick)="onClaim()"
+                        >
                             @if (isClaiming()) {
                                 <span>Claiming...</span>
+                            } @else if (authStore.claimCooldownSeconds() > 0) {
+                                <span class="claim-countdown tabular-nums">Next claim in {{ claimCountdown() }}</span>
                             } @else {
                                 <span>+100 Claim</span>
                             }
@@ -116,11 +125,11 @@ import { AuthStore } from '../../../state/auth.store';
             }
             .top-header-dock {
                 height: 60px;
-                background-color: var(--surface-glass, rgba(19, 17, 38, 0.97));
-                border-bottom: 1px solid var(--hairline, #252140);
+                background-color: var(--surface-glass);
+                border-bottom: 1px solid var(--hairline);
                 display: flex;
                 align-items: center;
-                padding: 0 var(--space-lg, 20px);
+                padding: 0 var(--space-lg);
             }
             .dock-container {
                 width: 100%;
@@ -129,21 +138,21 @@ import { AuthStore } from '../../../state/auth.store';
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: var(--space-md, 16px);
+                gap: var(--space-md);
             }
             .dock-left,
             .dock-right {
                 display: flex;
                 align-items: center;
-                gap: var(--space-md, 16px);
+                gap: var(--space-md);
             }
             .brand-link {
                 display: flex;
                 align-items: center;
                 gap: 10px;
                 text-decoration: none;
-                min-height: var(--touch-target-min, 40px);
-                min-width: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
             }
             .brand-emblem {
                 display: flex;
@@ -153,17 +162,17 @@ import { AuthStore } from '../../../state/auth.store';
                 height: 32px;
                 background-color: rgba(54, 0, 179, 0.16);
                 border: 1px solid rgba(124, 77, 255, 0.35);
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
             }
             .brand-text {
                 font-family: var(--font-ui);
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.3px;
             }
             .brand-highlight {
-                color: var(--primary-border, #7c4dff);
+                color: var(--primary-border);
             }
             .nav-links {
                 display: flex;
@@ -175,14 +184,14 @@ import { AuthStore } from '../../../state/auth.store';
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                min-height: 38px;
+                min-height: var(--touch-target-min);
                 padding: 6px 14px;
-                color: var(--ink-secondary, #9d97b8);
+                color: var(--ink-secondary);
                 font-family: var(--font-ui);
                 font-size: 13.5px;
                 font-weight: 600;
                 text-decoration: none;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 border: 1px solid transparent;
                 transition:
                     background-color 0.15s ease,
@@ -190,13 +199,13 @@ import { AuthStore } from '../../../state/auth.store';
                     color 0.15s ease;
             }
             .nav-tab:hover {
-                background-color: var(--surface-card, #131126);
-                color: var(--ink, #f8f7ff);
+                background-color: var(--surface-card);
+                color: var(--ink);
             }
             .nav-tab.active {
-                background-color: var(--surface-card-elevated, #1a1733);
-                color: var(--ink, #f8f7ff);
-                border: 1px solid var(--hairline, #252140);
+                background-color: var(--surface-card-elevated);
+                color: var(--ink);
+                border: 1px solid var(--hairline);
                 font-weight: 700;
             }
             .admin-nav-tab {
@@ -223,15 +232,15 @@ import { AuthStore } from '../../../state/auth.store';
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 38px;
-                height: 38px;
-                min-width: 38px;
-                min-height: 38px;
+                width: var(--touch-target-min);
+                height: var(--touch-target-min);
+                min-width: var(--touch-target-min);
+                min-height: var(--touch-target-min);
                 padding: 0;
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-pill, 9999px);
-                color: var(--ink-secondary, #9d97b8);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-pill);
+                color: var(--ink-secondary);
                 cursor: pointer;
                 transition:
                     background-color 0.15s ease,
@@ -241,9 +250,9 @@ import { AuthStore } from '../../../state/auth.store';
             }
 
             .theme-toggle-btn:hover {
-                background-color: var(--surface-card-elevated, #1a1733);
-                border-color: var(--primary-border, #7c4dff);
-                color: var(--ink, #ffffff);
+                background-color: var(--surface-card-elevated);
+                border-color: var(--primary-border);
+                color: var(--ink);
                 transform: rotate(15deg);
             }
 
@@ -260,9 +269,9 @@ import { AuthStore } from '../../../state/auth.store';
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
-                min-height: 38px;
+                min-height: var(--touch-target-min);
                 padding: 6px 14px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 font-family: var(--font-ui);
                 font-size: 13px;
                 font-weight: 600;
@@ -280,38 +289,38 @@ import { AuthStore } from '../../../state/auth.store';
             }
 
             .user-logged-in-btn {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                color: var(--ink, #f8f7ff);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                color: var(--ink);
                 padding: 6px;
             }
 
             .user-logged-in-btn:hover {
-                background-color: var(--surface-card-elevated, #1a1733);
-                border-color: var(--primary-border, #7c4dff);
+                background-color: var(--surface-card-elevated);
+                border-color: var(--primary-border);
             }
 
             .guest-logged-in-btn {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                color: var(--ink, #f8f7ff);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                color: var(--ink);
                 padding: 6px 12px;
             }
 
             .guest-logged-in-btn:hover {
-                background-color: var(--surface-card-elevated, #1a1733);
-                border-color: var(--primary-border, #7c4dff);
+                background-color: var(--surface-card-elevated);
+                border-color: var(--primary-border);
             }
 
             .guest-badge-pill {
                 font-family: var(--font-mono);
                 font-size: 11px;
                 font-weight: 700;
-                color: var(--accent, #00d4ff);
+                color: var(--accent);
                 background-color: rgba(0, 212, 255, 0.12);
                 border: 1px solid rgba(0, 212, 255, 0.3);
                 padding: 2px 6px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
             }
 
             .auth-user-name {
@@ -334,4 +343,18 @@ export class TopHeaderDockComponent {
     onClaim(): void {
         this.authStore.claim();
     }
+
+    /** h:mm:ss or m:ss until the next claim is allowed. */
+    protected readonly claimCountdown = computed(() => {
+        const total = this.authStore.claimCooldownSeconds();
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        const mmss = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        return h > 0 ? `${h}:${mmss}` : mmss;
+    });
+
+    protected readonly claimAriaLabel = computed(() =>
+        this.authStore.claimCooldownSeconds() > 0 ? `Next testnet USDC claim available in ${this.claimCountdown()}` : 'Claim testnet USDC'
+    );
 }

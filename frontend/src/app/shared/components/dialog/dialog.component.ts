@@ -26,7 +26,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
                     <div
                         #dialogContent
                         [class]="contentClass()"
-                        [attr.role]="role()"
+                        [attr.role]="dialogRole()"
                         [attr.aria-modal]="true"
                         [attr.aria-labelledby]="title() ? dialogId + '-title' : null"
                         [attr.aria-describedby]="description() ? dialogId + '-desc' : null"
@@ -135,9 +135,9 @@ export type DialogRole = 'dialog' | 'alertdialog';
                 width: 100%;
                 max-height: calc(100vh - 48px);
                 overflow-y: auto;
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--border-strong, #3d3766);
-                border-radius: var(--radius-xl, 20px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-xl);
                 padding: 24px;
                 box-shadow:
                     var(--shadow-terminal, 0 8px 32px rgba(0, 0, 0, 0.7)),
@@ -213,7 +213,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
                 font-size: 19px;
                 font-weight: 700;
                 line-height: 1.35;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 letter-spacing: -0.2px;
             }
 
@@ -222,7 +222,7 @@ export type DialogRole = 'dialog' | 'alertdialog';
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 14px;
                 line-height: 1.5;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             /* --- Body --- */
@@ -273,7 +273,8 @@ export class DialogComponent {
     readonly closeOnEscape = input<boolean>(true);
     readonly showCloseButton = input<boolean>(true);
     readonly size = input<DialogSize>('default');
-    readonly role = input<DialogRole>('dialog');
+    /** Named dialogRole, not role: a static role attribute on <app-dialog> would stay on the host while closed. */
+    readonly dialogRole = input<DialogRole>('dialog');
     readonly ariaLabel = input<string>('');
 
     readonly closed = output<void>();

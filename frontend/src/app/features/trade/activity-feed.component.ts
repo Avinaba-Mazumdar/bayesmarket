@@ -1,10 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LucideZap, LucideArrowUp, LucideArrowDown } from '@lucide/angular';
+import { ApiService } from '../../core/services/api.service';
 import { WebSocketService } from '../../core/services/websocket.service';
-import { TradeEvent } from '../../core/models/websocket.model';
 import { formatShares, formatPrice, formatTimestamp } from '../../core/utils/formatters';
 
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
+
+interface FeedRow {
+    id: string;
+    tradeType: 'BUY' | 'SELL';
+    outcome: 'YES' | 'NO';
+    shares: string;
+    price: string;
+    timestamp: string;
+}
 
 @Component({
     selector: 'app-activity-feed',
@@ -16,31 +26,40 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             <div class="feed-header">
                 <div class="header-title-group">
                     <span class="live-indicator" aria-hidden="true"></span>
-                    <h4 class="feed-title">Live Trade Activity</h4>
+                    <h4 class="feed-title">Recent Trades</h4>
                 </div>
-                <span class="feed-count tabular-nums"> {{ filteredTrades().length }} recent </span>
+                <span class="feed-count tabular-nums"> {{ filteredTrades().length }} shown </span>
             </div>
 
-            <div class="trades-scroll-container" role="feed" aria-busy="false">
+            <div class="trades-scroll-container" role="feed" [attr.aria-busy]="historyState() === 'loading'">
                 @if (filteredTrades().length === 0) {
-                    <div class="empty-trades">
-                        <svg lucideZap class="empty-icon" [size]="24" aria-hidden="true"></svg>
-                        <p class="empty-text">Listening for live trades on this market...</p>
-                        <span class="empty-hint">Orders placed will appear here instantaneously via WebSockets</span>
-                    </div>
+                    @if (historyState() === 'loading') {
+                        <div class="empty-trades">
+                            <p class="empty-text" role="status">Loading recent trades…</p>
+                        </div>
+                    } @else if (historyState() === 'error') {
+                        <div class="empty-trades">
+                            <p class="empty-text" role="alert">Recent trades could not be loaded. Refresh the page to try again.</p>
+                        </div>
+                    } @else {
+                        <div class="empty-trades">
+                            <svg lucideZap class="empty-icon" [size]="24" aria-hidden="true"></svg>
+                            <p class="empty-text">No trades yet on this market.</p>
+                            <span class="empty-hint">New trades appear here as they happen.</span>
+                        </div>
+                    }
                 } @else {
                     <div class="trades-list">
-                        @for (trade of filteredTrades(); track trade.trade_id || trade.timestamp) {
-                            <article class="trade-item" tabindex="0">
+                        @for (trade of filteredTrades(); track trade.id) {
+                            <article class="trade-item">
                                 <div class="trade-main">
                                     <app-badge [variant]="trade.outcome === 'YES' ? 'profit' : 'loss'" size="sm">
                                         @if (trade.outcome === 'YES') {
                                             <svg lucideArrowUp class="trade-badge-icon" [size]="12" aria-hidden="true"></svg>
-                                            YES
                                         } @else {
                                             <svg lucideArrowDown class="trade-badge-icon" [size]="12" aria-hidden="true"></svg>
-                                            NO
                                         }
+                                        {{ trade.tradeType === 'BUY' ? 'Bought' : 'Sold' }} {{ trade.outcome }}
                                     </app-badge>
                                     <span class="trade-amount tabular-nums"> {{ trade.formattedShares }} shares </span>
                                 </div>
@@ -65,9 +84,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .activity-feed-card {
-                background-color: var(--surface-card, #111622);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-xl, 20px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-xl);
                 padding: 18px 20px;
                 display: flex;
                 flex-direction: column;
@@ -79,7 +98,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                border-bottom: 1px solid var(--hairline, #1e2638);
+                border-bottom: 1px solid var(--hairline);
                 padding-bottom: 12px;
             }
 
@@ -93,8 +112,8 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background-color: var(--outcome-yes, #065f46);
-                box-shadow: 0 0 8px var(--outcome-yes-glow, rgba(6, 95, 70, 0.4));
+                background-color: var(--outcome-yes);
+                box-shadow: 0 0 8px var(--outcome-yes-glow);
                 will-change: opacity;
                 animation: pulseLive 2.5s ease-in-out infinite;
             }
@@ -113,7 +132,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-ui);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 margin: 0;
             }
 
@@ -121,7 +140,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-mono);
                 font-size: 11.5px;
                 font-weight: 600;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             .trades-scroll-container {
@@ -142,17 +161,17 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 align-items: center;
                 justify-content: space-between;
                 padding: 8px 12px;
-                background-color: var(--canvas-subtle, #0a0d14);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 font-size: 13px;
                 transition: background-color 0.12s ease;
             }
 
             .trade-item:hover,
             .trade-item:focus-visible {
-                background-color: var(--surface-card, #111622);
-                border-color: var(--primary-border, #3b82f6);
+                background-color: var(--surface-card);
+                border-color: var(--primary-border);
                 outline: none;
             }
 
@@ -167,7 +186,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 align-items: center;
                 gap: 4px;
                 padding: 3px 7px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 font-size: 11px;
                 font-weight: 700;
                 letter-spacing: 0.5px;
@@ -178,21 +197,21 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .trade-yes {
-                background-color: var(--outcome-yes-subtle, rgba(6, 95, 70, 0.09));
-                color: var(--outcome-yes-text, #065f46);
-                border: 1px solid var(--outcome-yes-border, rgba(6, 95, 70, 0.35));
+                background-color: var(--outcome-yes-subtle);
+                color: var(--outcome-yes-text);
+                border: 1px solid var(--outcome-yes-border);
             }
 
             .trade-no {
-                background-color: var(--outcome-no-subtle, rgba(159, 18, 57, 0.09));
-                color: var(--outcome-no-text, #9f1239);
-                border: 1px solid var(--outcome-no-border, rgba(159, 18, 57, 0.35));
+                background-color: var(--outcome-no-subtle);
+                color: var(--outcome-no-text);
+                border: 1px solid var(--outcome-no-border);
             }
 
             .trade-amount {
                 font-family: var(--font-mono);
                 font-weight: 600;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
             }
 
             .trade-details {
@@ -203,14 +222,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 
             .trade-price {
                 font-family: var(--font-mono);
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 font-size: 12px;
             }
 
             .trade-time {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             .empty-trades {
@@ -224,7 +243,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .empty-icon {
-                color: var(--status-warning, #fcd34d);
+                color: var(--status-warning);
                 flex-shrink: 0;
                 margin-bottom: 2px;
             }
@@ -232,14 +251,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .empty-text {
                 font-family: var(--font-ui);
                 font-size: 13.5px;
-                color: var(--ink-secondary, #cbd5e1);
+                color: var(--ink-secondary);
                 margin: 0;
             }
 
             .empty-hint {
                 font-family: var(--font-ui);
                 font-size: 11.5px;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
         `
     ]
@@ -247,16 +266,78 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 export class ActivityFeedComponent {
     readonly marketId = input<string>('');
     private readonly wsService = inject(WebSocketService);
+    private readonly apiService = inject(ApiService);
+    private readonly destroyRef = inject(DestroyRef);
+
+    /** Recorded trades from the REST API; live trades are merged in from the WebSocket. */
+    readonly historyState = signal<'loading' | 'ready' | 'error'>('loading');
+    private readonly recordedRows = signal<FeedRow[]>([]);
+    private requestSeq = 0;
+
+    constructor() {
+        effect(() => {
+            const id = this.marketId();
+            untracked(() => this.loadRecent(id));
+        });
+    }
 
     protected readonly filteredTrades = computed(() => {
         const id = this.marketId();
-        const trades = this.wsService.recentTrades();
-        const list = !id ? trades.slice(0, 15) : trades.filter((t) => !t.market_id || t.market_id === id).slice(0, 15);
-        return list.map((t) => ({
-            ...t,
-            formattedShares: formatShares(t.shares),
-            formattedPrice: formatPrice(t.price, 4).replace('$', ''),
-            formattedTime: formatTimestamp(t.timestamp)
-        }));
+        const live: FeedRow[] = this.wsService
+            .recentTrades()
+            .filter((t) => !id || !t.market_id || t.market_id === id)
+            .map((t) => ({
+                id: t.trade_id,
+                tradeType: t.trade_type,
+                outcome: t.outcome,
+                shares: t.shares,
+                price: t.price,
+                timestamp: t.timestamp
+            }));
+
+        const seen = new Set<string>();
+        return [...live, ...this.recordedRows()]
+            .filter((row) => {
+                if (seen.has(row.id)) return false;
+                seen.add(row.id);
+                return true;
+            })
+            .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+            .slice(0, 15)
+            .map((row) => ({
+                ...row,
+                formattedShares: formatShares(row.shares),
+                formattedPrice: formatPrice(row.price, 4).replace('$', ''),
+                formattedTime: formatTimestamp(row.timestamp)
+            }));
     });
+
+    private loadRecent(id: string): void {
+        if (!id) return;
+        const seq = ++this.requestSeq;
+        this.recordedRows.set([]);
+        this.historyState.set('loading');
+        this.apiService
+            .getMarketTrades(id, 15)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (trades) => {
+                    if (seq !== this.requestSeq) return;
+                    this.recordedRows.set(
+                        trades.map((t) => ({
+                            id: t.id,
+                            tradeType: t.trade_type,
+                            outcome: t.outcome,
+                            shares: t.shares_filled,
+                            price: t.execution_price,
+                            timestamp: t.created_at
+                        }))
+                    );
+                    this.historyState.set('ready');
+                },
+                error: () => {
+                    if (seq === this.requestSeq) this.historyState.set('error');
+                }
+            });
+    }
 }

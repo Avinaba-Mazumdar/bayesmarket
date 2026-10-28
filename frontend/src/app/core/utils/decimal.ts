@@ -48,3 +48,57 @@ export function truncateDecimal(value: string, places: number): string {
     const [whole, fraction] = fromScaled(scaled).split('.');
     return places > 0 ? `${whole}.${fraction.slice(0, places)}` : whole;
 }
+
+/**
+ * Normalizes user input to a canonical decimal string truncated to `places` decimals.
+ * Returns null for anything that is not a non-negative decimal.
+ *
+ * normalizeDecimal(' 12.349 ', 2) === '12.34'
+ */
+export function normalizeDecimal(value: string, places = SCALE): string | null {
+    const scaled = toScaled(value);
+    if (scaled === null) return null;
+    const digits = Math.max(0, Math.min(places, SCALE));
+    const unit = 10n ** BigInt(SCALE - digits);
+    const text = fromScaled(scaled - (scaled % unit));
+    return digits === 0 ? text.slice(0, text.indexOf('.')) : text.slice(0, text.indexOf('.') + 1 + digits);
+}
+
+/** Compares two canonical decimal strings: -1, 0 or 1, or null if either is invalid. */
+export function compareDecimal(a: string, b: string): -1 | 0 | 1 | null {
+    const x = toScaled(a);
+    const y = toScaled(b);
+    if (x === null || y === null) return null;
+    return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/** a + b as a canonical decimal string, or null if either input is invalid. */
+export function addDecimal(a: string, b: string): string | null {
+    const x = toScaled(a);
+    const y = toScaled(b);
+    if (x === null || y === null) return null;
+    return fromScaled(x + y);
+}
+
+/** a - b, clamped at zero, as a canonical decimal string, or null if either input is invalid. */
+export function subtractDecimal(a: string, b: string): string | null {
+    const x = toScaled(a);
+    const y = toScaled(b);
+    if (x === null || y === null) return null;
+    return fromScaled(x > y ? x - y : 0n);
+}
+
+/**
+ * Formats a USDC amount for display: truncated to cents, with thousands separators. Never rounds up,
+ * so a displayed balance is never larger than the real one.
+ *
+ * formatUsd('1234.569') === '$1,234.56'
+ */
+export function formatUsd(value: string): string {
+    const scaled = toScaled(value);
+    if (scaled === null) return '$0.00';
+    const cents = scaled / (ONE / 100n);
+    const whole = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const fraction = (cents % 100n).toString().padStart(2, '0');
+    return `$${whole}.${fraction}`;
+}

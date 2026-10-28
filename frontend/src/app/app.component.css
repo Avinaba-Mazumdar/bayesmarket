@@ -2,12 +2,12 @@
     position: absolute;
     top: -100px;
     left: 20px;
-    background-color: var(--primary, #4338ca);
-    color: var(--on-primary, #ffffff);
+    background-color: var(--primary);
+    color: var(--on-primary);
     padding: 12px 20px;
     z-index: 9999;
-    border: 2px solid var(--primary-border, #4338ca);
-    border-radius: var(--radius-md, 10px);
+    border: 2px solid var(--primary-border);
+    border-radius: var(--radius-md);
     font-family: var(--font-ui);
     font-size: 14px;
     font-weight: 700;
@@ -18,7 +18,7 @@
 
 .skip-link:focus {
     top: 20px;
-    outline: 2px solid var(--focus-outline, #3730a3);
+    outline: 2px solid var(--focus-outline);
     outline-offset: 2px;
 }
 
@@ -30,7 +30,7 @@
 
 #app-main-content {
     flex: 1 0 auto;
-    padding: var(--space-xl, 24px) var(--space-lg, 20px);
+    padding: var(--space-xl) var(--space-lg);
     max-width: 1600px;
     margin: 0 auto;
     width: 100%;

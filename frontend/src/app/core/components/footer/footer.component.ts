@@ -36,7 +36,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                         <a routerLink="/terms" class="footer-link">Terms &amp; Conditions</a>
                         <span class="dot-divider" aria-hidden="true">&bull;</span>
                         <a
-                            href="https://github.com/bayesmarket/bayesmarket"
+                            href="https://github.com/Avinaba-Mazumdar/bayesmarket"
                             target="_blank"
                             rel="noopener noreferrer"
                             class="footer-link external-link"
@@ -62,11 +62,11 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             }
 
             .app-footer {
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border-top: 1px solid var(--hairline, #252140);
-                padding: var(--space-xl, 24px) var(--space-lg, 20px);
+                background-color: var(--canvas-subtle);
+                border-top: 1px solid var(--hairline);
+                padding: var(--space-xl) var(--space-lg);
                 font-family: var(--font-ui);
-                color: var(--muted, #b8b3d4);
+                color: var(--muted);
                 font-size: 13px;
             }
 
@@ -75,15 +75,15 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                 margin: 0 auto;
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-md, 16px);
+                gap: var(--space-md);
             }
 
             .footer-disclaimer-row {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-xs, 8px);
-                padding-bottom: var(--space-md, 16px);
-                border-bottom: 1px solid var(--hairline, #1c1836);
+                gap: var(--space-xs);
+                padding-bottom: var(--space-md);
+                border-bottom: 1px solid var(--hairline);
             }
 
             .footer-brand {
@@ -95,22 +95,22 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             .footer-brand-name {
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.01em;
             }
 
             .brand-highlight {
-                color: var(--primary-text, #c4b5fd);
+                color: var(--primary-text);
             }
 
             .footer-badge {
                 font-size: 11px;
                 font-weight: 600;
-                color: var(--accent, #7dd3fc);
-                background-color: var(--accent-subtle, rgba(56, 189, 248, 0.12));
-                border: 1px solid var(--accent, #7dd3fc);
+                color: var(--accent);
+                background-color: var(--accent-subtle);
+                border: 1px solid var(--accent);
                 padding: 1px 6px;
-                border-radius: var(--radius-pill, 9999px);
+                border-radius: var(--radius-pill);
                 letter-spacing: 0.02em;
                 text-transform: uppercase;
             }
@@ -118,17 +118,17 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             .footer-disclaimer-text {
                 font-size: 12px;
                 line-height: 1.5;
-                color: var(--muted, #b8b3d4);
+                color: var(--muted);
                 margin: 0;
                 max-width: 1200px;
             }
 
             .footer-disclaimer-text code {
                 font-family: var(--font-mono);
-                background-color: var(--surface-card, #131126);
+                background-color: var(--surface-card);
                 padding: 1px 4px;
-                border-radius: var(--radius-xs, 4px);
-                border: 1px solid var(--hairline, #352f5e);
+                border-radius: var(--radius-xs);
+                border: 1px solid var(--hairline);
             }
 
             .footer-bottom-row {
@@ -136,7 +136,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                 align-items: center;
                 justify-content: space-between;
                 flex-wrap: wrap;
-                gap: var(--space-md, 16px);
+                gap: var(--space-md);
             }
 
             .footer-nav {
@@ -147,30 +147,32 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             }
 
             .footer-link {
-                color: var(--body, #cbd5e1);
+                color: var(--body);
                 text-decoration: none;
                 font-weight: 500;
                 font-size: 13px;
                 transition: color 0.15s ease;
-                min-height: 24px;
+                min-height: var(--touch-target-min);
+                display: inline-flex;
+                align-items: center;
                 display: inline-flex;
                 align-items: center;
             }
 
             .footer-link:hover {
-                color: var(--primary-text, #c4b5fd);
+                color: var(--primary-text);
                 text-decoration: underline;
                 text-underline-offset: 3px;
             }
 
             .dot-divider {
-                color: var(--hairline, #352f5e);
+                color: var(--hairline);
                 font-size: 10px;
             }
 
             .footer-copy {
                 font-size: 12px;
-                color: var(--muted, #8b85b3);
+                color: var(--muted);
             }
 
             @media (max-width: 768px) {

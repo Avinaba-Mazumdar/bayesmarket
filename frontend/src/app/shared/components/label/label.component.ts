@@ -27,7 +27,7 @@ export type LabelSize = 'sm' | 'default' | 'lg';
                 font-weight: 600;
                 line-height: 1.3;
                 letter-spacing: 0.1px;
-                color: var(--ink-secondary, #cbd5e1);
+                color: var(--ink-secondary);
                 user-select: none;
                 cursor: pointer;
                 transition: color 0.15s ease;
@@ -48,7 +48,7 @@ export type LabelSize = 'sm' | 'default' | 'lg';
 
             /* --- Error State --- */
             .label-error {
-                color: var(--status-loss, #fda4af);
+                color: var(--status-loss);
             }
 
             /* --- Disabled State --- */
@@ -58,7 +58,7 @@ export type LabelSize = 'sm' | 'default' | 'lg';
             }
 
             .required-indicator {
-                color: var(--primary-border, #e84089);
+                color: var(--primary-border);
                 margin-left: 3px;
                 font-weight: 700;
             }

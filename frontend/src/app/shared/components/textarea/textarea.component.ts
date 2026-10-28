@@ -41,9 +41,9 @@ export type TextareaVariant = 'default' | 'mono';
             .textarea-wrapper {
                 display: flex;
                 width: 100%;
-                background-color: var(--surface-terminal, #0e131d);
-                border: 1px solid var(--border-strong, #606e85);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-terminal);
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-lg);
                 padding: 10px 14px;
                 box-sizing: border-box;
                 transition:
@@ -53,8 +53,8 @@ export type TextareaVariant = 'default' | 'mono';
             }
 
             .textarea-wrapper:focus-within {
-                border-color: var(--focus-outline, #e84089);
-                box-shadow: 0 0 0 2px var(--focus-ring, rgba(232, 64, 137, 0.35));
+                border-color: var(--focus-outline);
+                box-shadow: 0 0 0 2px var(--focus-ring);
             }
 
             .native-textarea {
@@ -65,7 +65,7 @@ export type TextareaVariant = 'default' | 'mono';
                 outline: none;
                 box-shadow: none;
                 resize: vertical;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 14px;
                 line-height: 1.5;
@@ -79,7 +79,7 @@ export type TextareaVariant = 'default' | 'mono';
             }
 
             .native-textarea::placeholder {
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 opacity: 0.8;
             }
 
@@ -117,10 +117,10 @@ export type TextareaVariant = 'default' | 'mono';
 
             /* --- Error State --- */
             .textarea-error {
-                border-color: var(--status-loss-border, #fb7185);
+                border-color: var(--status-loss-border);
             }
             .textarea-error:focus-within {
-                border-color: var(--status-loss-border, #fb7185);
+                border-color: var(--status-loss-border);
                 box-shadow: 0 0 0 2px rgba(251, 113, 133, 0.35);
             }
 
@@ -140,7 +140,7 @@ export type TextareaVariant = 'default' | 'mono';
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 12px;
                 font-weight: 500;
-                color: var(--status-loss, #fda4af);
+                color: var(--status-loss);
                 margin-top: 5px;
                 padding-left: 2px;
             }

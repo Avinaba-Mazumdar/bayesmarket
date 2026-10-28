@@ -1,4 +1,4 @@
-import { applyTolerance, truncateDecimal } from './decimal';
+import { addDecimal, applyTolerance, compareDecimal, formatUsd, normalizeDecimal, subtractDecimal, truncateDecimal } from './decimal';
 
 describe('decimal utils', () => {
     describe('applyTolerance', () => {
@@ -42,6 +42,53 @@ describe('decimal utils', () => {
 
         it('returns non-decimal input unchanged', () => {
             expect(truncateDecimal('n/a', 2)).toBe('n/a');
+        });
+    });
+
+    describe('normalizeDecimal', () => {
+        it('truncates to the requested places and never rounds up', () => {
+            expect(normalizeDecimal(' 12.349 ', 2)).toBe('12.34');
+            expect(normalizeDecimal('999.999999', 2)).toBe('999.99');
+            expect(normalizeDecimal('50', 8)).toBe('50.00000000');
+        });
+
+        it('rejects non-decimal input', () => {
+            expect(normalizeDecimal('', 2)).toBeNull();
+            expect(normalizeDecimal('1e3', 2)).toBeNull();
+            expect(normalizeDecimal('-1', 2)).toBeNull();
+            expect(normalizeDecimal('abc', 2)).toBeNull();
+        });
+    });
+
+    describe('compareDecimal', () => {
+        it('compares exactly, beyond float precision', () => {
+            expect(compareDecimal('1000.00000001', '1000.00000000')).toBe(1);
+            expect(compareDecimal('0.1', '0.10000000')).toBe(0);
+            expect(compareDecimal('9', '10')).toBe(-1);
+            expect(compareDecimal('x', '10')).toBeNull();
+        });
+    });
+
+    describe('addDecimal and subtractDecimal', () => {
+        it('stays exact where binary floats drift', () => {
+            expect(addDecimal('0.1', '0.2')).toBe('0.30000000');
+            expect(subtractDecimal('1000.00000000', '0.00000001')).toBe('999.99999999');
+        });
+
+        it('clamps subtraction at zero', () => {
+            expect(subtractDecimal('5', '7')).toBe('0.00000000');
+        });
+    });
+
+    describe('formatUsd', () => {
+        it('groups thousands and truncates to cents', () => {
+            expect(formatUsd('1000')).toBe('$1,000.00');
+            expect(formatUsd('1234567.899')).toBe('$1,234,567.89');
+            expect(formatUsd('0.5')).toBe('$0.50');
+        });
+
+        it('falls back for invalid input', () => {
+            expect(formatUsd('n/a')).toBe('$0.00');
         });
     });
 });

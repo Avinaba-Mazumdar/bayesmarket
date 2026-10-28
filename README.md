@@ -1,10 +1,10 @@
 # BayesMarket
 
-[![CI](https://github.com/Avinaba-Mazumdar/bayesmarket-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Avinaba-Mazumdar/bayesmarket-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/Avinaba-Mazumdar/bayesmarket/actions/workflows/ci.yml/badge.svg)](https://github.com/Avinaba-Mazumdar/bayesmarket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Angular](<https://img.shields.io/badge/Angular-22%20(Zoneless)-DD0031?logo=angular&logoColor=white>)](https://angular.dev)
-[![WCAG AAA](https://img.shields.io/badge/WCAG%202.2-Level%20AAA-brightgreen)](target/DESIGN.md)
+[![WCAG AAA target](https://img.shields.io/badge/WCAG%202.2-AAA%20target-blue)](target/DESIGN.md)
 
 > **High-Performance Binary Prediction Market Exchange Engine & Reactive Trading Platform**
 
@@ -22,7 +22,7 @@ Unlike traditional wagering apps, BayesMarket implements a **collateralized comp
 
 ## Preview
 
-|              Institutional Trading Terminal & Live Chart               |            Real-Time Market Catalog & Probability Split            |
+|                     Trading Terminal & Live Chart                      |            Real-Time Market Catalog & Probability Split            |
 | :--------------------------------------------------------------------: | :----------------------------------------------------------------: |
 | ![BayesMarket Trading Terminal](docs/screenshots/trading_terminal.png) | ![BayesMarket Discovery Page](docs/screenshots/discovery_page.png) |
 
@@ -36,7 +36,7 @@ Unlike traditional wagering apps, BayesMarket implements a **collateralized comp
 - **Real-Time Streaming**: Push-based price updates and live trade activity via resilient, auto-reconnecting WebSockets.
 - **Reactive Zoneless UI**: Built with Angular Signals, computed derivations, and `lightweight-charts` for 60fps canvas rendering without change-detection overhead.
 - **Instant Sandbox Mode**: 1-click ephemeral Guest Session pre-loaded with 1,000 virtual USDC and claim replenishment to test trading workflows without wallet connection or registration.
-- **WCAG 2.2 Level AAA Compliant**: Rigorously engineered accessibility architecture featuring 7:1 enhanced contrast, 44×44px hit targets, full keyboard navigation, and two-step financial order confirmation review.
+- **WCAG 2.2 Level AAA Target**: Designed for AAA: text colours are checked to 7:1 contrast by calculation and controls have 44×44px hit targets. An automated audit has not yet been run, so AAA compliance is not yet verified; see [target/DESIGN.md](target/DESIGN.md). Full keyboard navigation and two-step financial order confirmation review are implemented.
 - **Abuse Mitigation**: In-memory token-bucket rate limiting per IP and session (`golang.org/x/time/rate`).
 
 ---
@@ -155,8 +155,8 @@ Run the entire platform locally — including PostgreSQL 18, automated database 
 
 ```bash
 # Clone the repository
-git clone https://github.com/Avinaba-Mazumdar/bayesmarket-oss.git
-cd bayesmarket-oss
+git clone https://github.com/Avinaba-Mazumdar/bayesmarket.git
+cd bayesmarket
 
 # Boot all services via Docker Compose
 docker compose up --build -d
@@ -220,13 +220,13 @@ The web application will be accessible at `http://localhost:4200`.
 
 ## Engineering Decisions & Invariants
 
-| Decision                               | Implementation                                           | Engineering Rationale                                                                                                                 |
-| :------------------------------------- | :------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
-| **Zero-Float Financial Math**          | `shopspring/decimal` fixed-point arithmetic              | Eliminates IEEE-754 floating-point drift across iterative buy/sell bonding curves.                                                    |
-| **Balance Solvency & Race Prevention** | PostgreSQL `SELECT ... FOR UPDATE` row locks             | Enforces serializable isolation; 20 parallel threads attempting to drain the same balance yields exactly 1 success and 19 rejections. |
-| **High-Performance Canvas Charts**     | TradingView Lightweight Charts + Angular Signals         | 60fps canvas rendering isolated from framework change-detection cycles.                                                               |
-| **Non-Blocking WS Telemetry**          | Go channels with buffered fan-out and select-drop        | Slow network consumers are gracefully disconnected without stalling the central matching pipeline.                                    |
-| **Institutional Accessibility**        | WCAG 2.2 Level AAA (7:1 contrast, 44×44px touch targets) | Dual-coded outcome indicators, 2-step financial confirmation modal, full keyboard navigability.                                       |
+| Decision                               | Implementation                                                                        | Engineering Rationale                                                                                                                 |
+| :------------------------------------- | :------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------ |
+| **Zero-Float Financial Math**          | `shopspring/decimal` fixed-point arithmetic                                           | Eliminates IEEE-754 floating-point drift across iterative buy/sell bonding curves.                                                    |
+| **Balance Solvency & Race Prevention** | PostgreSQL `SELECT ... FOR UPDATE` row locks                                          | Enforces serializable isolation; 20 parallel threads attempting to drain the same balance yields exactly 1 success and 19 rejections. |
+| **High-Performance Canvas Charts**     | TradingView Lightweight Charts + Angular Signals                                      | 60fps canvas rendering isolated from framework change-detection cycles.                                                               |
+| **Non-Blocking WS Telemetry**          | Go channels with buffered fan-out and select-drop                                     | Slow network consumers are gracefully disconnected without stalling the central matching pipeline.                                    |
+| **Accessibility**                      | WCAG 2.2 Level AAA target (7:1 text contrast, 44×44px touch targets; not yet audited) | Dual-coded outcome indicators, 2-step financial confirmation modal, full keyboard navigability.                                       |
 
 ---
 

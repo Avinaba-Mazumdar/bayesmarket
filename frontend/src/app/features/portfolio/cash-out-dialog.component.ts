@@ -5,7 +5,8 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthStore } from '../../state/auth.store';
 import { ToastService } from '../../shared/components/toast/toast.service';
 import { CashOutResponse, SellQuoteResponse, UserPosition } from '../../core/models/market.model';
-import { applyTolerance, truncateDecimal } from '../../core/utils/decimal';
+import { addDecimal, applyTolerance, compareDecimal, formatUsd, normalizeDecimal, truncateDecimal } from '../../core/utils/decimal';
+import { InputComponent } from '../../shared/components/input/input.component';
 import { DialogComponent } from '../../shared/components/dialog/dialog.component';
 import { ButtonComponent } from '../../shared/components/button/button.component';
 import { BadgeComponent } from '../../shared/components/badge/badge.component';
@@ -14,14 +15,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
     selector: 'app-cash-out-dialog',
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [DialogComponent, ButtonComponent, BadgeComponent, LucideArrowUp, LucideArrowDown, LucideCircleAlert],
+    imports: [DialogComponent, ButtonComponent, BadgeComponent, InputComponent, LucideArrowUp, LucideArrowDown, LucideCircleAlert],
     template: `
         <app-dialog
             [open]="isOpen()"
             [title]="'Confirm AMM Liquidation'"
             [description]="'Liquidate your outcome shares back into the automated liquidity pool for USDC cash.'"
             size="default"
-            role="alertdialog"
+            dialogRole="alertdialog"
             [closeOnOverlayClick]="!isExecuting()"
             [closeOnEscape]="!isExecuting()"
             [showCloseButton]="!isExecuting()"
@@ -51,7 +52,22 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 
                         <div class="meta-item">
                             <span class="meta-label">Shares to Sell</span>
-                            <span class="shares-amount tabular-nums">{{ formattedShares() }} Shares</span>
+                            <div class="shares-entry">
+                                <app-input
+                                    id="cash-out-shares-input"
+                                    type="text"
+                                    variant="mono"
+                                    size="default"
+                                    [value]="sharesInput()"
+                                    [error]="sharesError() ?? ''"
+                                    (valueChange)="onSharesChange($event)"
+                                    ariaLabel="Shares to sell"
+                                />
+                                <app-button variant="outline" size="sm" ariaLabel="Sell all shares in this position" (btnClick)="setAllShares()">
+                                    All
+                                </app-button>
+                            </div>
+                            <span class="shares-owned tabular-nums">of {{ formattedShares() }} owned</span>
                         </div>
                     </div>
 
@@ -107,6 +123,13 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                         </div>
                     }
 
+                    @if (!canSell()) {
+                        <div class="amm-notice quote-error" role="status">
+                            <svg lucideCircleAlert class="notice-glyph" [size]="16" aria-hidden="true"></svg>
+                            <span>Selling is closed for this market right now.</span>
+                        </div>
+                    }
+
                     <div class="amm-notice" role="note">
                         <svg lucideCircleAlert class="notice-glyph" [size]="16" aria-hidden="true"></svg>
                         <span>
@@ -127,7 +150,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                         variant="primary"
                         size="default"
                         [loading]="isExecuting() || isQuoting()"
-                        [disabled]="isExecuting() || minPayout() === null"
+                        [disabled]="isExecuting() || minPayout() === null || !!sharesError() || !canSell()"
                         ariaLabel="Confirm liquidation and sell shares for USDC"
                         (btnClick)="onConfirmCashOut(pos)"
                     >
@@ -150,9 +173,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             }
 
             .market-summary-box {
-                background-color: var(--canvas-subtle, #0e0c1c);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 12px 14px;
                 display: flex;
                 flex-direction: column;
@@ -165,14 +188,14 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .market-question {
                 font-family: var(--font-ui);
                 font-size: 14.5px;
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 margin: 0;
                 line-height: 1.35;
             }
@@ -182,9 +205,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 align-items: center;
                 justify-content: space-between;
                 gap: 12px;
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 12px 14px;
             }
 
@@ -197,7 +220,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .meta-label {
                 font-family: var(--font-ui);
                 font-size: 11px;
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
             }
@@ -206,7 +229,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 font-family: var(--font-mono);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .badge-glyph {
@@ -217,9 +240,9 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
             .financial-table {
                 display: flex;
                 flex-direction: column;
-                border: 1px solid var(--hairline, #252140);
-                border-radius: var(--radius-md, 10px);
-                background-color: var(--canvas, #080711);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
+                background-color: var(--canvas);
                 overflow: hidden;
             }
 
@@ -228,7 +251,7 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
                 align-items: center;
                 justify-content: space-between;
                 padding: 10px 14px;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
                 font-size: 13px;
             }
 
@@ -238,55 +261,67 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 
             .cell-label {
                 font-family: var(--font-ui);
-                color: var(--muted, #9d97b8);
+                color: var(--muted);
             }
 
             .cell-val {
                 font-family: var(--font-mono);
                 font-weight: 600;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 font-feature-settings: 'tnum' 1;
             }
 
             .highlight-val {
                 font-size: 15px;
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
             }
 
             .profit-val {
-                color: var(--status-profit, #065f46);
+                color: var(--status-profit);
             }
 
             .loss-val {
-                color: var(--status-loss, #9f1239);
+                color: var(--status-loss);
             }
 
             .balance-preview-row {
-                background-color: var(--status-info-bg, #f0f9ff);
+                background-color: var(--status-info-bg);
             }
 
             .balance-preview {
                 font-size: 14.5px;
-                color: var(--status-info, #075985);
+                color: var(--status-info);
             }
 
             .amm-notice {
                 display: flex;
                 align-items: flex-start;
                 gap: 8px;
-                background-color: var(--primary-subtle, rgba(67, 56, 202, 0.08));
-                border: 1px solid var(--primary-border, #4338ca);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--primary-subtle);
+                border: 1px solid var(--primary-border);
+                border-radius: var(--radius-md);
                 padding: 10px 12px;
                 font-family: var(--font-ui);
                 font-size: 12px;
-                color: var(--primary-text, #4338ca);
+                color: var(--primary-text);
                 line-height: 1.45;
             }
 
             .notice-glyph {
                 flex-shrink: 0;
                 margin-top: 1px;
+            }
+
+            .shares-entry {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .shares-owned {
+                font-size: 12px;
+                color: var(--muted);
             }
 
             .dialog-actions-row {
@@ -302,6 +337,8 @@ import { BadgeComponent } from '../../shared/components/badge/badge.component';
 export class CashOutDialogComponent {
     readonly isOpen = model<boolean>(false);
     readonly position = input<UserPosition | null>(null);
+    /** False while the market is not open for trading; the sale cannot be submitted. */
+    readonly canSell = input<boolean>(true);
 
     readonly cashedOut = output<CashOutResponse>();
     readonly dialogDismissed = output<void>();
@@ -316,6 +353,25 @@ export class CashOutDialogComponent {
 
     readonly isExecuting = signal<boolean>(false);
     readonly isQuoting = signal<boolean>(false);
+
+    /** The reader's entry for how many shares to sell; defaults to the whole position. */
+    readonly sharesInput = signal<string>('');
+    private sharesDebounce: ReturnType<typeof setTimeout> | null = null;
+
+    /** The entry as a canonical 8-decimal string, or null when it is not a number. */
+    readonly sharesToSell = computed(() => normalizeDecimal(this.sharesInput(), 8));
+
+    readonly sharesError = computed<string | null>(() => {
+        const shares = this.sharesToSell();
+        const owned = this.position()?.shares_owned;
+        if (shares === null || compareDecimal(shares, '0') !== 1) {
+            return 'Enter how many shares to sell.';
+        }
+        if (owned && compareDecimal(shares, owned) === 1) {
+            return `You hold ${owned} shares in this position.`;
+        }
+        return null;
+    });
     readonly sellQuote = signal<SellQuoteResponse | null>(null);
     readonly quoteError = signal<string | null>(null);
 
@@ -330,7 +386,10 @@ export class CashOutDialogComponent {
         effect(() => {
             const pos = this.position();
             if (this.isOpen() && pos) {
-                untracked(() => this.refreshQuote());
+                untracked(() => {
+                    this.sharesInput.set(pos.shares_owned);
+                    this.refreshQuote();
+                });
             } else {
                 untracked(() => {
                     this.sellQuote.set(null);
@@ -340,15 +399,33 @@ export class CashOutDialogComponent {
         });
     }
 
+    /** Updates the share entry; the quote is refreshed after the reader pauses typing. */
+    onSharesChange(value: string | number): void {
+        this.sharesInput.set(String(value ?? ''));
+        if (this.sharesDebounce) clearTimeout(this.sharesDebounce);
+        this.sharesDebounce = setTimeout(() => this.refreshQuote(), 300);
+    }
+
+    setAllShares(): void {
+        this.sharesInput.set(this.position()?.shares_owned ?? '');
+        this.refreshQuote();
+    }
+
     refreshQuote(): void {
         const pos = this.position();
-        if (!pos) return;
+        const shares = this.sharesToSell();
+        if (!pos || shares === null || this.sharesError()) {
+            this.sellQuote.set(null);
+            this.quoteError.set(null);
+            this.isQuoting.set(false);
+            return;
+        }
 
         this.isQuoting.set(true);
         this.quoteError.set(null);
         this.sellQuote.set(null);
         this.apiService
-            .getSellQuote(pos.market_id, pos.outcome, pos.shares_owned)
+            .getSellQuote(pos.market_id, pos.outcome, shares)
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe({
                 next: (quote) => {
@@ -400,10 +477,10 @@ export class CashOutDialogComponent {
     });
 
     protected readonly estimatedPostBalance = computed(() => {
-        const balStr = this.authStore.cashBalance().replace(/[$,]/g, '');
-        const currentBal = parseFloat(balStr) || 0;
-        const proceeds = parseFloat(this.sellQuote()?.payout_usdc ?? '0') || 0;
-        return (currentBal + proceeds).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const balance = this.authStore.cashBalanceRaw();
+        const quote = this.sellQuote();
+        const post = quote ? (addDecimal(balance, quote.payout_usdc) ?? balance) : balance;
+        return formatUsd(post).slice(1); // the template adds the $ sign
     });
 
     onDismiss(): void {
@@ -433,7 +510,7 @@ export class CashOutDialogComponent {
                 {
                     market_id: pos.market_id,
                     outcome: pos.outcome,
-                    shares: pos.shares_owned,
+                    shares: this.sharesToSell() ?? '0',
                     min_payout_usdc: minPayout
                 },
                 token,
@@ -446,8 +523,7 @@ export class CashOutDialogComponent {
                     this.isOpen.set(false);
 
                     // Update cash balance in AuthStore
-                    const updatedBal = this.authStore.formatBalance(receipt.new_cash_balance);
-                    this.authStore.updateBalance(updatedBal);
+                    this.authStore.updateBalance(receipt.new_cash_balance);
 
                     this.toastService.success(
                         'Shares Liquidated',

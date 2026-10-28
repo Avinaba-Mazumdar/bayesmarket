@@ -915,6 +915,19 @@ All monetary values, share quantities, prices, percentages, reserves, and collat
 
 ---
 
+#### 9. Market Read Endpoints (History, Trades, Categories)
+
+- **`GET /api/v1/markets/:id/history?range=1h|24h|7d|all`**: implied YES probability, one point per bucket (1 minute, 15 minutes, 1 hour and 1 day respectively). Points come only from trades recorded after migration `000007`, which stores `trades.yes_probability_after`. Trades made before that migration have no recorded probability and do not appear. A range with no trades returns `"points": []`, and the chart shows an empty state rather than drawing anything.
+- **`GET /api/v1/markets/:id/trades?limit=50`**: the most recent trades, newest first. Trader identities are never included.
+- **`GET /api/v1/categories`**: the categories a market may use. Market creation and category changes are validated against this same list.
+
+#### 10. Refresh Sessions
+
+- **`POST /api/v1/auth/refresh`** reads the `bm_refresh` cookie and returns a new access token. The cookie is `HttpOnly`, scoped to `/api/v1/auth`, lasts 30 days, and is `SameSite=None; Secure` in production (the frontend and API are usually on different sites) and `SameSite=Lax` in local development. Each refresh rotates the cookie. The database stores only the SHA-256 hash of the cookie value, in `refresh_tokens`.
+- **Reuse detection**: presenting a cookie that has already been rotated is treated as theft. Every refresh session for that account is revoked and the reader must sign in again.
+- **`POST /api/v1/auth/logout`** revokes the session on this device and clears the cookie. For a guest account this is permanent, and the sign-out dialog says so before it runs.
+- **Frontend**: refreshes are single-flight. Concurrent callers share one request, because a second refresh with the same cookie would look like reuse.
+
 ### 7.3 WebSocket Real-Time Protocol
 
 - **URL**: `wss://<host>/ws/markets/:id`
@@ -1045,7 +1058,7 @@ Every inbound request is assigned a unique `X-Trace-ID` propagated through Go `c
 | **Infinite Division / Zero Reserves** | High     | **Boundary Clamping**: Market prices are restricted to the interval `[0.0100, 0.9900]`. If a trade would drive a reserve below minimum liquidity threshold ($100.00 USDC), execution aborts. |
 | **Sybil Claim Depletion**             | Medium   | **Dual-Key Claim Lock**: Claims require both a minimum time cooldown (5 min) per IP address and an active user cash-balance check (`cash_balance < $200.00`).                                |
 | **SQL Injection**                     | Critical | **Prepared Statements**: All database operations use parameter placeholders (`$1, $2`) via `pgx`. No dynamic string concatenation.                                                           |
-| **Cross-Site Scripting (XSS)**        | High     | **Strict CSP & Sanitization**: Angular's default DOM sanitization prevents script injection; HTTP-Only cookie flags for JWT tokens prevent client-side credential theft.                     |
+| **Cross-Site Scripting (XSS)**        | High     | **Strict CSP & Sanitization**: Angular's default DOM sanitization prevents script injection; the refresh token is an HttpOnly cookie that scripts cannot read. The 1-hour access token is kept in sessionStorage.                     |
 
 ### 10.1 Token-Bucket Rate Limiter & Oracle Cache Policy
 
@@ -1139,6 +1152,7 @@ BayesMarket contains **zero pre-seeded or hardcoded demo markets**. All predicti
     - Access the web interface at `http://localhost:4200`.
 3. **Session Provisioning**:
     - Initial visit automatically issues an ephemeral guest JWT with 1,000 virtual USDC via `POST /api/v1/auth/guest`.
+    - Returning visitors are signed back in from the refresh cookie via `POST /api/v1/auth/refresh`; see §7.2 Refresh Sessions.
 4. **Order Execution & Mathematical Integrity**:
     - Select an active prediction market and configure order sizing (e.g., 100 USDC on YES).
     - Real-time AMM quote computes spot price, slippage impact, and expected shares.

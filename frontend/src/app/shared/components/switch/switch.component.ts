@@ -37,8 +37,8 @@ export type SwitchColor = 'primary' | 'yes';
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                min-width: var(--touch-target-min, 40px);
-                min-height: var(--touch-target-min, 40px);
+                min-width: var(--touch-target-min);
+                min-height: var(--touch-target-min);
                 padding: 4px;
                 background: transparent;
                 border: none;
@@ -49,7 +49,7 @@ export type SwitchColor = 'primary' | 'yes';
             }
 
             button:focus-visible .switch-track {
-                outline: 2px solid var(--focus-outline, #e84089);
+                outline: 2px solid var(--focus-outline);
                 outline-offset: 2px;
             }
 
@@ -63,9 +63,9 @@ export type SwitchColor = 'primary' | 'yes';
                 position: relative;
                 display: inline-flex;
                 align-items: center;
-                border-radius: var(--radius-pill, 9999px);
-                border: 1px solid var(--border-strong, #cbd5e1);
-                background-color: var(--canvas-subtle, #f1f5f9);
+                border-radius: var(--radius-pill);
+                border: 1px solid var(--border-strong);
+                background-color: var(--canvas-subtle);
                 transition:
                     background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
                     border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
@@ -134,14 +134,14 @@ export type SwitchColor = 'primary' | 'yes';
 
             /* --- Checked Colors --- */
             .switch-checked.switch-color-primary .switch-track {
-                background-color: var(--primary, #a6034c);
-                border-color: var(--primary-border, #e84089);
+                background-color: var(--primary);
+                border-color: var(--primary-border);
                 box-shadow: var(--shadow-glow-primary, 0 0 12px rgba(166, 3, 76, 0.4));
             }
 
             .switch-checked.switch-color-yes .switch-track {
-                background-color: var(--outcome-yes, #10b981);
-                border-color: var(--outcome-yes, #10b981);
+                background-color: var(--outcome-yes);
+                border-color: var(--outcome-yes);
                 box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
             }
         `

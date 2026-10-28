@@ -10,7 +10,7 @@ import { OrderResponse } from '../../core/models/market.model';
 describe('OrderConfirmDialogComponent', () => {
     let fixture: ComponentFixture<OrderConfirmDialogComponent>;
     let component: OrderConfirmDialogComponent;
-    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; placeOrder: any };
+    let apiServiceSpy: { createGuestSession: any; getPortfolio: any; placeOrder: any; refreshSession: any; endSession: any; getMarketCategories: any; getMarketTrades: any; getMarketHistory: any; };
     let authStore: AuthStore;
     let toastService: ToastService;
 
@@ -56,6 +56,11 @@ describe('OrderConfirmDialogComponent', () => {
 
     beforeEach(async () => {
         apiServiceSpy = {
+            refreshSession: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))),
+            endSession: vi.fn().mockReturnValue(of(undefined)),
+            getMarketCategories: vi.fn().mockReturnValue(of([])),
+            getMarketTrades: vi.fn().mockReturnValue(of([])),
+            getMarketHistory: vi.fn().mockReturnValue(of({ market_id: '', range: '24h', points: [] })),
             createGuestSession: vi.fn().mockReturnValue(
                 of({
                     token: 'test-auth-token',
@@ -85,7 +90,7 @@ describe('OrderConfirmDialogComponent', () => {
         // Set guest session directly in auth store signals
         authStore.token.set('test-auth-token');
         authStore.userId.set('user-123');
-        authStore.cashBalance.set('$1,000.00');
+        authStore.updateBalance('1000.00');
 
         fixture.componentRef.setInput('isOpen', true);
         fixture.componentRef.setInput('intent', mockIntent);

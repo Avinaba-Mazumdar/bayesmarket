@@ -13,7 +13,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [CommonModule, ButtonComponent, LucideLoaderCircle, LucideCircleAlert],
     template: `
-        <div class="callback-container" role="main">
+        <div class="callback-container">
             <div class="callback-card">
                 @if (errorMessage()) {
                     <div class="status-icon error" role="alert">
@@ -47,7 +47,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 justify-content: center;
                 min-height: calc(100vh - 120px);
                 padding: 24px;
-                background-color: var(--canvas, #f8f9fc);
+                background-color: var(--canvas);
             }
 
             .callback-card {
@@ -58,9 +58,9 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 max-width: 440px;
                 width: 100%;
                 padding: 40px 32px;
-                background-color: var(--surface-card, #ffffff);
-                border: 1px solid var(--hairline, #cbd5e1);
-                border-radius: var(--radius-xl, 18px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-xl);
                 box-shadow: var(--shadow-terminal, 0 10px 25px -5px rgba(15, 23, 42, 0.1));
             }
 
@@ -72,11 +72,11 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             }
 
             .status-icon.loading {
-                color: var(--primary, #4338ca);
+                color: var(--primary);
             }
 
             .status-icon.error {
-                color: var(--status-loss, #9f1239);
+                color: var(--status-loss);
             }
 
             .spin {
@@ -96,7 +96,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 20px;
                 font-weight: 700;
-                color: var(--ink, #0f172a);
+                color: var(--ink);
                 margin: 0 0 10px 0;
                 letter-spacing: -0.2px;
             }
@@ -104,7 +104,7 @@ import { ButtonComponent } from '../../shared/components/button/button.component
             .callback-desc {
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 14px;
-                color: var(--muted, #3b4861);
+                color: var(--muted);
                 line-height: 1.5;
                 margin: 0 0 24px 0;
             }

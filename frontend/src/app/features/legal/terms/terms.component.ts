@@ -191,7 +191,7 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                         </p>
                         <p>
                             <strong>Repository: </strong>
-                            <a href="https://github.com/bayesmarket/bayesmarket" target="_blank" rel="noopener noreferrer" class="legal-link"
+                            <a href="https://github.com/Avinaba-Mazumdar/bayesmarket" target="_blank" rel="noopener noreferrer" class="legal-link"
                                 >GitHub &mdash; BayesMarket Open Source</a
                             >
                         </p>
@@ -210,15 +210,15 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             .legal-page-container {
                 max-width: 960px;
                 margin: 0 auto;
-                padding: var(--space-xl, 24px) var(--space-md, 16px) var(--space-section, 48px);
-                color: var(--ink, #0f172a);
+                padding: var(--space-xl) var(--space-md) var(--space-section);
+                color: var(--ink);
                 font-family: var(--font-ui);
             }
 
             .legal-header {
-                margin-bottom: var(--space-xxl, 32px);
-                border-bottom: 1px solid var(--hairline, #252140);
-                padding-bottom: var(--space-xl, 24px);
+                margin-bottom: var(--space-xxl);
+                border-bottom: 1px solid var(--hairline);
+                padding-bottom: var(--space-xl);
             }
 
             .back-link {
@@ -227,213 +227,213 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
                 gap: 8px;
                 font-size: 14px;
                 font-weight: 600;
-                color: var(--primary-text, #c4b5fd);
+                color: var(--primary-text);
                 text-decoration: none;
-                margin-bottom: var(--space-md, 16px);
+                margin-bottom: var(--space-md);
                 padding: 6px 12px;
-                border-radius: var(--radius-sm, 6px);
-                background-color: var(--primary-subtle, rgba(124, 77, 255, 0.12));
-                border: 1px solid var(--hairline, #352f5e);
+                border-radius: var(--radius-sm);
+                background-color: var(--primary-subtle);
+                border: 1px solid var(--hairline);
                 transition:
                     background-color 0.15s ease,
                     border-color 0.15s ease;
             }
 
             .back-link:hover {
-                background-color: var(--primary-subtle, rgba(124, 77, 255, 0.25));
-                border-color: var(--primary-border, #c4b5fd);
+                background-color: var(--primary-subtle);
+                border-color: var(--primary-border);
             }
 
             .brand-badge {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                margin-bottom: var(--space-xs, 8px);
+                margin-bottom: var(--space-xs);
             }
 
             .brand-text {
                 font-size: 16px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.01em;
             }
 
             .brand-highlight {
-                color: var(--primary-text, #c4b5fd);
+                color: var(--primary-text);
             }
 
             .legal-title {
                 font-size: 32px;
                 font-weight: 800;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
                 letter-spacing: -0.02em;
-                margin: var(--space-xs, 8px) 0;
+                margin: var(--space-xs) 0;
             }
 
             .legal-subtitle {
                 font-size: 14px;
-                color: var(--muted, #b8b3d4);
+                color: var(--muted);
                 margin-bottom: 0;
             }
 
             .legal-subtitle code {
                 font-family: var(--font-mono);
-                background-color: var(--surface-card, #131126);
+                background-color: var(--surface-card);
                 padding: 2px 6px;
-                border-radius: var(--radius-xs, 4px);
-                border: 1px solid var(--hairline, #352f5e);
+                border-radius: var(--radius-xs);
+                border: 1px solid var(--hairline);
             }
 
             /* Warning Callout */
             .callout-card {
                 display: flex;
-                gap: var(--space-md, 16px);
-                padding: var(--space-lg, 20px);
-                border-radius: var(--radius-lg, 14px);
-                margin-bottom: var(--space-xxl, 32px);
+                gap: var(--space-md);
+                padding: var(--space-lg);
+                border-radius: var(--radius-lg);
+                margin-bottom: var(--space-xxl);
             }
 
             .simulation-warning {
                 background-color: rgba(252, 211, 77, 0.1);
-                border: 1px solid var(--status-warning-border, #fcd34d);
+                border: 1px solid var(--status-warning-border);
             }
 
             .callout-icon-wrap {
                 flex-shrink: 0;
                 width: 44px;
                 height: 44px;
-                border-radius: var(--radius-md, 10px);
-                background-color: var(--surface-card, #131126);
+                border-radius: var(--radius-md);
+                background-color: var(--surface-card);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border: 1px solid var(--hairline, #352f5e);
+                border: 1px solid var(--hairline);
             }
 
             .callout-icon {
-                color: var(--status-warning, #fcd34d);
+                color: var(--status-warning);
             }
 
             .callout-title {
                 font-size: 18px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
-                margin-bottom: var(--space-xxs, 4px);
+                color: var(--ink);
+                margin-bottom: var(--space-xxs);
             }
 
             .callout-text {
                 font-size: 15px;
                 line-height: var(--line-height-prose, 1.6);
-                color: var(--body, #cbd5e1);
-                margin-bottom: var(--space-xs, 8px);
+                color: var(--body);
+                margin-bottom: var(--space-xs);
                 max-width: none;
             }
 
             .callout-subtext {
                 font-size: 14px;
-                color: var(--status-warning, #fcd34d);
+                color: var(--status-warning);
                 margin-bottom: 0;
                 max-width: none;
             }
 
             /* Code Quote for MIT */
             .code-quote {
-                background-color: var(--surface-card, #131126);
-                border-left: 4px solid var(--primary-border, #c4b5fd);
-                border-top: 1px solid var(--hairline, #352f5e);
-                border-right: 1px solid var(--hairline, #352f5e);
-                border-bottom: 1px solid var(--hairline, #352f5e);
-                border-radius: var(--radius-sm, 6px);
-                padding: var(--space-md, 16px);
-                margin: var(--space-md, 16px) 0;
+                background-color: var(--surface-card);
+                border-left: 4px solid var(--primary-border);
+                border-top: 1px solid var(--hairline);
+                border-right: 1px solid var(--hairline);
+                border-bottom: 1px solid var(--hairline);
+                border-radius: var(--radius-sm);
+                padding: var(--space-md);
+                margin: var(--space-md) 0;
             }
 
             .mono-text {
                 font-family: var(--font-mono);
                 font-size: 13px;
                 line-height: 1.6;
-                color: var(--muted, #b8b3d4);
+                color: var(--muted);
                 margin-bottom: 0;
             }
 
             /* Sections */
             .legal-section {
-                margin-bottom: var(--space-xxl, 36px);
+                margin-bottom: var(--space-xxl);
             }
 
             .section-heading {
                 font-size: 20px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
-                margin-bottom: var(--space-sm, 12px);
+                color: var(--ink);
+                margin-bottom: var(--space-sm);
                 padding-bottom: 6px;
-                border-bottom: 1px solid var(--hairline, #252140);
+                border-bottom: 1px solid var(--hairline);
             }
 
             p {
                 font-size: 15px;
                 line-height: var(--line-height-prose, 1.6);
-                color: var(--body, #cbd5e1);
-                margin-bottom: var(--space-md, 16px);
+                color: var(--body);
+                margin-bottom: var(--space-md);
                 max-width: none;
             }
 
             .legal-list {
                 list-style: square;
-                padding-left: var(--space-xl, 24px);
-                margin-bottom: var(--space-md, 16px);
+                padding-left: var(--space-xl);
+                margin-bottom: var(--space-md);
             }
 
             .legal-list li {
                 font-size: 15px;
                 line-height: var(--line-height-prose, 1.6);
-                color: var(--body, #cbd5e1);
-                margin-bottom: var(--space-xs, 8px);
+                color: var(--body);
+                margin-bottom: var(--space-xs);
             }
 
             /* Info Card */
             .info-card {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #352f5e);
-                border-radius: var(--radius-md, 10px);
-                padding: var(--space-lg, 20px);
-                margin: var(--space-md, 16px) 0;
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
+                padding: var(--space-lg);
+                margin: var(--space-md) 0;
             }
 
             .info-card-header {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                margin-bottom: var(--space-xs, 8px);
+                margin-bottom: var(--space-xs);
             }
 
             .info-card-header h3 {
                 font-size: 16px;
                 font-weight: 700;
-                color: var(--ink, #f8f7ff);
+                color: var(--ink);
             }
 
             .info-icon {
-                color: var(--accent, #7dd3fc);
+                color: var(--accent);
             }
 
             .info-card p {
                 font-size: 14px;
-                color: var(--body, #cbd5e1);
+                color: var(--body);
                 margin-bottom: 0;
             }
 
             /* Contact Box */
             .contact-box {
-                background-color: var(--surface-card, #131126);
-                border: 1px solid var(--hairline, #352f5e);
-                border-radius: var(--radius-md, 10px);
-                padding: var(--space-lg, 20px);
-                margin-top: var(--space-md, 16px);
+                background-color: var(--surface-card);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
+                padding: var(--space-lg);
+                margin-top: var(--space-md);
             }
 
             .contact-box p {
-                margin-bottom: var(--space-xxs, 6px);
+                margin-bottom: var(--space-xxs);
                 font-size: 14px;
             }
 
@@ -442,13 +442,13 @@ import { BrandIconComponent } from '../../../shared/components/brand-icon/brand-
             }
 
             .legal-link {
-                color: var(--link, #c4b5fd);
+                color: var(--link);
                 text-decoration: underline;
                 text-underline-offset: 3px;
             }
 
             .legal-link:hover {
-                color: var(--link-active, #ffffff);
+                color: var(--link-active);
             }
 
             @media (max-width: 640px) {

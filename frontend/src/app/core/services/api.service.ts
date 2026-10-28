@@ -16,6 +16,10 @@ import {
     GoogleVerifyRequest,
     Market,
     MarketStatus,
+    HistoryRange,
+    MarketHistoryResponse,
+    MarketTrade,
+    MarketCategory,
     OrderResponse,
     PlaceOrderRequest,
     PortfolioResponse,
@@ -115,6 +119,27 @@ export class ApiService {
     }
 
     /**
+     * Market categories, as defined by the backend. Used by the catalog filter and the admin form.
+     */
+    getMarketCategories(): Observable<MarketCategory[]> {
+        return this.http.get<MarketCategory[]>(`${this.baseUrl}/categories`);
+    }
+
+    /**
+     * Implied YES probability history of a market, built from recorded trades.
+     */
+    getMarketHistory(marketId: string, range: HistoryRange): Observable<MarketHistoryResponse> {
+        return this.http.get<MarketHistoryResponse>(`${this.baseUrl}/markets/${encodeURIComponent(marketId)}/history?range=${range}`);
+    }
+
+    /**
+     * Most recent public trades on a market, newest first. Trader identities are not included.
+     */
+    getMarketTrades(marketId: string, limit = 50): Observable<MarketTrade[]> {
+        return this.http.get<MarketTrade[]>(`${this.baseUrl}/markets/${encodeURIComponent(marketId)}/trades?limit=${limit}`);
+    }
+
+    /**
      * Fetch a single market by UUID or slug.
      */
     getMarketById(idOrSlug: string): Observable<Market> {
@@ -158,6 +183,21 @@ export class ApiService {
     claim(token: string): Observable<ClaimResponse> {
         const headers = this.buildHeaders(token);
         return this.http.post<ClaimResponse>(`${this.baseUrl}/claim`, {}, { headers });
+    }
+
+    /**
+     * Renews the session from the HttpOnly refresh cookie. Sends the cookie explicitly, because the API
+     * may be on another origin. Responds with a new access token and rotates the cookie.
+     */
+    refreshSession(): Observable<AuthResponse> {
+        return this.http.post<AuthResponse>(`${this.baseUrl}/auth/refresh`, {}, { withCredentials: true });
+    }
+
+    /**
+     * Ends the refresh session on this device. For a guest account this is permanent.
+     */
+    endSession(): Observable<void> {
+        return this.http.post<void>(`${this.baseUrl}/auth/logout`, {}, { withCredentials: true });
     }
 
     /**

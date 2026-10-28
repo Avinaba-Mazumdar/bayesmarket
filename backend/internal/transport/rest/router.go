@@ -317,6 +317,7 @@ bayesmarket_up 1
 
 	// API v1 Group
 	v1 := router.Group("/api/v1")
+	v1.GET("/categories", HandleGetMarketCategories)
 	{
 		// 0. Public System Configuration
 		v1.GET("/config", publicReadLimiter.LimitByIP(), func(c *gin.Context) {
@@ -343,6 +344,8 @@ bayesmarket_up 1
 			auth.GET("/google/url", publicReadLimiter.LimitByIP(), authHandler.HandleGoogleAuthURL)
 			auth.POST("/google/callback", middleware.OptionalAuth(jwtSecret), actionLimiter.LimitByClientOrUser(), authHandler.HandleGoogleAuthCallback)
 			auth.GET("/me", middleware.RequireAuth(jwtSecret), publicReadLimiter.LimitByIP(), authHandler.HandleGetMe)
+			auth.POST("/refresh", actionLimiter.LimitByClientOrUser(), authHandler.HandleRefresh)
+			auth.POST("/logout", publicReadLimiter.LimitByIP(), authHandler.HandleLogout)
 		}
 
 		// 2. Markets, Quotes & Orders
@@ -350,6 +353,8 @@ bayesmarket_up 1
 		{
 			markets.GET("", publicReadLimiter.LimitByIP(), marketHandler.HandleGetMarkets)
 			markets.GET("/:id", publicReadLimiter.LimitByIP(), marketHandler.HandleGetMarketByID)
+			markets.GET("/:id/history", publicReadLimiter.LimitByIP(), marketHandler.HandleGetMarketHistory)
+			markets.GET("/:id/trades", publicReadLimiter.LimitByIP(), marketHandler.HandleGetMarketTrades)
 			markets.POST("/:id/quote", quoteLimiter.LimitByClientOrUser(), marketHandler.HandleMarketQuote)
 			markets.POST("/:id/orders",
 				middleware.RequireAuth(jwtSecret),

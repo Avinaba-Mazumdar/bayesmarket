@@ -79,9 +79,9 @@ interface GlossaryTerm {
             }
 
             .plain-english-summary {
-                background-color: var(--primary-subtle, rgba(79, 70, 229, 0.08));
-                border: 1px solid var(--primary-border, #6366f1);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--primary-subtle);
+                border: 1px solid var(--primary-border);
+                border-radius: var(--radius-lg);
                 padding: 16px;
             }
 
@@ -89,7 +89,7 @@ interface GlossaryTerm {
                 font-family: var(--font-ui);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--primary-text, #4338ca);
+                color: var(--primary-text);
                 margin-bottom: 8px;
             }
 
@@ -97,7 +97,7 @@ interface GlossaryTerm {
                 font-family: var(--font-ui);
                 font-size: 13.5px;
                 line-height: 1.6;
-                color: var(--ink, #f8fafc);
+                color: var(--ink);
                 margin: 0;
             }
 
@@ -109,9 +109,9 @@ interface GlossaryTerm {
             }
 
             .term-card {
-                background-color: var(--canvas-subtle, #0c1017);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-md, 10px);
+                background-color: var(--canvas-subtle);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-md);
                 padding: 14px;
                 display: flex;
                 flex-direction: column;
@@ -122,32 +122,32 @@ interface GlossaryTerm {
                 font-family: var(--font-ui);
                 font-size: 15px;
                 font-weight: 700;
-                color: var(--primary-border, #6366f1);
+                color: var(--primary-border);
             }
 
             .term-def {
                 font-family: var(--font-ui);
                 font-size: 13px;
                 line-height: 1.5;
-                color: var(--ink-secondary, #cbd5e1);
+                color: var(--ink-secondary);
                 margin: 0;
             }
 
             .term-plain {
                 font-family: var(--font-ui);
                 font-size: 12.5px;
-                color: var(--status-info, #075985);
+                color: var(--status-info);
                 margin: 0;
-                background-color: var(--status-info-bg, #f0f9ff);
-                border: 1px solid var(--status-info-border, #0284c7);
+                background-color: var(--status-info-bg);
+                border: 1px solid var(--status-info-border);
                 padding: 6px 10px;
-                border-radius: var(--radius-sm, 6px);
+                border-radius: var(--radius-sm);
                 line-height: 1.45;
             }
 
             .plain-label {
                 font-weight: 700;
-                color: var(--ink, #0f172a);
+                color: var(--ink);
             }
         `
     ]
@@ -159,7 +159,7 @@ export class GlossaryPopoverComponent {
         {
             term: 'Automated Market Maker (AMM)',
             definition:
-                'A decentralized system of algorithmic liquidity pools that enables assets to be traded automatically without traditional order books or centralized intermediaries.',
+                'A pricing formula that sets share prices from the amount of YES and NO shares held in the pool, so trades can execute without a separate buyer on the other side.',
             plainEnglish:
                 'A computer program that automatically sets prices and holds money so anyone can buy or sell shares instantly without needing a matching buyer.'
         },

@@ -88,10 +88,10 @@ export type SelectVariant = 'default' | 'mono';
                 justify-content: space-between;
                 gap: 8px;
                 width: 100%;
-                background-color: var(--surface-terminal, #0e131d);
-                color: var(--ink, #f8fafc);
-                border: 1px solid var(--border-strong, #606e85);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-terminal);
+                color: var(--ink);
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-lg);
                 padding: 0 14px;
                 box-sizing: border-box;
                 font-family: var(--font-ui, system-ui, sans-serif);
@@ -106,16 +106,16 @@ export type SelectVariant = 'default' | 'mono';
             }
 
             .select-trigger:focus-visible {
-                border-color: var(--focus-outline, #e84089);
-                box-shadow: 0 0 0 2px var(--focus-ring, rgba(232, 64, 137, 0.35));
+                border-color: var(--focus-outline);
+                box-shadow: 0 0 0 2px var(--focus-ring);
             }
 
             /* --- Sizes (WCAG Touch Target: min 40px) --- */
             .select-size-default {
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
             }
             .select-size-sm {
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 padding: 0 10px;
                 font-size: 13px;
             }
@@ -133,7 +133,7 @@ export type SelectVariant = 'default' | 'mono';
 
             /* --- Error State --- */
             .select-error {
-                border-color: var(--status-loss-border, #fb7185);
+                border-color: var(--status-loss-border);
             }
             .select-error:focus-visible {
                 box-shadow: 0 0 0 2px rgba(251, 113, 133, 0.35);
@@ -155,14 +155,14 @@ export type SelectVariant = 'default' | 'mono';
             }
 
             .trigger-text.is-placeholder {
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
             }
 
             .chevron-icon {
                 width: 16px;
                 height: 16px;
                 flex-shrink: 0;
-                color: var(--muted, #a2b4c9);
+                color: var(--muted);
                 transition: transform 0.2s ease;
             }
 
@@ -179,9 +179,9 @@ export type SelectVariant = 'default' | 'mono';
                 z-index: 50;
                 max-height: 260px;
                 overflow-y: auto;
-                background-color: var(--surface-card-elevated, #171f30);
-                border: 1px solid var(--hairline, #1e2638);
-                border-radius: var(--radius-lg, 14px);
+                background-color: var(--surface-card-elevated);
+                border: 1px solid var(--hairline);
+                border-radius: var(--radius-lg);
                 box-shadow: var(--shadow-lg, 0 12px 28px -4px rgba(0, 0, 0, 0.65));
                 padding: 4px;
                 outline: none;
@@ -192,10 +192,10 @@ export type SelectVariant = 'default' | 'mono';
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
-                min-height: var(--touch-target-min, 40px);
+                min-height: var(--touch-target-min);
                 padding: 8px 12px;
-                border-radius: var(--radius-md, 10px);
-                color: var(--ink, #f8fafc);
+                border-radius: var(--radius-md);
+                color: var(--ink);
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 14px;
                 cursor: pointer;
@@ -204,12 +204,12 @@ export type SelectVariant = 'default' | 'mono';
             }
 
             .select-option.focused {
-                background-color: var(--primary-subtle, rgba(67, 56, 202, 0.08));
+                background-color: var(--primary-subtle);
             }
 
             .select-option.selected {
-                background-color: var(--primary-subtle, rgba(67, 56, 202, 0.12));
-                color: var(--primary-text, #4338ca);
+                background-color: var(--primary-subtle);
+                color: var(--primary-text);
                 font-weight: 600;
             }
 
@@ -233,14 +233,14 @@ export type SelectVariant = 'default' | 'mono';
 
             .option-desc {
                 font-size: 11px;
-                color: var(--muted, #3b4861);
+                color: var(--muted);
             }
 
             .check-icon {
                 width: 16px;
                 height: 16px;
                 flex-shrink: 0;
-                color: var(--primary-text, #4338ca);
+                color: var(--primary-text);
             }
 
             /* --- Error Message --- */
@@ -249,7 +249,7 @@ export type SelectVariant = 'default' | 'mono';
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-size: 12px;
                 font-weight: 500;
-                color: var(--status-loss, #fda4af);
+                color: var(--status-loss);
                 margin-top: 5px;
                 padding-left: 2px;
             }

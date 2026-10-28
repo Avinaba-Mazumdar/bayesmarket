@@ -13,7 +13,14 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
     template: `
         <div [class]="containerClass()" [attr.aria-label]="ariaLabelText()">
             @if (showImage()) {
-                <img [src]="src()" [alt]="alt()" class="avatar-image" (error)="onImageError()" (load)="onImageLoad()" />
+                <img
+                    [src]="src()"
+                    [alt]="alt()"
+                    class="avatar-image"
+                    referrerpolicy="no-referrer"
+                    (error)="onImageError()"
+                    (load)="onImageLoad()"
+                />
             } @else {
                 <span class="avatar-fallback" aria-hidden="true">
                     @if (initials()) {
@@ -46,9 +53,9 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
                 overflow: hidden;
                 user-select: none;
                 flex-shrink: 0;
-                background-color: var(--surface-card-elevated, #171f30);
-                color: var(--ink, #f8fafc);
-                border: 1px solid var(--hairline, #1e2638);
+                background-color: var(--surface-card-elevated);
+                color: var(--ink);
+                border: 1px solid var(--hairline);
                 font-family: var(--font-ui, system-ui, sans-serif);
                 font-weight: 600;
                 text-transform: uppercase;
@@ -63,7 +70,7 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
             }
 
             .avatar-shape-square {
-                border-radius: var(--radius-md, 10px);
+                border-radius: var(--radius-md);
             }
 
             /* --- Sizes --- */
@@ -74,8 +81,8 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
             }
 
             .avatar-size-default {
-                width: var(--touch-target-min, 40px);
-                height: var(--touch-target-min, 40px);
+                width: var(--touch-target-min);
+                height: var(--touch-target-min);
                 font-size: 14px;
             }
 
@@ -120,7 +127,7 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
                 bottom: 1px;
                 right: 1px;
                 border-radius: 50%;
-                border: 2px solid var(--surface-card, #111622);
+                border: 2px solid var(--surface-card);
             }
 
             .avatar-size-sm .avatar-status-dot {
@@ -141,21 +148,21 @@ export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
             }
 
             .avatar-status-online {
-                background-color: var(--outcome-yes, #10b981);
+                background-color: var(--outcome-yes);
                 box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
             }
 
             .avatar-status-offline {
-                background-color: var(--border-strong, #606e85);
+                background-color: var(--border-strong);
             }
 
             .avatar-status-busy {
-                background-color: var(--outcome-no, #fb7185);
+                background-color: var(--outcome-no);
                 box-shadow: 0 0 6px rgba(251, 113, 133, 0.6);
             }
 
             .avatar-status-away {
-                background-color: var(--status-warning, #fcd34d);
+                background-color: var(--status-warning);
             }
         `
     ]
