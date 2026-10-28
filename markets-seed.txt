@@ -1,0 +1,167 @@
+BayesMarket seed markets (16)
+Source: the copy of backend/seeds/markets-seed.sql that was on disk. It is the only copy once the folder is deleted.
+Fields kept: id, slug, title, description, category, resolution_source, resolution_date, created_at.
+Dropped: image_url (no longer in the schema), winning_outcome (all markets start active, no settlement history).
+Starting probability and collateral are not in this file: they are needed when the seed is written.
+
+------------------------------------------------------------------------
+[01] Will the US default on its debt before 2028?
+id:                961ad046-d88a-43a3-b7ab-f0d86316587e
+slug:              will-the-us-default-on-its-debt-before-2028
+category:          macro
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:03.189538+00
+resolution_source: U.S. Department of the Treasury (fiscaldata.treasury.gov) and rating agency releases (S&P, Moody's, Fitch)
+description:       This market resolves to YES if the U.S. Department of the Treasury fails to make full, scheduled principal or interest payments on public marketable sovereign debt obligations before December 31, 2027, 23:59:59 UTC, or if a major sovereign credit rating agency (S&P, Moody's, Fitch) formally declares the United States to be in sovereign debt default. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[02] Will US National Debt exceed $40 Trillion before 2028?
+id:                c4a4fd49-6b5a-4868-b4e4-766155da1dd5
+slug:              will-us-national-debt-exceed-40-trillion-before-2028
+category:          macro
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:04.758953+00
+resolution_source: U.S. Treasury Fiscal Data (fiscaldata.treasury.gov/datasets/debt-to-the-penny)
+description:       This market resolves to YES if the official "Total Public Debt Outstanding" published by the U.S. Department of the Treasury reaches or exceeds $40,000,000,000,000.00 at any point prior to December 31, 2027, 23:59:59 UTC. If the total public debt remains strictly below $40 trillion throughout this period, the market resolves to NO.
+------------------------------------------------------------------------
+[03] Will the US enter an official recession before 2028?
+id:                9cd4481d-4068-4507-9108-e4ec7d6ead40
+slug:              will-the-us-enter-an-official-recession-before-2028
+category:          macro
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:05.99391+00
+resolution_source: National Bureau of Economic Research (nber.org/research/business-cycle-dating)
+description:       This market resolves to YES if the National Bureau of Economic Research (NBER) Business Cycle Dating Committee officially announces that a peak in U.S. economic activity occurred and that the U.S. economy entered a recession with a start date between January 1, 2024, and December 31, 2027. If no NBER-determined recession starting within this timeframe is announced by December 31, 2027, the market resolves to NO.
+------------------------------------------------------------------------
+[04] Will the Federal Funds Target Rate drop below 3.00% before 2028?
+id:                9ccd9e0a-4c17-42e3-a639-ea260f7a1d51
+slug:              will-the-federal-funds-target-rate-drop-below-3-00-before-2028
+category:          macro
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:07.46631+00
+resolution_source: Federal Reserve Board of Governors (federalreserve.gov/monetarypolicy/fomccalendars.htm)
+description:       This market resolves to YES if the Federal Open Market Committee (FOMC) sets the upper bound of the target range for the federal funds rate strictly below 3.00% (e.g., 2.75% or lower) at any scheduled or emergency meeting before December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[05] Will Bitcoin reach $150,000 before 2028?
+id:                f75be639-6cb3-4f5a-b083-d90f8f13aa8f
+slug:              will-bitcoin-reach-150-000-before-2028
+category:          crypto
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:08.503841+00
+resolution_source: CoinGecko Bitcoin Index (coingecko.com/en/coins/bitcoin) & Coinbase spot ticker
+description:       This market resolves to YES if the spot price of Bitcoin (BTC/USD) reaches or exceeds $150,000.00 at any point prior to December 31, 2027, 23:59:59 UTC, according to the designated reference index composite (CoinGecko / Coinbase). If the price never reaches $150,000.00 prior to the resolution timestamp, the market resolves to NO.
+------------------------------------------------------------------------
+[06] Will Bitcoin reach $250,000 before 2028?
+id:                494f8366-d3ea-4b50-a6e1-c07c6ab8c49f
+slug:              will-bitcoin-reach-250-000-before-2028
+category:          crypto
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:09.747033+00
+resolution_source: CoinGecko composite / Coinbase Index / Binance spot BTC/USDT
+description:       This market resolves to YES if the spot price of Bitcoin (BTC/USD) reaches or exceeds $250,000.00 on major spot exchanges (Coinbase, Binance, Kraken) at any point prior to December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[07] Will Ethereum reach $10,000 before 2028?
+id:                9ad6ece0-aeed-4b7c-8f87-2b69b0be9c61
+slug:              will-ethereum-reach-10-000-before-2028
+category:          crypto
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:10.726219+00
+resolution_source: CoinGecko Ethereum Index (coingecko.com/en/coins/ethereum) & Coinbase ETH/USD
+description:       This market resolves to YES if the spot price of Ethereum (ETH/USD) touches or exceeds $10,000.00 at any point prior to December 31, 2027, 23:59:59 UTC, according to major exchange composite indices. If Ethereum fails to reach $10,000.00 before the end date, the market resolves to NO.
+------------------------------------------------------------------------
+[08] Will the US establish a Strategic Bitcoin Reserve before 2028?
+id:                4137a64f-ccaa-4591-ab36-0cc110eda526
+slug:              will-the-us-establish-a-strategic-bitcoin-reserve-before-2028
+category:          crypto
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:11.746167+00
+resolution_source: Congress.gov legislative records & Federal Register (federalregister.gov)
+description:       This market resolves to YES if the United States federal government passes federal legislation signed into law, or issues an official Presidential Executive Order, establishing an official national strategic reserve or stockpile of Bitcoin held and managed by the U.S. Treasury or Federal Reserve before December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[09] Will OpenAI announce it has achieved AGI before 2028?
+id:                3dc7cfff-c916-4f37-9674-39a1d3fa3824
+slug:              will-openai-announce-it-has-achieved-agi-before-2028
+category:          ai
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:12.905404+00
+resolution_source: OpenAI Official Announcements & Press Publications (openai.com/index)
+description:       This market resolves to YES if OpenAI officially announces through an official press release, blog post (openai.com/news), or an authorized public statement by the CEO that it has developed or achieved Artificial General Intelligence (AGI) matching its charter definition prior to December 31, 2027, 23:59:59 UTC. Ambiguous statements that do not clearly declare AGI will resolve to NO.
+------------------------------------------------------------------------
+[10] Will OpenAI conduct an initial public offering (IPO) before 2028?
+id:                a3f4bd88-8c8d-4e1e-94e9-1c21b56bfbcf
+slug:              will-openai-conduct-an-initial-public-offering-ipo-before-2028
+category:          ai
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:14.011781+00
+resolution_source: U.S. Securities and Exchange Commission (SEC EDGAR, sec.gov/edgar) & NYSE/NASDAQ listings
+description:       This market resolves to YES if OpenAI or its primary holding entity completes an initial public offering (IPO) or direct listing, and its common shares begin trading publicly on the NYSE or NASDAQ before December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[11] Will Anthropic conduct an initial public offering (IPO) before 2028?
+id:                0ff03f5d-fe53-4492-aa19-99a2b7ca4245
+slug:              will-anthropic-conduct-an-initial-public-offering-ipo-before-2028
+category:          ai
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:15.347861+00
+resolution_source: U.S. SEC EDGAR filings (sec.gov/edgar) & NASDAQ/NYSE listings
+description:       This market resolves to YES if Anthropic, PBC completes an initial public offering (IPO) or direct listing, and its shares begin trading on a registered national securities exchange in the United States before December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[12] Will an AI model score 100% on FrontierMath before 2028?
+id:                3ad4d708-23a9-4587-bab3-7cc2a2084ea9
+slug:              will-an-ai-model-score-100-on-frontiermath-before-2028
+category:          ai
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:16.844933+00
+resolution_source: Epoch AI Official Research & FrontierMath Leaderboard (epoch.ai/frontiermath)
+description:       This market resolves to YES if an artificial intelligence model or system achieves a verified score of 100% on the Epoch AI FrontierMath evaluation benchmark (or the official full benchmark problem set evaluated by Epoch AI) prior to December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[13] Will SpaceX land humans on Mars before 2030?
+id:                bb7153b5-858d-4920-93a0-1ca1cc0a3749
+slug:              will-spacex-land-humans-on-mars-before-2030
+category:          science
+status:            active
+resolution_date:   2029-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:18.76267+00
+resolution_source: SpaceX official announcements (spacex.com), NASA press office, and FAA Commercial Space Transportation division
+description:       This market resolves to YES if SpaceX lands at least one living human being on the surface of Mars, confirmed by telemetry, live video broadcast, and official verification from NASA or the FAA, prior to December 31, 2029, 23:59:59 UTC. If no crewed Mars landing is completed by SpaceX before the deadline, the market resolves to NO.
+------------------------------------------------------------------------
+[14] Will NASA's Artemis program land humans on the Moon before 2028?
+id:                2053c245-dae2-42b6-afea-567941d99766
+slug:              will-nasa-s-artemis-program-land-humans-on-the-moon-before-2028
+category:          science
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:19.848577+00
+resolution_source: NASA Artemis program updates (nasa.gov/specials/artemis)
+description:       This market resolves to YES if a crewed Artemis mission conducted by NASA successfully lands human astronauts on the lunar surface before December 31, 2027, 23:59:59 UTC. If the mission is delayed beyond 2027 or fails to complete a lunar surface landing before the deadline, the market resolves to NO.
+------------------------------------------------------------------------
+[15] Will commercial nuclear fusion provide net electricity to the grid before 2030?
+id:                2513d7eb-0713-4227-97be-26c1882b6978
+slug:              will-commercial-nuclear-fusion-provide-net-electricity-to-the-grid-before-2030
+category:          science
+status:            active
+resolution_date:   2029-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:21.039463+00
+resolution_source: U.S. Department of Energy (energy.gov), regional transmission organizations (RTOs/ISOs), and corporate utility filings
+description:       This market resolves to YES if any commercial nuclear fusion facility or pilot plant (e.g., Commonwealth Fusion Systems, Helion Energy, TAE Technologies) achieves net electricity delivery into a public, regional, or municipal power grid, confirmed by independent utility or regulatory documentation, prior to December 31, 2029, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------
+[16] Will the US government confirm the existence of extraterrestrial life before 2028?
+id:                e66873ac-acbe-4f85-b6c3-b90bfad76e6a
+slug:              will-the-us-government-confirm-the-existence-of-extraterrestrial-life-before-202
+category:          science
+status:            active
+resolution_date:   2027-12-31 23:59:00+00
+created_at:        2026-10-16 18:30:22.504151+00
+resolution_source: The White House (whitehouse.gov), ODNI (dni.gov), Department of Defense (defense.gov), or NASA (nasa.gov)
+description:       This market resolves to YES if the President of the United States, the Director of National Intelligence (ODNI), the Secretary of Defense, or the NASA Administrator formally and explicitly confirms on the record that non-human extraterrestrial biological or technological life has been detected and verified, prior to December 31, 2027, 23:59:59 UTC. Otherwise, this market resolves to NO.
+------------------------------------------------------------------------

@@ -50,3 +50,4 @@ Thumbs.db
 
 # Local tooling & buffers
 .freebuff/
+.commandcode/
