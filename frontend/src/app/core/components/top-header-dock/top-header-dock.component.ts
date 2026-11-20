@@ -49,7 +49,7 @@ import { AuthStore } from '../../../state/auth.store';
                             @if (isClaiming()) {
                                 <span>Claiming...</span>
                             } @else if (authStore.claimCooldownSeconds() > 0) {
-                                <span class="claim-countdown tabular-nums">Next claim in {{ claimCountdown() }}</span>
+                                <span class="claim-countdown tabular-nums"><span class="claim-prefix">Next claim in </span>{{ claimCountdown() }}</span>
                             } @else {
                                 <span>+100 Claim</span>
                             }
@@ -224,6 +224,54 @@ import { AuthStore } from '../../../state/auth.store';
                 }
                 .brand-text {
                     font-size: 16px;
+                }
+            }
+            /*
+             * Phones: two rows. Row 1 holds the logo and the account actions; row 2 holds the nav
+             * tabs at full width. One row cannot fit logo + tabs + Claim + theme + avatar at 360px.
+             * The header grows to ~112px here, so styles.css raises scroll-padding-top to match.
+             */
+            @media (max-width: 640px) {
+                .top-header-dock {
+                    height: auto;
+                    padding: 6px 12px 4px;
+                }
+                .dock-container {
+                    flex-wrap: wrap;
+                    row-gap: 4px;
+                    column-gap: 8px;
+                }
+                /* Let the brand and nav become direct flex items of the container. */
+                .dock-left {
+                    display: contents;
+                }
+                .brand-link {
+                    order: 0;
+                }
+                .dock-right {
+                    order: 1;
+                    margin-left: auto;
+                    gap: 8px;
+                    min-width: 0;
+                }
+                .nav-links {
+                    order: 2;
+                    flex: 1 0 100%;
+                    margin-left: 0;
+                    gap: 4px;
+                }
+                .nav-tab {
+                    flex: 1 1 0;
+                    padding: 6px 8px;
+                    white-space: nowrap;
+                }
+                .brand-text,
+                .claim-prefix,
+                .auth-user-name {
+                    display: none;
+                }
+                .guest-logged-in-btn {
+                    padding: 6px 10px;
                 }
             }
 

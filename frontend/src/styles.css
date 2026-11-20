@@ -29,6 +29,13 @@ html {
     scroll-padding-bottom: 96px;
 }
 
+/* The header wraps to two rows (~103px) at this width; see top-header-dock. */
+@media (max-width: 640px) {
+    html {
+        scroll-padding-top: 120px;
+    }
+}
+
 body {
     min-height: 100vh;
     background-color: var(--canvas);

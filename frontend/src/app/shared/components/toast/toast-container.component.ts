@@ -79,6 +79,12 @@ import { Toast, ToastService } from './toast.service';
                 width: calc(100vw - 40px);
                 pointer-events: none;
             }
+            /* Clear the two-row phone header. */
+            @media (max-width: 640px) {
+                .toast-viewport {
+                    top: 116px;
+                }
+            }
 
             .toast-item {
                 position: relative;

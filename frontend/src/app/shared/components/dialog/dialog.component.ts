@@ -242,16 +242,29 @@ export type DialogRole = 'dialog' | 'alertdialog';
                 display: none;
             }
 
+            /* No trailing gap when there is no footer. */
+            .dialog-body:has(+ .dialog-footer:empty) {
+                margin-bottom: 0;
+            }
+
+            /* Phones: a bottom sheet docked to the bottom edge, square bottom corners. */
             @media (max-width: 640px) {
                 .dialog-portal {
                     padding: 0;
                     align-items: flex-end;
                 }
 
+                /* margin:auto would centre the sheet vertically; push it to the bottom instead. */
+                .dialog-positioner {
+                    margin: auto 0 0;
+                }
+
                 .dialog-content {
                     border-bottom-left-radius: 0;
                     border-bottom-right-radius: 0;
+                    border-bottom: none;
                     max-height: 85vh;
+                    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
                 }
 
                 .dialog-footer {

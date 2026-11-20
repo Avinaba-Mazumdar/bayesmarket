@@ -131,7 +131,7 @@
 
     /* Hero & Special Surfaces */
     --hero-gradient: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    --hero-glow: radial-gradient(circle, rgba(67, 56, 202, 0.08) 0%, transparent 70%);
+    --hero-glow: radial-gradient(closest-side, rgba(67, 56, 202, 0.08) 0%, transparent 70%);
     --dialog-overlay: rgba(15, 23, 42, 0.55);
 
     /* Backward compatibility aliases */
@@ -284,7 +284,7 @@
     --shadow-glow-no: 0 0 16px rgba(159, 18, 57, 0.18);
 
     --hero-gradient: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    --hero-glow: radial-gradient(circle, rgba(67, 56, 202, 0.08) 0%, transparent 70%);
+    --hero-glow: radial-gradient(closest-side, rgba(67, 56, 202, 0.08) 0%, transparent 70%);
     --dialog-overlay: rgba(15, 23, 42, 0.55);
 }
 
@@ -366,6 +366,6 @@
     --shadow-glow-yes: 0 0 16px rgba(16, 185, 129, 0.25);
     --shadow-glow-no: 0 0 16px rgba(251, 113, 133, 0.25);
     --hero-gradient: linear-gradient(135deg, #161c2f 0%, #131a2c 100%);
-    --hero-glow: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
+    --hero-glow: radial-gradient(closest-side, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
     --dialog-overlay: rgba(3, 5, 12, 0.75);
 }
