@@ -29,7 +29,7 @@ Unlike traditional wagering apps, BayesMarket implements a **collateralized comp
 
 ## Key Features
 
-- **Collateralized Complete-Set CPMM**: Mathematically governed bonding curve where outcome probabilities sum to $1.00 ($P*{\text{YES}} + P*{\text{NO}} = 1.00$) and every winning share is backed by market collateral.
+- **Collateralized Complete-Set CPMM**: Mathematically governed bonding curve where outcome probabilities sum to 1.00 ($`P_{\text{YES}} + P_{\text{NO}} = 1.00`$) and every winning share is backed by market collateral.
 - **Fixed-Point Financial Math**: Arbitrary precision arithmetic via `shopspring/decimal` to eliminate IEEE-754 floating-point drift and rounding errors.
 - **High-Concurrency Go Engine**: Low-latency order execution, row-level locking in PostgreSQL for atomic balances and pool invariants, and non-blocking channel fan-out.
 - **Real-Time Streaming**: Push-based price updates and live trade activity via resilient, auto-reconnecting WebSockets.
@@ -156,7 +156,7 @@ The API and the frontend run directly on your machine, against a PostgreSQL 18 d
 
 - **Go**: `v1.27+`
 - **Node.js**: `v22+` (or `v24 LTS`)
-- **pnpm**: `v10+` (or `npm`)
+- **pnpm**: `v11+`
 - **PostgreSQL**: Local PostgreSQL 18 or **[Neon.tech](https://neon.tech)**
 
 ### 1. Environment Configuration
@@ -200,12 +200,12 @@ The web application will be accessible at `http://localhost:4200`.
 
 ```bash
 # 1. Get a guest session and the SQL that makes it an admin
-npm run seed:markets -- --guest
+pnpm seed:markets --guest
 
 # 2. Run the printed UPDATE as the database owner (not the bayes_app role)
 
 # 3. Seed with the token the previous step printed
-npm run seed:markets -- --token <access-token>
+pnpm seed:markets --token <access-token>
 ```
 
 Existing titles are skipped, so the command is safe to re-run. Add `--dry-run` to list the markets without creating them. The starting collateral (default 10,000 USDC) and YES probability (default 0.5) apply to every market; override them with `--collateral` and `--probability`.
@@ -240,7 +240,7 @@ go test -v -race ./internal/amm/...
 ## Documentation
 
 - [System Architecture (target/ARCHITECTURE.md)](target/ARCHITECTURE.md): Deep-dive into database schema, concurrency controls, and state management.
-- [Design System & WCAG 2.2 AAA Specification (target/DESIGN.md)](target/DESIGN.md): Institutional-grade UI tokens, typography, component specifications, and comprehensive accessibility verification.
+- [Design System & WCAG 2.2 AAA Specification (target/DESIGN.md)](target/DESIGN.md): UI tokens, typography, component specifications, and comprehensive accessibility verification.
 - [AI Agent System Master & Coding Invariants (target/AGENTs.md)](target/AGENTs.md): System master persona, mathematical invariants, and Definition of Done.
 - [Active Implementation Task Board (target/TODOs.md)](target/TODOs.md): 9-phase execution roadmap and user verification gates.
 

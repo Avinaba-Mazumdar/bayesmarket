@@ -25,13 +25,15 @@ func init() {
 }
 
 func getSuperadminToken(t *testing.T, pool *pgxpool.Pool, cfg *config.Config) string {
+	// users.email is UNIQUE, so each admin gets its own address. A fixed address made every call after the
+	// first one fail on a shared test database.
 	adminID := uuid.New()
 	if pool != nil {
 		_, err := pool.Exec(context.Background(), `
 			INSERT INTO users (id, is_guest, is_admin, auth_provider, name, email)
-			VALUES ($1, false, true, 'google', 'Test Admin', 'admin@test.local')
+			VALUES ($1, false, true, 'google', 'Test Admin', $2)
 			ON CONFLICT (id) DO UPDATE SET is_admin = true;
-		`, adminID)
+		`, adminID, "admin-"+adminID.String()+"@test.local")
 		if err != nil {
 			t.Fatalf("failed to insert test admin user: %v", err)
 		}
@@ -61,6 +63,13 @@ func getTestEnv(t *testing.T) (*pgxpool.Pool, *config.Config, *gin.Engine) {
 	pool, err := database.NewPool(ctx, dbURL)
 	if err != nil {
 		t.Skipf("Skipping live REST tests: cannot connect to test database: %v", err)
+	}
+
+	// CI starts from an empty database, so the schema cannot depend on another test having migrated
+	// first. RunMigrations is idempotent and serialised by an advisory lock.
+	if err := database.RunMigrations(ctx, pool); err != nil {
+		pool.Close()
+		t.Fatalf("failed to apply migrations: %v", err)
 	}
 
 	cfg := testutil.TestConfig(dbURL)
@@ -156,6 +165,13 @@ func ensureTestMarket(t *testing.T, pool *pgxpool.Pool, slug, title string) stri
 		t.Fatalf("Failed to insert test liquidity pool: %v", err)
 	}
 	return id
+}
+
+// tradingTestMarket returns the shared active market the order tests trade in, creating it if needed.
+// The tests used to pick "the oldest active market", which does not exist on a fresh database.
+func tradingTestMarket(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	return ensureTestMarket(t, pool, "test-market-trading", "Test Trading Market")
 }
 
 // 3. Task 4.3: Market Discovery Endpoints

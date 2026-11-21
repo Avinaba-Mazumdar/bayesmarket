@@ -27,8 +27,25 @@ func getTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestSchemaConstraints_NegativeUserBalance(t *testing.T) {
+// getMigratedTestPool returns a pool on a database that has the schema applied. CI starts from an
+// empty database, and Go runs the tests in this file in order, so the constraint tests cannot rely on
+// another test having migrated first. RunMigrations is idempotent.
+func getMigratedTestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 	pool := getTestPool(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if err := database.RunMigrations(ctx, pool); err != nil {
+		pool.Close()
+		t.Fatalf("failed to apply migrations: %v", err)
+	}
+	return pool
+}
+
+func TestSchemaConstraints_NegativeUserBalance(t *testing.T) {
+	pool := getMigratedTestPool(t)
 	defer pool.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -48,7 +65,7 @@ func TestSchemaConstraints_NegativeUserBalance(t *testing.T) {
 }
 
 func TestSchemaConstraints_ZeroOrNegativeReserves(t *testing.T) {
-	pool := getTestPool(t)
+	pool := getMigratedTestPool(t)
 	defer pool.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

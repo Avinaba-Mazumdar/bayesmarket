@@ -25,16 +25,16 @@ The problems sit around that core:
 
 ### Fix first
 
-| # | ID | Item |
-|---|----|------|
-| 1 | S-1 | Make client-IP detection correct behind Vercel and Render, or every IP limit becomes a global limit |
-| 2 | S-2 | Verify WebSockets work in production; Vercel rewrites do not proxy them |
-| 3 | L-1 | Stop replacing the whole market page with a spinner after each order or cash-out |
-| 4 | L-2 | Compare live events against `market().id`, not the route param (slug links lose live data) |
-| 5 | L-3 / L-4 | Add an HTTP interceptor that renews the access token on 401, and serialize refresh across tabs |
-| 6 | L-5 | Persist the oracle proof on the market row; it is currently deleted after 7 days |
-| 7 | L-7 | Remove the admin Delete button, or add the endpoint it calls |
-| 8 | S-3 | Make the ledger append-only at the database level |
+| #   | ID        | Item                                                                                                |
+| --- | --------- | --------------------------------------------------------------------------------------------------- |
+| 1   | S-1       | Make client-IP detection correct behind Vercel and Render, or every IP limit becomes a global limit |
+| 2   | S-2       | Verify WebSockets work in production; Vercel rewrites do not proxy them                             |
+| 3   | L-1       | Stop replacing the whole market page with a spinner after each order or cash-out                    |
+| 4   | L-2       | Compare live events against `market().id`, not the route param (slug links lose live data)          |
+| 5   | L-3 / L-4 | Add an HTTP interceptor that renews the access token on 401, and serialize refresh across tabs      |
+| 6   | L-5       | Persist the oracle proof on the market row; it is currently deleted after 7 days                    |
+| 7   | L-7       | Remove the admin Delete button, or add the endpoint it calls                                        |
+| 8   | S-3       | Make the ledger append-only at the database level                                                   |
 
 ---
 
@@ -46,13 +46,13 @@ The problems sit around that core:
 
 With `TRUSTED_PROXIES` empty, `c.ClientIP()` returns the TCP peer. Behind Render's load balancer, and again behind Vercel's `/api` rewrite in [vercel.json](frontend/vercel.json), that peer is a proxy, not the user. Every per-IP control then applies to all users together:
 
-| Control | Location | Effect when all users share one IP |
-|---|---|---|
-| Guest creation, 5 per IP per day | [auth_handler.go:168](backend/internal/transport/rest/auth_handler.go#L168) | The 6th visitor of the day cannot start a guest session |
-| Claims, 10 per IP per day and 30 s apart | [claim_handler.go:337](backend/internal/transport/rest/claim_handler.go#L337) | Claims stop for everyone after 10 |
-| WebSocket connections, 20 per IP | [ws_handler.go:13](backend/internal/transport/ws/ws_handler.go#L13) | The 21st open tab anywhere is refused |
-| Public read limiter, 10 burst then 1/s | [rate_limiter.go](backend/internal/middleware/rate_limiter.go) | The whole site shares one bucket |
-| Admin failure limiter, 5 failures | [auth.go:183](backend/internal/middleware/auth.go#L183) | Any five failed admin calls by anyone lock every admin out |
+| Control                                  | Location                                                                      | Effect when all users share one IP                         |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Guest creation, 5 per IP per day         | [auth_handler.go:168](backend/internal/transport/rest/auth_handler.go#L168)   | The 6th visitor of the day cannot start a guest session    |
+| Claims, 10 per IP per day and 30 s apart | [claim_handler.go:337](backend/internal/transport/rest/claim_handler.go#L337) | Claims stop for everyone after 10                          |
+| WebSocket connections, 20 per IP         | [ws_handler.go:13](backend/internal/transport/ws/ws_handler.go#L13)           | The 21st open tab anywhere is refused                      |
+| Public read limiter, 10 burst then 1/s   | [rate_limiter.go](backend/internal/middleware/rate_limiter.go)                | The whole site shares one bucket                           |
+| Admin failure limiter, 5 failures        | [auth.go:183](backend/internal/middleware/auth.go#L183)                       | Any five failed admin calls by anyone lock every admin out |
 
 A related gap existed in the former Docker setup: its nginx proxy set `X-Forwarded-For` on `/api/` but not on `/ws/`, so every WebSocket client looked like the proxy. Docker is removed; the same check applies to any reverse proxy in front of the API.
 
@@ -383,45 +383,45 @@ I have not deleted anything. Each item below was checked with a reference search
 
 ### Files
 
-| File | Reason |
-|---|---|
-| [frontend/test-results/.last-run.json](frontend/test-results/.last-run.json) | Playwright run artifact. Delete it and add `test-results/` and `playwright-report/` to `.gitignore`. |
-| [markets-seed.txt](markets-seed.txt) | Text dump of 16 markets that nothing reads, kept at the repository root. Either turn it into a real seed command (for example `api -seed` reading JSON) or move it to `docs/`. The README's "pre-calibrated prediction markets" promise depends on this decision. |
-| [frontend/pnpm-workspace.yaml](frontend/pnpm-workspace.yaml) and one of the two `pnpm-lock.yaml` files | Two workspaces and two lockfiles for one package. The former Docker build used the `frontend/` copies; the root copies duplicate `allowBuilds`. Keep one source of truth. **(verify against the Vercel build before deleting)** |
+| File                                                                                                   | Reason                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [frontend/test-results/.last-run.json](frontend/test-results/.last-run.json)                           | Playwright run artifact. Delete it and add `test-results/` and `playwright-report/` to `.gitignore`.                                                                                                                                                              |
+| [markets-seed.txt](markets-seed.txt)                                                                   | Text dump of 16 markets that nothing reads, kept at the repository root. Either turn it into a real seed command (for example `api -seed` reading JSON) or move it to `docs/`. The README's "pre-calibrated prediction markets" promise depends on this decision. |
+| [frontend/pnpm-workspace.yaml](frontend/pnpm-workspace.yaml) and one of the two `pnpm-lock.yaml` files | Two workspaces and two lockfiles for one package. The former Docker build used the `frontend/` copies; the root copies duplicate `allowBuilds`. Keep one source of truth. **(verify against the Vercel build before deleting)**                                   |
 
 ### Backend symbols
 
-| Symbol | Location | Status |
-|---|---|---|
-| `User`, `Market`, `LiquidityPool`, `UserPosition`, `Trade`, `LedgerEntry` structs; `Outcome`, `TradeType` | [models.go](backend/internal/models/models.go) | Unused. `LedgerEntry` does not even match the table. Keep only `MarketStatus`. |
-| `InternalPrecision`; the spot-price sum check and `ErrSpotPriceSumViolation` | [cpmm.go](backend/internal/amm/cpmm.go) | Unused, or a check that cannot fail: two 28-digit quotients of the same sum |
-| `CtxUserEmailKey`, `CtxUserNameKey`, `CtxUserAvatarKey`, `CtxAuthProviderKey`, `GetIsGuest`, `GetIsAdmin`, `GetClaims` | [auth.go](backend/internal/middleware/auth.go) | Unused |
-| `RateLimiter.Stop` and the weak-pointer registry | [rate_limiter.go](backend/internal/middleware/rate_limiter.go) | Unused in production (see A-4) |
-| `GuestAuthResponse` | [auth_handler.go:120](backend/internal/transport/rest/auth_handler.go#L120) | "Backwards compatibility" alias with no users |
-| `GoogleTokenInfo.Error` | [auth_handler.go](backend/internal/transport/rest/auth_handler.go) | Unused field |
-| `ParseOptionalBoundedPositiveDecimal` | [validation.go](backend/internal/transport/rest/validation.go) | Tests only |
-| `writeIdempotencyReceipt` | [idempotency.go](backend/internal/transport/rest/idempotency.go) | Unused |
-| `MarketHandler.Cache()` | [market_handler.go](backend/internal/transport/rest/market_handler.go) | Unused |
-| Redundant exact-match cases in `isSensitiveParam` | [router.go](backend/internal/transport/rest/router.go) | Already covered by the `Contains` checks below them |
-| `MessageTypePing`, `MessageTypePong`, `MarketDeletedMessage`, `BroadcastMarketDeleted` | [messages.go](backend/internal/transport/ws/messages.go), [hub.go](backend/internal/transport/ws/hub.go) | Unused |
-| `Hub.ClientCount`, `Hub.MarketClientCount` | [hub.go](backend/internal/transport/ws/hub.go) | Tests only |
-| Global stream `/ws/markets` and the `globalClients` index | [router.go:197](backend/internal/transport/rest/router.go#L197), [hub.go](backend/internal/transport/ws/hub.go) | The frontend never connects to it. Remove it, or use it for live catalog prices (U-6). Today `MARKET_UPDATED` is also sent twice to market subscribers through it. |
+| Symbol                                                                                                                 | Location                                                                                                        | Status                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `User`, `Market`, `LiquidityPool`, `UserPosition`, `Trade`, `LedgerEntry` structs; `Outcome`, `TradeType`              | [models.go](backend/internal/models/models.go)                                                                  | Unused. `LedgerEntry` does not even match the table. Keep only `MarketStatus`.                                                                                     |
+| `InternalPrecision`; the spot-price sum check and `ErrSpotPriceSumViolation`                                           | [cpmm.go](backend/internal/amm/cpmm.go)                                                                         | Unused, or a check that cannot fail: two 28-digit quotients of the same sum                                                                                        |
+| `CtxUserEmailKey`, `CtxUserNameKey`, `CtxUserAvatarKey`, `CtxAuthProviderKey`, `GetIsGuest`, `GetIsAdmin`, `GetClaims` | [auth.go](backend/internal/middleware/auth.go)                                                                  | Unused                                                                                                                                                             |
+| `RateLimiter.Stop` and the weak-pointer registry                                                                       | [rate_limiter.go](backend/internal/middleware/rate_limiter.go)                                                  | Unused in production (see A-4)                                                                                                                                     |
+| `GuestAuthResponse`                                                                                                    | [auth_handler.go:120](backend/internal/transport/rest/auth_handler.go#L120)                                     | "Backwards compatibility" alias with no users                                                                                                                      |
+| `GoogleTokenInfo.Error`                                                                                                | [auth_handler.go](backend/internal/transport/rest/auth_handler.go)                                              | Unused field                                                                                                                                                       |
+| `ParseOptionalBoundedPositiveDecimal`                                                                                  | [validation.go](backend/internal/transport/rest/validation.go)                                                  | Tests only                                                                                                                                                         |
+| `writeIdempotencyReceipt`                                                                                              | [idempotency.go](backend/internal/transport/rest/idempotency.go)                                                | Unused                                                                                                                                                             |
+| `MarketHandler.Cache()`                                                                                                | [market_handler.go](backend/internal/transport/rest/market_handler.go)                                          | Unused                                                                                                                                                             |
+| Redundant exact-match cases in `isSensitiveParam`                                                                      | [router.go](backend/internal/transport/rest/router.go)                                                          | Already covered by the `Contains` checks below them                                                                                                                |
+| `MessageTypePing`, `MessageTypePong`, `MarketDeletedMessage`, `BroadcastMarketDeleted`                                 | [messages.go](backend/internal/transport/ws/messages.go), [hub.go](backend/internal/transport/ws/hub.go)        | Unused                                                                                                                                                             |
+| `Hub.ClientCount`, `Hub.MarketClientCount`                                                                             | [hub.go](backend/internal/transport/ws/hub.go)                                                                  | Tests only                                                                                                                                                         |
+| Global stream `/ws/markets` and the `globalClients` index                                                              | [router.go:197](backend/internal/transport/rest/router.go#L197), [hub.go](backend/internal/transport/ws/hub.go) | The frontend never connects to it. Remove it, or use it for live catalog prices (U-6). Today `MARKET_UPDATED` is also sent twice to market subscribers through it. |
 
 ### Frontend symbols
 
-| Symbol | Location | Status |
-|---|---|---|
-| `deleteMarket`, `DeleteMarketResponse`, the admin Delete button | api.service.ts, market.model.ts, admin-dashboard | Calls a missing endpoint (L-7) |
-| `verifyAdmin` | [api.service.ts:241](frontend/src/app/core/services/api.service.ts#L241) | Unused |
-| `MarketDeletedEvent`, `lastMarketDeleted`, and its effect in market-detail | websocket.model.ts, websocket.service.ts | The server never sends this frame |
-| `setPaused` | websocket.service.ts | Tests only |
-| `provisionNewGuestSession`, `formatBalance`, `refreshBalance` | [auth.store.ts](frontend/src/app/state/auth.store.ts) | Unused |
-| `localStorage`-to-`sessionStorage` migration and display-string balance parsing | auth.store.ts | Legacy (A-8) |
-| Fallback model fields (`cash_balance`, `total_portfolio_value`, `market_value`, `unrealized_pnl`) | [market.model.ts](frontend/src/app/core/models/market.model.ts) | The API never sends them |
-| `isDev` | [admin-dashboard.component.ts:383](frontend/src/app/features/admin/admin-dashboard.component.ts#L383) | Unused |
-| `.input-label`, `.input-wrapper`, `.amount-field` styles | [order-terminal.component.ts](frontend/src/app/features/terminal/order-terminal.component.ts) | Dead CSS; the markup now uses `app-input` |
-| Empty `{ … }` blocks | [price-chart.component.ts](frontend/src/app/features/charts/price-chart.component.ts) | Left over from removed `runOutsideAngular` wrappers |
-| Toast timer and pause/resume machinery | toast.service.ts | Dead while every toast uses `duration: 0`. Keep it if U-3 adds auto-dismiss. |
+| Symbol                                                                                            | Location                                                                                              | Status                                                                       |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `deleteMarket`, `DeleteMarketResponse`, the admin Delete button                                   | api.service.ts, market.model.ts, admin-dashboard                                                      | Calls a missing endpoint (L-7)                                               |
+| `verifyAdmin`                                                                                     | [api.service.ts:241](frontend/src/app/core/services/api.service.ts#L241)                              | Unused                                                                       |
+| `MarketDeletedEvent`, `lastMarketDeleted`, and its effect in market-detail                        | websocket.model.ts, websocket.service.ts                                                              | The server never sends this frame                                            |
+| `setPaused`                                                                                       | websocket.service.ts                                                                                  | Tests only                                                                   |
+| `provisionNewGuestSession`, `formatBalance`, `refreshBalance`                                     | [auth.store.ts](frontend/src/app/state/auth.store.ts)                                                 | Unused                                                                       |
+| `localStorage`-to-`sessionStorage` migration and display-string balance parsing                   | auth.store.ts                                                                                         | Legacy (A-8)                                                                 |
+| Fallback model fields (`cash_balance`, `total_portfolio_value`, `market_value`, `unrealized_pnl`) | [market.model.ts](frontend/src/app/core/models/market.model.ts)                                       | The API never sends them                                                     |
+| `isDev`                                                                                           | [admin-dashboard.component.ts:383](frontend/src/app/features/admin/admin-dashboard.component.ts#L383) | Unused                                                                       |
+| `.input-label`, `.input-wrapper`, `.amount-field` styles                                          | [order-terminal.component.ts](frontend/src/app/features/terminal/order-terminal.component.ts)         | Dead CSS; the markup now uses `app-input`                                    |
+| Empty `{ … }` blocks                                                                              | [price-chart.component.ts](frontend/src/app/features/charts/price-chart.component.ts)                 | Left over from removed `runOutsideAngular` wrappers                          |
+| Toast timer and pause/resume machinery                                                            | toast.service.ts                                                                                      | Dead while every toast uses `duration: 0`. Keep it if U-3 adds auto-dismiss. |
 
 ---
 
@@ -429,16 +429,16 @@ I have not deleted anything. Each item below was checked with a reference search
 
 `AGENTs.md` says the `target/` documents are the source of truth. They currently contradict the code:
 
-| Document | Says | Code does |
-|---|---|---|
-| ARCHITECTURE.md:633, 745 | Claims grant 500 USDC | 100 USDC ([claim_handler.go:336](backend/internal/transport/rest/claim_handler.go#L336)) |
-| ARCHITECTURE.md:1137 | `DELETE /admin/markets/:id` with `409 market_has_activity` | Not implemented |
-| ARCHITECTURE.md:1151 | The first visit issues a guest JWT automatically | Guest sessions are created only on click (`auth.store.ts:141`) |
-| AGENTs.md:82 | `Idempotency-Key` is required on claims | Optional |
-| AGENTs.md:110-112 | Focus colour `#e84089`, border `#606e85` | DESIGN.md:391 and 411 retire both; tokens use `#3730a3` and `#64748b` |
-| README.md:139 | Signal stores for Guest, Market, and Portfolio | Only `auth.store.ts` exists |
-| README.md:128 | `database/` holds seed data | No seed code exists |
-| .env.example:15 | The privileged pool is used for "market deletes" | No market delete exists |
+| Document                 | Says                                                       | Code does                                                                                |
+| ------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| ARCHITECTURE.md:633, 745 | Claims grant 500 USDC                                      | 100 USDC ([claim_handler.go:336](backend/internal/transport/rest/claim_handler.go#L336)) |
+| ARCHITECTURE.md:1137     | `DELETE /admin/markets/:id` with `409 market_has_activity` | Not implemented                                                                          |
+| ARCHITECTURE.md:1151     | The first visit issues a guest JWT automatically           | Guest sessions are created only on click (`auth.store.ts:141`)                           |
+| AGENTs.md:82             | `Idempotency-Key` is required on claims                    | Optional                                                                                 |
+| AGENTs.md:110-112        | Focus colour `#e84089`, border `#606e85`                   | DESIGN.md:391 and 411 retire both; tokens use `#3730a3` and `#64748b`                    |
+| README.md:139            | Signal stores for Guest, Market, and Portfolio             | Only `auth.store.ts` exists                                                              |
+| README.md:128            | `database/` holds seed data                                | No seed code exists                                                                      |
+| .env.example:15          | The privileged pool is used for "market deletes"           | No market delete exists                                                                  |
 
 ---
 

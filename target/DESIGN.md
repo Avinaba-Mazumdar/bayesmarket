@@ -1,7 +1,7 @@
 ---
 version: 1.2.0
 name: bayesmarket-design-system
-description: Institutional-grade, high-precision binary prediction market exchange interface. Light-first palette: indigo primary (#4338ca), deep teal accent (#075985), and dual-coded binary outcomes (YES deep green #065f46, NO deep rose #9f1239). The dark theme uses the same hues in darker shades. Scoutie Sans paired with JetBrains Mono. WCAG 2.2 Level AAA is the implementation and verification target across applicable success criteria.
+description: High-precision, play-money binary prediction market exchange interface. Light-first palette: indigo primary (#4338ca), deep teal accent (#075985), and dual-coded binary outcomes (YES deep green #065f46, NO deep rose #9f1239). The dark theme uses the same hues in darker shades. Scoutie Sans paired with JetBrains Mono. WCAG 2.2 Level AAA is the implementation and verification target across applicable success criteria.
 
 colors:
     canvas: '#f8f9fc'
@@ -394,7 +394,7 @@ components:
 
 ## 1. Overview & Architectural Ethos
 
-**BayesMarket** is an institutional-grade, high-concurrency binary prediction exchange where market participants trade continuous outcome shares (**YES** and **NO**) on verifiable future events.
+**BayesMarket** is a high-concurrency, play-money binary prediction exchange where market participants trade continuous outcome shares (**YES** and **NO**) on verifiable future events.
 
 Unlike retail betting platforms or casual mobile apps, BayesMarket operates as an **algorithmic financial trading terminal**. The UI facilitates instant price discovery, real-time probability curve interpretation, slippage calculation, and atomic trade execution in **under 250 milliseconds**.
 
@@ -729,7 +729,7 @@ To fully satisfy **WCAG 2.2 SC 2.5.5 Target Size (Enhanced — Level AAA)**:
 
 ## 9. Responsive Architecture & Multi-Device Parity
 
-BayesMarket is engineered to deliver institutional-grade trading ergonomics from smartphones to ultra-wide desktop monitors:
+BayesMarket is engineered to deliver precise trading ergonomics from smartphones to ultra-wide desktop monitors:
 
 ### 9.1 Breakpoint Matrix
 

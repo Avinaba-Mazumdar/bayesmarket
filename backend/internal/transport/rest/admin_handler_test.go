@@ -65,7 +65,8 @@ func TestAdminResolveUnauthorized(t *testing.T) {
 		t.Errorf("Expected 401 Unauthorized without auth header, got %d", w.Code)
 	}
 
-	// 2. With invalid bearer token -> 403
+	// 2. With invalid bearer token -> 401. A bad or expired token is an authentication failure, and the
+	// frontend's auth-renewal interceptor only refreshes the session on 401.
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"winning_outcome":"YES","oracle_proof":"https://example.com/evidence/official-release"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -73,8 +74,8 @@ func TestAdminResolveUnauthorized(t *testing.T) {
 	req.Header.Set("Idempotency-Key", uuid.New().String())
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Errorf("Expected 403 Forbidden with invalid token, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 Unauthorized with invalid token, got %d", w.Code)
 	}
 
 	// 3. With regular user bearer token -> 403 Forbidden

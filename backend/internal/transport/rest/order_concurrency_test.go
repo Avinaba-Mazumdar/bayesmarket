@@ -78,11 +78,7 @@ func TestConcurrency_DoubleSpendAttack(t *testing.T) {
 	}
 
 	// Fetch an active market
-	var marketID string
-	err = pool.QueryRow(ctx, "SELECT id FROM markets WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").Scan(&marketID)
-	if err != nil {
-		t.Fatalf("Failed to query active market: %v", err)
-	}
+	marketID := tradingTestMarket(t, pool)
 
 	concurrency := 20
 	var wg sync.WaitGroup
@@ -174,22 +170,28 @@ func TestConcurrency_DoubleSpendAttack(t *testing.T) {
 		t.Fatalf("Expected positive shares owned, got %s", sharesOwned)
 	}
 
-	// Verify ledger entries: exactly 4 balanced entries for the single trade (2 cash/collateral, 2 share positions)
-	var ledgerCount int
-	err = pool.QueryRow(ctx, "SELECT COUNT(*) FROM ledger_entries WHERE user_id = $1", userID).Scan(&ledgerCount)
+	// Verify ledger entries: exactly one trade posting, and it balances. A complete-set buy posts 7 rows
+	// (user cash, pool collateral, YES and NO supply, YES and NO pool reserve, user position; see
+	// buyEntries in ledger.go). The guest's starting-balance grant is a separate user_seed posting, so
+	// only entry_type = 'trade' rows belong to the order.
+	var ledgerCount, tradeTxCount int
+	err = pool.QueryRow(ctx, "SELECT COUNT(*), COUNT(DISTINCT transaction_id) FROM ledger_entries WHERE user_id = $1 AND entry_type = 'trade'", userID).Scan(&ledgerCount, &tradeTxCount)
 	if err != nil {
 		t.Fatalf("Failed to count ledger entries: %v", err)
 	}
-	if ledgerCount != 4 {
-		t.Fatalf("Expected exactly 4 double-entry ledger rows, got %d", ledgerCount)
+	if tradeTxCount != 1 {
+		t.Fatalf("Expected exactly 1 trade transaction in the ledger, got %d", tradeTxCount)
+	}
+	if ledgerCount != 7 {
+		t.Fatalf("Expected exactly 7 double-entry ledger rows for the single buy, got %d", ledgerCount)
 	}
 
 	var usdcSum, shareSum decimal.Decimal
-	err = pool.QueryRow(ctx, "SELECT COALESCE(SUM(delta), 0) FROM ledger_entries WHERE user_id = $1 AND asset = 'USDC'", userID).Scan(&usdcSum)
+	err = pool.QueryRow(ctx, "SELECT COALESCE(SUM(delta), 0) FROM ledger_entries WHERE user_id = $1 AND entry_type = 'trade' AND asset = 'USDC'", userID).Scan(&usdcSum)
 	if err != nil || !usdcSum.IsZero() {
 		t.Fatalf("Expected USDC ledger entries to reconcile to 0, got %s (err: %v)", usdcSum, err)
 	}
-	err = pool.QueryRow(ctx, "SELECT COALESCE(SUM(delta), 0) FROM ledger_entries WHERE user_id = $1 AND asset != 'USDC'", userID).Scan(&shareSum)
+	err = pool.QueryRow(ctx, "SELECT COALESCE(SUM(delta), 0) FROM ledger_entries WHERE user_id = $1 AND entry_type = 'trade' AND asset != 'USDC'", userID).Scan(&shareSum)
 	if err != nil || !shareSum.IsZero() {
 		t.Fatalf("Expected Share ledger entries to reconcile to 0, got %s (err: %v)", shareSum, err)
 	}
@@ -205,17 +207,14 @@ func TestConcurrency_HighContentionPool(t *testing.T) {
 	defer cancel()
 
 	// Pick active market
-	var marketID string
+	marketID := tradingTestMarket(t, pool)
 	var initialCollateral, initialRYes, initialRNo string
 	queryInit := `
-		SELECT m.id, p.collateral_reserve, p.reserve_yes, p.reserve_no 
-		FROM markets m 
-		JOIN liquidity_pools p ON p.market_id = m.id 
-		WHERE m.status = 'active' 
-		ORDER BY m.created_at ASC 
-		LIMIT 1;
+		SELECT p.collateral_reserve, p.reserve_yes, p.reserve_no
+		FROM liquidity_pools p
+		WHERE p.market_id = $1;
 	`
-	err := pool.QueryRow(ctx, queryInit).Scan(&marketID, &initialCollateral, &initialRYes, &initialRNo)
+	err := pool.QueryRow(ctx, queryInit, marketID).Scan(&initialCollateral, &initialRYes, &initialRNo)
 	if err != nil {
 		t.Fatalf("Failed to query market: %v", err)
 	}
@@ -340,8 +339,7 @@ func TestCashOut_LiquidationAndSolvency(t *testing.T) {
 	userID := authData.User.ID
 
 	// Pick active market
-	var marketID string
-	_ = pool.QueryRow(ctx, "SELECT id FROM markets WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").Scan(&marketID)
+	marketID := tradingTestMarket(t, pool)
 
 	// Buy 100 USDC of YES
 	orderPayload := map[string]string{
@@ -492,8 +490,7 @@ func TestOrder_IdempotencyReplay(t *testing.T) {
 	token := authData.Token
 	userID := authData.User.ID
 
-	var marketID string
-	_ = pool.QueryRow(ctx, "SELECT id FROM markets WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").Scan(&marketID)
+	marketID := tradingTestMarket(t, pool)
 
 	idempKey := "idemp-test-replay-" + uuid.New().String()
 	orderPayload := map[string]string{

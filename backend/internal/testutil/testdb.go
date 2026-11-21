@@ -40,11 +40,17 @@ func SafeTestDatabaseURL(t *testing.T) string {
 }
 
 // TestConfig returns an explicitly constructed test config without loading .env.
+//
+// The environment is "local" because the live-database tests are written against local-mode behaviour:
+// dev- mock Google tokens, the 100-per-IP guest and claim caps, and no claim burst cooldown. Any other
+// value, including "test", is treated like production by Config.IsDevOrLocal, so many tests sharing one
+// httptest client IP hit the production guest cap (429) and the mock sign-in is refused (403). Tests that
+// check production behaviour build their own Config with Environment "production".
 func TestConfig(dbURL string) *config.Config {
 	return &config.Config{
 		DatabaseURL:       dbURL,
 		JWTSecret:         config.EphemeralJWTSecret(),
 		DisableRateLimits: true,
-		Environment:       "test",
+		Environment:       "local",
 	}
 }

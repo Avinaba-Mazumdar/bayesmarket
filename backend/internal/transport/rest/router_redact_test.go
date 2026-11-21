@@ -69,7 +69,11 @@ func TestRedactQueryPath(t *testing.T) {
 func TestRedactedLoggerMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var logBuf bytes.Buffer
+	// gin.DefaultWriter is a package global. Restore it, or every router built by a later test logs
+	// into this unsynchronised buffer and the race detector fails the concurrent order tests.
+	prevWriter := gin.DefaultWriter
 	gin.DefaultWriter = &logBuf
+	t.Cleanup(func() { gin.DefaultWriter = prevWriter })
 
 	r := gin.New()
 	r.Use(redactedLogger())

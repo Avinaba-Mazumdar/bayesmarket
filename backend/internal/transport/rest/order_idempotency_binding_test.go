@@ -37,10 +37,7 @@ func TestOrder_IdempotencyKeyReusedWithDifferentBody(t *testing.T) {
 	token := authData.Token
 	userID := authData.User.ID
 
-	var marketID string
-	if err := pool.QueryRow(ctx, "SELECT id FROM markets WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").Scan(&marketID); err != nil {
-		t.Fatalf("No active market to trade in: %v", err)
-	}
+	marketID := tradingTestMarket(t, pool)
 
 	idempKey := "idemp-test-binding-" + uuid.New().String()
 	place := func(amount string) *httptest.ResponseRecorder {

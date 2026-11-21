@@ -2,7 +2,7 @@
     "name": "bayesmarket-monorepo",
     "version": "1.0.0",
     "private": true,
-    "description": "Institutional-grade binary prediction market exchange engine and reactive trading platform",
+    "description": "Play-money binary prediction market exchange engine and reactive trading platform",
     "license": "MIT",
     "author": "Avinaba Mazumdar",
     "repository": {
